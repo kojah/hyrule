@@ -125,3 +125,31 @@ syntax described in [optional application parentheses](APPLICATIONS.md).
 For example, `query $proof = Exclusive $lock decide $proof { ... }` and
 `Proven => Acquire $lock;` retain the same ordering and exhaustive handling as
 their parenthesized forms. Nested applications still require parentheses.
+
+## Anonymous query decisions
+
+When the result needs no name, combine the query and its immediate decision:
+
+```text
+query Exclusive;
+
+rule Acquire:
+  AcquireEvent lock:$lock
+  => query Exclusive $lock {
+       Proven => effects [(Acquire $lock)];
+       Disproven => effects [(Acquire $lock), (RecordOrder $lock)];
+       Unknown reason:$why => effects [(Uncertain $lock $why)];
+     };
+```
+
+This is the anonymous form of `query $proof = Exclusive $lock decide $proof`.
+The `query` keyword remains at the execution site: the operation is stateful,
+executes exactly once when reached, and never participates in speculative
+matching or guard fallthrough. Every declared outcome still needs an arm.
+Invalid runtime tags still return zero/false without trying a fallback rule.
+
+The shorthand introduces no source-level result capture or synthetic name.
+Payload captures are scoped to their arm, enclosing captures remain available,
+and nested anonymous queries do not shadow one another. Use the named form
+when an arm needs the complete query result as well as its payload. Both forms
+accept optional outer call parentheses, and formatting preserves the spelling.

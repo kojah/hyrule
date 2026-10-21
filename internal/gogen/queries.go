@@ -16,7 +16,7 @@ func (e *emitter) queryValue(x *syntax.Expr, expected types.Type) (string, error
 	outer := e.captures
 	e.captures = cloneCaptures(outer)
 	defer func() { e.captures = outer }()
-	if _, exists := e.captures[x.Name]; exists {
+	if _, exists := e.captures[x.Name]; x.Name != "" && exists {
 		return "", e.fail(x, "query capture shadows $"+x.Name)
 	}
 	call := x.Args[0]
@@ -44,7 +44,11 @@ func (e *emitter) queryValue(x *syntax.Expr, expected types.Type) (string, error
 	e.serial++
 	id := matchir.ValueID(e.serial)
 	result := valueName(id)
-	e.captures[x.Name] = capture{id, union.typ}
+	// An anonymous query introduces no source-level capture. In particular,
+	// nested shorthand queries cannot collide through a synthetic name.
+	if x.Name != "" {
+		e.captures[x.Name] = capture{id, union.typ}
+	}
 	fmt.Fprintf(&e.out, "%s := %s(%s)\n", result, name, strings.Join(arguments, ","))
 	fmt.Fprintf(&e.out, "if !%s(%s) { var zero %s; return zero,false }\n", e.validator(union), result, e.host.typeName(sigOutput(e)))
 	e.serial++
@@ -103,7 +107,10 @@ func (e *emitter) checkDecision(x *syntax.Expr, union *boundUnion) error {
 		if _, _, _, err := e.matcher(pattern, union.typ); err != nil {
 			return err
 		}
-		names := map[string]struct{}{x.Name: {}}
+		names := map[string]struct{}{}
+		if x.Name != "" {
+			names[x.Name] = struct{}{}
+		}
 		for name := range e.captures {
 			names[name] = struct{}{}
 		}

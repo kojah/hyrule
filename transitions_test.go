@@ -39,6 +39,11 @@ const queryDeclarations = `match Pair = Pair;
  `
 
 func TestOrderedQueryOutcomesAndEffects(t *testing.T) {
+	t.Run("named", func(t *testing.T) { testOrderedQueryOutcomesAndEffects(t, false) })
+	t.Run("anonymous", func(t *testing.T) { testOrderedQueryOutcomesAndEffects(t, true) })
+}
+
+func testOrderedQueryOutcomesAndEffects(t *testing.T, anonymous bool) {
 	root := fixture(t)
 	write(t, root, "bindings.go", queryHost)
 	rules := queryDeclarations + `
@@ -55,6 +60,12 @@ func TestOrderedQueryOutcomesAndEffects(t *testing.T) {
   };
  rule Fallback: _ => effects [(Mark 99)];
  `
+	if anonymous {
+		rules = strings.NewReplacer(
+			"query $proof = (Ask $x) decide $proof", "query Ask $x",
+			"query $next = (Ask $y) decide $next", "query (Ask $y)",
+		).Replace(rules)
+	}
 	formatted, err := hyrule.Format("input.rules", []byte(rules))
 	if err != nil {
 		t.Fatal(err)
@@ -106,6 +117,9 @@ func runGeneratedTransitionTest(t *testing.T, root string) {
 func TestQueryDecisionDiagnostics(t *testing.T) {
 	complete := `(Proven) => effects []; (Disproven) => effects []; (Unavailable) => effects [];`
 	for _, tt := range []struct{ name, result, want string }{
+		{"anonymous missing", `query Ask 0 {Proven => effects [];}`, "missing Disproven, Unavailable"},
+		{"anonymous non-query", `query Mark 0 {` + complete + `}`, "expected query binding"},
+		{"anonymous unbound result", `query Ask 0 {Proven => effects [$proof]; Disproven => effects []; Unavailable => effects [];}`, "unbound capture"},
 		{"missing", `query $p = (Ask 0) decide $p {(Proven)=>effects [];}`, "missing Disproven, Unavailable"},
 		{"duplicate", `query $p = (Ask 0) decide $p {` + complete + `(Proven)=>effects [];}`, "duplicate decision variant"},
 		{"catchall", `query $p = (Ask 0) decide $p {_=>effects [];}`, "decision arm must name"},

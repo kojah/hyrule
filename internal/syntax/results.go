@@ -34,14 +34,18 @@ func (p *parser) query(depth int) *Expr {
 
 func (p *parser) queryBody(position Position, depth int) *Expr {
 	result := &Expr{Position: position, Kind: Query}
-	p.expect("$")
-	result.Name = p.identifier()
-	p.expect("=")
+	if p.text == "$" {
+		p.next()
+		result.Name = p.identifier()
+		p.expect("=")
+	}
 	result.Args = []*Expr{p.outerExpression(depth + 1)}
-	p.expect("decide")
-	p.expect("$")
-	if name := p.identifier(); name != result.Name {
-		p.fail(result.Position, "decide must handle the immediately preceding query capture")
+	if result.Name != "" {
+		p.expect("decide")
+		p.expect("$")
+		if name := p.identifier(); name != result.Name {
+			p.fail(result.Position, "decide must handle the immediately preceding query capture")
+		}
 	}
 	p.expect("{")
 	for p.text != "}" && p.token != scanner.EOF && p.failure == nil {
@@ -66,7 +70,11 @@ func renderResult(expression *Expr, indent int) string {
 	}
 	pad := strings.Repeat(" ", indent)
 	var out strings.Builder
-	out.WriteString("query $" + expression.Name + " = " + renderLayout(expression.Args[0], indent) + "\n" + pad + "decide $" + expression.Name + " {")
+	if expression.Name == "" {
+		out.WriteString("query " + renderLayout(expression.Args[0], indent) + " {")
+	} else {
+		out.WriteString("query $" + expression.Name + " = " + renderLayout(expression.Args[0], indent) + "\n" + pad + "decide $" + expression.Name + " {")
+	}
 	for _, arm := range expression.Arms {
 		out.WriteString("\n" + pad + "  " + render(arm.Pattern) + " => " + renderLayout(arm.Result, indent+2) + ";")
 	}
