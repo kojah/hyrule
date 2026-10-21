@@ -6,6 +6,7 @@ has no Hyrule runtime dependency. The pipeline example demonstrates both lifting
 live under `internal/lower/memory`: shared loads/stores, field/index projections
 stay in that package; `mapop`, `interfaceop`, `channelop` and `sliceop` own their typed family operations and original-source projections.
 The slicetransfer family also lowers append/copy operations into complete exact, empty or conservative transfer plans consumed by symbolic summaries and native graph emission.
+Interface assertion lowering also selects retained-tag, copied-payload, typed-zero, panic-only or unsupported outcomes, shared by native graph emitters and public reads.
 Matchers expose SSA structure and static types. Container state, identity,
 temporal interpretation and execution selection remain with their consumers.
 
