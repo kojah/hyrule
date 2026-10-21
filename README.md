@@ -7,6 +7,7 @@ live under `internal/lower/memory` and `internal/lower/scalarop`: shared loads/s
 stay in that package; `mapop`, `interfaceop`, `channelop` and `sliceop` own their typed family operations and original-source projections.
 The slicetransfer family lowers append/copy operations into complete exact, empty or conservative transfer plans consumed by symbolic summaries and native graph emission. Its clear rules choose empty, exact-span or possible-zero state effects; native emission applies those typed element writes without changing the slice header.
 Interface assertion lowering also selects retained-tag, copied-payload, typed-zero, panic-only or unsupported outcomes, shared by native graph emitters and public reads.
+The mapstate family selects finite map write, clear, delete and paired lookup state transitions. Generic Go applies immutable entry edits; equality, provenance, graph traversal and evidence admission remain host responsibilities.
 The scalarop family recognizes original scalar literals, arithmetic, conversions, loads and input/call/tuple-result/phi boundaries. The bounded integer evaluator and native constant-control evaluator consume these descriptors; arithmetic, actual argument admission, work bounds and memory interpretation remain host policy.
 Matchers expose SSA structure and static types. Container state, identity,
 temporal interpretation and execution selection remain with their consumers.
@@ -49,7 +50,7 @@ host argument. Rule names are stable diagnostic identities, unique per target.
 binds the entire input to that subpattern. `_` ignores a pattern value.
 Parenthesized calls nest. Literals use Go spelling for numbers, strings, raw
 strings, `true`, `false`, and `nil`; negative numeric literals are supported.
-A rule has at most one guard call after `&&`; implement compound predicates in Go.
+A rule may have multiple guard calls, each introduced by `&&`. Guards run in source order and short-circuit: a false guard skips later guards and the builder, then tries the next rule.
 Declarations and rules end with `;`. Line and block comments are accepted.
 
 Files are sorted lexically; rules retain source order within each file. The first

@@ -61,8 +61,8 @@ func Generate(h Host, files []*syntax.File) ([]byte, error) {
 		if err := e.pattern(r.Match, "harg0", sig.Params().At(0).Type()); err != nil {
 			return nil, err
 		}
-		if r.Guard != nil {
-			guard, err := e.value(r.Guard, "guard")
+		for _, condition := range r.Guards {
+			guard, err := e.value(condition, "guard")
 			if err != nil {
 				return nil, err
 			}

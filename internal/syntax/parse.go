@@ -52,10 +52,10 @@ func Parse(name string, input io.Reader) (*File, error) {
 			p.rule = rule.Name
 			p.expect(":")
 			rule.Match = p.expression(0)
-			if p.text == "&" {
+			for p.text == "&" {
 				p.expect("&")
 				p.expect("&")
-				rule.Guard = p.expression(0)
+				rule.Guards = append(rule.Guards, p.expression(0))
 			}
 			p.expect("=")
 			p.expect(">")
@@ -198,8 +198,8 @@ func Format(name string, input []byte) ([]byte, error) {
 		rule := item.Rule
 		comments(rule.Comments)
 		fmt.Fprintf(&out, "rule %s:\n  %s", rule.Name, render(rule.Match))
-		if rule.Guard != nil {
-			fmt.Fprintf(&out, "\n  && %s", render(rule.Guard))
+		for _, guard := range rule.Guards {
+			fmt.Fprintf(&out, "\n  && %s", render(guard))
 		}
 		fmt.Fprintf(&out, "\n  => %s;\n", render(rule.Build))
 	}

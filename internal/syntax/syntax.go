@@ -55,12 +55,12 @@ type Binding struct {
 	Comments []string
 }
 
-// Rule is one ordered match, optional guard and replacement.
+// Rule is one ordered match, ordered short-circuit guards and replacement.
 type Rule struct {
 	Position
 	Name     string
 	Match    *Expr
-	Guard    *Expr
+	Guards   []*Expr
 	Build    *Expr
 	Comments []string
 }

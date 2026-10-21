@@ -251,3 +251,57 @@ func TestRetireAllTargets(t *testing.T) {
 		t.Fatal("retired output retained")
 	}
 }
+
+func TestMultipleGuardsShortCircuitAndFallThrough(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", `package fixture
+ type Node struct{ A,B int }
+ type Signature func(Node)(int,bool)
+ var Events []string
+ func Pair(n Node)(int,int,bool){return n.A,n.B,true}
+ func First(n int)bool{Events=append(Events,"first");return n>0}
+ func Second(n int)bool{Events=append(Events,"second");return n<3}
+ func Make(n int)int{Events=append(Events,"build");return n}
+ func Fallback(n int)int{Events=append(Events,"fallback");return n+10}
+ `)
+	input := []byte(`match Pair = Pair;
+ guard First = First;
+ guard Second = Second;
+ build Make = Make;
+ build Fallback = Fallback;
+ rule Both: (Pair $a _) && (First $a) && (Second $a) => (Make $a);
+ rule Other: (Pair $a _) => (Fallback $a);
+ `)
+	formatted, err := hyrule.Format("input.rules", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := hyrule.Format("input.rules", formatted)
+	if err != nil || !bytes.Equal(formatted, again) {
+		t.Fatalf("multiple-guard formatting: %v", err)
+	}
+	write(t, root, "input.rules", string(formatted))
+	config, artifacts := compile(t, root)
+	if err := config.Publish(artifacts, false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "guards_test.go", `package fixture
+ import("testing";"reflect")
+ func TestGuards(t *testing.T){
+  for _,test:=range []struct{in,want int;events []string}{
+   {-1,9,[]string{"first","fallback"}},
+   {3,13,[]string{"first","second","fallback"}},
+   {2,2,[]string{"first","second","build"}},
+  }{
+   Events=nil;got,ok:=Rewrite(Node{A:test.in})
+   if !ok||got!=test.want||!reflect.DeepEqual(Events,test.events){t.Fatalf("%+v => %d,%v,%v",test,got,ok,Events)}
+  }
+ }
+ `)
+	command := exec.Command("go", "test", "-run", "TestGuards", ".")
+	command.Dir = root
+	command.Env = append(os.Environ(), "GOWORK=off")
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("guard behavior: %v\n%s", err, output)
+	}
+}
