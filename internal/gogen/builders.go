@@ -26,7 +26,7 @@ func (e *emitter) valueArguments(x *syntax.Expr, signature *types.Signature, kin
 		if ordered && (argument.Kind == syntax.Call || argument.Kind == syntax.Effects) {
 			e.serial++
 			name := fmt.Sprintf("hv%d", e.serial)
-			fmt.Fprintf(&e.out, "var %s %s = %s\n", name, e.host.typeName(signature.Params().At(parameter).Type()), value)
+			fmt.Fprintf(&e.out, "var %s %s = %s\n", name, e.host.TypeName(signature.Params().At(parameter).Type()), value)
 			value = name
 		}
 		arguments[parameter] = value

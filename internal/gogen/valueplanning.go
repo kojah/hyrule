@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/token"
 	"go/types"
+	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/compiler"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
@@ -18,9 +19,13 @@ func untyped(typ types.Type) bool {
 func (e *emitter) expressionType(expression *syntax.Expr) (types.Type, error) {
 	switch expression.Kind {
 	case syntax.Variable:
-		value, known := e.captures[expression.Name]
+		name, path, _ := strings.Cut(expression.Name, ".")
+		value, known := e.captures[name]
 		if !known {
 			return nil, e.fail(expression, "unbound capture $"+expression.Name)
+		}
+		if path != "" {
+			return e.host.Project(value.typ, strings.Split(path, "."))
 		}
 		return value.typ, nil
 	case syntax.Symbol:
@@ -109,6 +114,18 @@ func (e *emitter) prepareValue(rule *syntax.Rule, expression *syntax.Expr, expec
 	if expression.Kind == syntax.Query {
 		return expression, nil
 	}
+	if expression.Kind == syntax.Variable && strings.Contains(expression.Name, ".") {
+		typ, err := e.expressionType(expression)
+		if err != nil {
+			return nil, err
+		}
+		evaluation := &matchir.Evaluation{Kind: matchir.ForeignEvaluation, Type: e.tables.typeID(typ), Expression: e.expressionID(rule, expression)}
+		output := e.cursor.Evaluate(evaluation)
+		e.serial = max(e.serial, int(output))
+		name := fmt.Sprintf("#%d", output)
+		e.captures[name] = capture{id: output, typ: typ}
+		return &syntax.Expr{Position: expression.Position, Kind: syntax.Variable, Name: name, Field: expression.Field}, nil
+	}
 	if expression.Kind == syntax.Call {
 		if _, arithmetic := compiler.Arithmetic(expression.Name); arithmetic {
 			evaluation, typ, err := e.arithmeticEvaluation(rule, expression, expected)
@@ -174,7 +191,7 @@ func (e *emitter) valueParameters(expression *syntax.Expr, expected types.Type) 
 		signature = e.constructorSignature(variant)
 	} else if binding := e.bindings[expression.Name]; binding != nil && (binding.Kind == "build" || binding.Kind == "guard") {
 		kind = binding.Kind
-		_, candidate, err := e.host.hook(binding.GoName)
+		_, candidate, err := e.host.Hook(binding.GoName)
 		if err != nil {
 			return nil, err
 		}
@@ -245,7 +262,7 @@ func (e *emitter) local(rule *syntax.Rule, clause syntax.Clause) error {
 	if _, err := e.valueExpected(prepared, "build", typ); err != nil {
 		return err
 	}
-	if prepared.Kind == syntax.Variable {
+	if prepared.Kind == syntax.Variable && !strings.Contains(prepared.Name, ".") {
 		e.captures[clause.Name] = e.captures[prepared.Name]
 		return nil
 	}

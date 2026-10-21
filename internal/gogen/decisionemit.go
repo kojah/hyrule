@@ -58,12 +58,30 @@ func (e *emitter) emitDecisions(node, stop *matchir.Node) error {
 				return err
 			}
 		case matchir.Record:
+			terminal := continuationReturns(node.Next, node.Fallback)
+			if terminal {
+				if err := e.emitDeadSuffix(node.Fallback, stop); err != nil {
+					return err
+				}
+			}
 			if err := e.emitRecord(node); err != nil {
 				return err
 			}
+			if terminal {
+				return nil
+			}
 		case matchir.Evaluate:
+			terminal := continuationReturns(node.Next, node.Fallback)
+			if terminal {
+				if err := e.emitDeadSuffix(node.Fallback, stop); err != nil {
+					return err
+				}
+			}
 			if err := e.emitEvaluation(node); err != nil {
 				return err
+			}
+			if terminal {
+				return nil
 			}
 		case matchir.Test:
 			fmt.Fprintf(&e.out, "if %s == %s {\n", e.operand(node.Left), e.operand(node.Right))
@@ -89,9 +107,17 @@ func (e *emitter) emitDecisions(node, stop *matchir.Node) error {
 	return nil
 }
 
-func decisionReturns(node *matchir.Node) bool {
-	for node != nil && node.Kind != matchir.Fail {
+// Infallible extractions/evaluations enter their continuation unconditionally.
+// Recognizing that terminal path avoids emitting unreachable trailing failure
+// returns, while unreachable rules still receive Go type validation above it.
+func decisionReturns(node *matchir.Node) bool { return continuationReturns(node, nil) }
+
+func continuationReturns(node, stop *matchir.Node) bool {
+	for node != nil && node != stop && node.Kind != matchir.Fail {
 		if node.Kind == matchir.Build {
+			return true
+		}
+		if (node.Kind == matchir.Record || node.Kind == matchir.Evaluate) && continuationReturns(node.Next, node.Fallback) {
 			return true
 		}
 		node = node.Fallback
@@ -116,7 +142,7 @@ func (e *emitter) emitBuild(node, stop *matchir.Node) error {
 	}
 	if validation := e.validation(e.host.Signature.Results().At(0).Type(), "hresult"); validation != "" {
 		fmt.Fprintf(&e.out, "hresult := %s\nif !%s { var zero %s; return zero,false }\nreturn hresult,true\n",
-			build, validation, e.host.typeName(e.host.Signature.Results().At(0).Type()))
+			build, validation, e.host.TypeName(e.host.Signature.Results().At(0).Type()))
 	} else {
 		fmt.Fprintf(&e.out, "return %s, true\n", build)
 	}

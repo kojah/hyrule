@@ -154,6 +154,13 @@ result or a builder argument. The host applies the resulting plan afterward.
 See [queries and transition plans](TRANSITIONS.md) for syntax, execution and
 exhaustiveness rules, and `examples/transitions` for a runnable lock-state plan.
 
+## Reducing host adapters
+
+[Native host interfaces](HOST_INTERFACES.md) support Boolean and tuple query
+outcomes, checked field projections, argument forwarding, native generated
+parameter/result lists, and read-only views of existing Go types. Existing
+signatures and binding syntax remain compatible.
+
 ## Tagged unions
 
 A schema declares exclusive constructors over existing Go struct storage:
@@ -206,8 +213,10 @@ type LiftSignature func(Source, *Host) (Operation, bool)
 type LowerSignature func(Operation) (Plan, bool)
 ```
 
-The first parameter is the input; an optional second parameter provides context.
-Input and output types can differ. Results must be `(Output, bool)`. Signature
+For the legacy API, the first parameter is the input; an optional second
+parameter provides context. Input and output types can differ. Results are
+`(Output, bool)`. [Native APIs](HOST_INTERFACES.md) accept multiple parameters and
+results with explicit partial or total failure contracts. Signature
 imports whose package name differs from the import path's last component need an
 explicit alias. Dot imports are unsupported in binding files.
 
@@ -218,10 +227,12 @@ Hook contracts:
 | `match Op = MatchOp;` | `func(Input) (Child1, Child2, ..., bool)` |
 | `guard Fact = HasFact;` | `func(Capture1, ...) bool` |
 | `build Result = BuildResult;` | `func(Argument1, ...) Output` |
+| `query Ask;` | `func(Argument1, ...) bool`, a declared struct union, or a declared tuple outcome |
 
 Hooks may be package functions or methods of the host. Ambiguous names are errors.
 Generic and variadic hook functions are unsupported. Builders return one value;
-use a struct or slice for tuples, multiple effects, provenance and failure data.
+use a struct or slice for a builder's multiple effects or provenance. Native APIs
+and query tuple outcomes avoid wrappers at their own boundaries.
 A guard decides whether a rule applies; a builder must produce its result once
 that guard succeeds. Nested replacement calls use `build` bindings.
 

@@ -153,3 +153,9 @@ Payload captures are scoped to their arm, enclosing captures remain available,
 and nested anonymous queries do not shadow one another. Use the named form
 when an arm needs the complete query result as well as its payload. Both forms
 accept optional outer call parentheses, and formatting preserves the spelling.
+
+## Native host results
+
+Queries also accept native Boolean and tuple outputs. See
+[native host interfaces](HOST_INTERFACES.md) for their exhaustive decisions,
+forwarded field arguments, and explicit failure contracts for total APIs.

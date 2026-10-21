@@ -2,12 +2,16 @@ package gogen
 
 import (
 	"go/types"
+	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
 )
 
 func (e *emitter) bind(x *syntax.Expr, name string, value matchir.ValueID, t types.Type) error {
+	if strings.Contains(name, ".") {
+		return e.fail(x, "field projections cannot bind captures")
+	}
 	if old, ok := e.captures[name]; ok {
 		if !types.Comparable(t) || !types.Identical(old.typ, t) {
 			return e.fail(x, "repeated capture requires identical comparable types")
@@ -41,6 +45,9 @@ func safeEquality(t types.Type) bool {
 	return true
 }
 func (e *emitter) pattern(x *syntax.Expr, value matchir.ValueID, t types.Type) error {
+	if x.Kind == syntax.Variable && strings.Contains(x.Name, ".") {
+		return e.fail(x, "field projections are read-only values, not capture patterns")
+	}
 	if x.Bind != "" {
 		if err := e.bind(x, x.Bind, value, t); err != nil {
 			return err
@@ -75,7 +82,7 @@ func (e *emitter) pattern(x *syntax.Expr, value matchir.ValueID, t types.Type) e
 			outputTypes[index] = e.tables.typeID(sig.Results().At(index).Type())
 		}
 		var outputs []matchir.ValueID
-		if record := e.recordNames[x.Name]; record != nil {
+		if record := e.recordNames[x.Name]; record != nil && !record.declaration.View {
 			outputs = e.cursor.Record(record.schema, value)
 		} else if constructor := e.constructors[x.Name]; constructor != nil {
 			outputs = e.cursor.Variant(constructor.union.schema, constructor.id, value)

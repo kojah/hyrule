@@ -50,8 +50,12 @@ func Parse(name string, input io.Reader) (*File, error) {
 			union := p.unionDeclaration(pos, comments)
 			union.Exhaustive = kind == "exhaustive"
 			file.Items = append(file.Items, Item{Union: union})
-		case "record":
-			file.Items = append(file.Items, Item{Record: p.recordDeclaration(pos, comments)})
+		case "record", "view":
+			record := p.recordDeclaration(pos, comments)
+			record.View = kind == "view"
+			file.Items = append(file.Items, Item{Record: record})
+		case "signature":
+			file.Items = append(file.Items, Item{API: p.apiDeclaration(pos, comments)})
 		case "pattern":
 			pattern := p.patternDeclaration(pos, comments)
 			file.Items = append(file.Items, Item{Pattern: pattern})
@@ -160,7 +164,7 @@ func (p *parser) expression(depth int) *Expr {
 		return p.listExpression(depth)
 	case p.text == "(":
 		p.next()
-		result.Kind, result.Name = Call, p.identifier()
+		result.Kind, result.Name = Call, p.hookName()
 		for p.text != ")" && p.token != scanner.EOF && p.failure == nil {
 			result.Args = append(result.Args, p.argument(depth+1))
 		}
@@ -168,7 +172,7 @@ func (p *parser) expression(depth int) *Expr {
 		p.applicationKind(result)
 	case p.text == "$":
 		p.next()
-		result.Kind, result.Name = Variable, p.identifier()
+		result.Kind, result.Name = Variable, p.capturePath()
 		if p.text == ":" {
 			p.next()
 			bound := p.expression(depth + 1)
@@ -193,7 +197,7 @@ func (p *parser) expression(depth int) *Expr {
 		result.Kind, result.Name = Literal, "-"+p.text
 		p.next()
 	case p.token == scanner.Ident:
-		result.Kind, result.Name = Symbol, p.identifier()
+		result.Kind, result.Name = Symbol, p.hookName()
 	default:
 		p.fail(p.position, "expected operation, $capture, _, or literal")
 	}
@@ -245,6 +249,11 @@ func Format(name string, input []byte) ([]byte, error) {
 		}
 	}
 	for index, item := range file.Items {
+		if item.API != nil {
+			comments(item.API.Comments)
+			out.WriteString(formatAPI(item.API))
+			continue
+		}
 		if item.Binding != nil {
 			binding := item.Binding
 			comments(binding.Comments)

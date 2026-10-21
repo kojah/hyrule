@@ -16,9 +16,9 @@ func (e *emitter) emitEvaluation(node *matchir.Node) error {
 	}
 	name := valueName(node.Outputs[0])
 	typ := e.tables.types[node.Evaluation.Type]
-	fmt.Fprintf(&e.out, "var %s %s = %s\n_ = %s\n", name, e.host.typeName(typ), value, name)
+	fmt.Fprintf(&e.out, "var %s %s = %s\n_ = %s\n", name, e.host.TypeName(typ), value, name)
 	if validation := e.validation(typ, name); validation != "" {
-		fmt.Fprintf(&e.out, "if !%s { var zero %s; return zero,false }\n", validation, e.host.typeName(e.host.Signature.Results().At(0).Type()))
+		fmt.Fprintf(&e.out, "if !%s { var zero %s; return zero,false }\n", validation, e.host.TypeName(e.host.Signature.Results().At(0).Type()))
 	}
 	if err := e.emitDecisions(node.Next, node.Fallback); err != nil {
 		return err
@@ -44,7 +44,7 @@ func (e *emitter) evaluationValue(expression *matchir.Evaluation) (string, error
 			}
 			e.serial++
 			operands[index] = fmt.Sprintf("hv%d", e.serial)
-			fmt.Fprintf(&e.out, "var %s %s = %s\n", operands[index], e.host.typeName(e.tables.types[expression.Type]), value)
+			fmt.Fprintf(&e.out, "var %s %s = %s\n", operands[index], e.host.TypeName(e.tables.types[expression.Type]), value)
 		}
 		operator := [...]string{"+", "-", "*", "/", "%"}[expression.Arithmetic]
 		return "(" + operands[0] + " " + operator + " " + operands[1] + ")", nil

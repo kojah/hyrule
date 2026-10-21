@@ -22,7 +22,7 @@ func (e *emitter) constructorValue(expression *syntax.Expr, variant *boundVarian
 	for index, value := range arguments {
 		fields = append(fields, variant.fields[index].Name()+": "+value)
 	}
-	return e.host.typeName(variant.union.typ) + "{" + strings.Join(fields, ", ") + "}", nil
+	return e.host.TypeName(variant.union.typ) + "{" + strings.Join(fields, ", ") + "}", nil
 }
 
 func (e *emitter) constructorSignature(variant *boundVariant) *types.Signature {
@@ -93,7 +93,7 @@ func (e *emitter) constructionValue(construction *matchir.Construction) (string,
 		if expression.expression.Kind == syntax.Call || expression.expression.Kind == syntax.Effects {
 			e.serial++
 			temporary := fmt.Sprintf("hv%d", e.serial)
-			fmt.Fprintf(&e.out, "var %s %s = %s\n", temporary, e.host.typeName(variant.fields[field.Field].Type()), value)
+			fmt.Fprintf(&e.out, "var %s %s = %s\n", temporary, e.host.TypeName(variant.fields[field.Field].Type()), value)
 			value = temporary
 		}
 		arguments[field.Field] = value
@@ -102,5 +102,5 @@ func (e *emitter) constructionValue(construction *matchir.Construction) (string,
 	for index, value := range arguments {
 		fields = append(fields, variant.fields[index].Name()+": "+value)
 	}
-	return e.host.typeName(union.typ) + "{" + strings.Join(fields, ", ") + "}", nil
+	return e.host.TypeName(union.typ) + "{" + strings.Join(fields, ", ") + "}", nil
 }

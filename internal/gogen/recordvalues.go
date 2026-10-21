@@ -9,6 +9,9 @@ import (
 )
 
 func (e *emitter) recordValue(expression *syntax.Expr, record *boundRecord) (string, error) {
+	if record.declaration.View {
+		return "", e.fail(expression, "views are read-only; use a builder for construction")
+	}
 	if len(expression.Args) != len(record.fields) && !hasNamedArguments(expression) {
 		return "", e.fail(expression, "record construction requires every declared field")
 	}
@@ -24,10 +27,13 @@ func (e *emitter) recordLiteral(record *boundRecord, arguments []string) string 
 	for index, value := range arguments {
 		fields[index] = record.fields[index].Name() + ": " + value
 	}
-	return e.host.typeName(record.typ) + "{" + strings.Join(fields, ", ") + "}"
+	return e.host.TypeName(record.typ) + "{" + strings.Join(fields, ", ") + "}"
 }
 
 func (e *emitter) recordConstruction(rule *syntax.Rule, expression *syntax.Expr, record *boundRecord) (*matchir.Construction, error) {
+	if record.declaration.View {
+		return nil, e.fail(expression, "views are read-only")
+	}
 	positions, err := e.builderPositions(expression, e.recordSignature(record), "build")
 	if err != nil {
 		return nil, err
@@ -52,7 +58,7 @@ func (e *emitter) recordConstructionValue(construction *matchir.Construction) (s
 		if expression.expression.Kind == syntax.Call {
 			e.serial++
 			temporary := fmt.Sprintf("hv%d", e.serial)
-			fmt.Fprintf(&e.out, "var %s %s = %s\n", temporary, e.host.typeName(record.fields[field.Field].Type()), value)
+			fmt.Fprintf(&e.out, "var %s %s = %s\n", temporary, e.host.TypeName(record.fields[field.Field].Type()), value)
 			value = temporary
 		}
 		arguments[field.Field] = value

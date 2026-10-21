@@ -1,5 +1,5 @@
-// Package gogen emits direct calls to a typed Go host without a runtime matcher.
-package gogen
+// Package hostapi resolves Go host types, hooks and signature stubs for Hyrule.
+package hostapi
 
 import (
 	"bytes"
@@ -86,8 +86,8 @@ func signatureFields(ft *ast.FuncType) ([]*ast.Field, error) {
 			}
 		}
 	}
-	if len(fields) < 1 || len(fields) > 2 {
-		return nil, fmt.Errorf("signature requires input and optional host parameters")
+	if len(fields) < 1 {
+		return nil, fmt.Errorf("signature requires at least one parameter")
 	}
 	for i, f := range fields {
 		f.Names = []*ast.Ident{ast.NewIdent(fmt.Sprintf("harg%d", i))}
@@ -98,28 +98,36 @@ func signatureFields(ft *ast.FuncType) ([]*ast.Field, error) {
 
 // Host contains the package and the selected generated function signature.
 type Host struct {
-	Package   *types.Package
-	Signature *types.Signature
-	Function  string
-	imports   map[string]string
+	Package     *types.Package
+	Signature   *types.Signature
+	Function    string
+	Imports     map[string]string
+	ImportNames map[string]*types.Package
 }
 
-func (h *Host) typeName(t types.Type) string {
-	return types.TypeString(t, func(p *types.Package) string {
-		if p == h.Package {
-			return ""
-		}
-		if name := h.imports[p.Path()]; name != "" {
-			return name
-		}
-		name := fmt.Sprintf("hyruleImport%d", len(h.imports))
-		h.imports[p.Path()] = name
-		return name
-	})
+// TypeName renders a type and records its generated imports.
+func (h *Host) TypeName(t types.Type) string {
+	return types.TypeString(t, h.Qualifier)
 }
 
-func (h *Host) hook(name string) (string, *types.Signature, error) {
+// Hook resolves a non-generic function or a legacy host method.
+func (h *Host) Hook(name string) (string, *types.Signature, error) {
 	obj := h.Package.Scope().Lookup(name)
+	if label, member, qualified := strings.Cut(name, "."); qualified {
+		pkg := h.ImportNames[label]
+		if pkg == nil {
+			return "", nil, fmt.Errorf("unknown import %s", label)
+		}
+		fn, ok := pkg.Scope().Lookup(member).(*types.Func)
+		if !ok || !fn.Exported() {
+			return "", nil, fmt.Errorf("unknown exported function %s", name)
+		}
+		sig := fn.Type().(*types.Signature)
+		if sig.Variadic() || sig.TypeParams().Len() != 0 {
+			return "", nil, fmt.Errorf("hook %s: generic and variadic functions unsupported", name)
+		}
+		return h.Qualifier(pkg) + "." + member, sig, nil
+	}
 	var method types.Object
 	if h.Signature.Params().Len() == 2 {
 		method, _, _ = types.LookupFieldOrMethod(h.Signature.Params().At(1).Type(), true, h.Package, name)
@@ -141,4 +149,35 @@ func (h *Host) hook(name string) (string, *types.Signature, error) {
 		return "", nil, fmt.Errorf("hook %s: generic and variadic functions unsupported", name)
 	}
 	return call, sig, nil
+}
+
+// Qualifier assigns stable, collision-free generated import names.
+func (h *Host) Qualifier(p *types.Package) string {
+	if p == h.Package {
+		return ""
+	}
+	if name := h.Imports[p.Path()]; name != "" {
+		return name
+	}
+	name := fmt.Sprintf("hyruleImport%d", len(h.Imports))
+	h.Imports[p.Path()] = name
+	return name
+}
+
+// UsedQualifiers finds actual selector roots, excluding comments and literals.
+func UsedQualifiers(source string) (map[string]bool, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), "generated.go", "package generated\n"+source, 0)
+	if err != nil {
+		return nil, err
+	}
+	used := map[string]bool{}
+	ast.Inspect(file, func(n ast.Node) bool {
+		if selector, ok := n.(*ast.SelectorExpr); ok {
+			if root, ok := selector.X.(*ast.Ident); ok {
+				used[root.Name] = true
+			}
+		}
+		return true
+	})
+	return used, nil
 }

@@ -11,6 +11,7 @@ import (
 
 // Program holds ordered source rules and their binding declarations.
 type Program struct {
+	API          *syntax.API
 	Bindings     map[string]*syntax.Binding
 	Unions       []*syntax.Union
 	Constructors map[string]*syntax.Variant
@@ -27,7 +28,12 @@ func Collect(files []*syntax.File) (*Program, error) {
 	names := map[string]bool{}
 	for _, file := range files {
 		for _, item := range file.Items {
-			if b := item.Binding; b != nil {
+			if api := item.API; api != nil {
+				if program.API != nil {
+					return nil, &syntax.Diagnostic{Position: api.Position, Message: "duplicate signature declaration"}
+				}
+				program.API = api
+			} else if b := item.Binding; b != nil {
 				if b.Name == "or" {
 					return nil, &syntax.Diagnostic{Position: b.Position, Message: "or is reserved for alternatives"}
 				}
@@ -56,6 +62,25 @@ func Collect(files []*syntax.File) (*Program, error) {
 				}
 				names[item.Rule.Name] = true
 				program.rules = append(program.rules, item.Rule)
+			}
+		}
+	}
+	if program.API != nil {
+		for _, name := range []string{"inputs", "outputs"} {
+			if program.Bindings[name] != nil || program.patterns[name] != nil {
+				return nil, &syntax.Diagnostic{Position: program.API.Position, Message: "native signature reserves " + name}
+			}
+			for _, union := range program.Unions {
+				for _, variant := range union.Variants {
+					if variant.Name == name {
+						return nil, &syntax.Diagnostic{Position: variant.Position, Message: "native signature reserves " + name}
+					}
+				}
+			}
+			for _, record := range program.Records {
+				if record.Name == name {
+					return nil, &syntax.Diagnostic{Position: record.Position, Message: "native signature reserves " + name}
+				}
 			}
 		}
 	}

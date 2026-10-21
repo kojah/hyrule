@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/gogen"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
 	"golang.org/x/tools/go/packages"
 )
@@ -32,7 +33,7 @@ func (c *Config) Compile(ctx context.Context, target string) ([]Artifact, error)
 	}
 	selected := []Target{}
 	for _, t := range c.Targets {
-		data, err := gogen.Stub(filepath.Join(c.root, t.Bindings), t.Signature, t.Function)
+		data, err := hostapi.Stub(filepath.Join(c.root, t.Bindings), t.Signature, t.Function)
 		if err != nil {
 			return nil, fmt.Errorf("target %s: %w", t.Name, err)
 		}
@@ -69,7 +70,22 @@ func (c *Config) Compile(ctx context.Context, target string) ([]Artifact, error)
 		if err != nil {
 			return nil, err
 		}
-		data, err := gogen.Generate(gogen.Host{Package: pkg.Types, Signature: sig, Function: t.Function}, files)
+		names := map[string]*types.Package{}
+		for _, file := range pkg.Syntax {
+			if filepath.Clean(pkg.Fset.Position(file.Pos()).Filename) != filepath.Join(c.root, t.Bindings) {
+				continue
+			}
+			for _, spec := range file.Imports {
+				obj := pkg.TypesInfo.Implicits[spec]
+				if spec.Name != nil {
+					obj = pkg.TypesInfo.Defs[spec.Name]
+				}
+				if imported, ok := obj.(*types.PkgName); ok {
+					names[imported.Name()] = imported.Imported()
+				}
+			}
+		}
+		data, err := gogen.Generate(gogen.Host{Package: pkg.Types, Signature: sig, Function: t.Function, ImportNames: names}, files)
 		if err != nil {
 			return nil, fmt.Errorf("target %s: %w", t.Name, err)
 		}

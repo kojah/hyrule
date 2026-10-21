@@ -61,12 +61,14 @@ type Expr struct {
 // Binding declares a named matcher, builder, pure guard or ordered host query.
 type Binding struct {
 	Position
-	Kind      string
-	Name      string
-	GoName    string
-	Implicit  bool // Preserve alias-free spelling when formatting.
-	Continued bool // This name continues the preceding comma-separated declaration.
-	Comments  []string
+	Kind       string
+	Name       string
+	GoName     string
+	Implicit   bool // Preserve alias-free spelling when formatting.
+	Parameters []string
+	Body       *Expr
+	Continued  bool // This name continues the preceding comma-separated declaration.
+	Comments   []string
 }
 
 // Rule is one match, ordered immutable bindings/guards and replacement.
@@ -102,6 +104,7 @@ type Item struct {
 	Union   *Union
 	Record  *Record
 	Rule    *Rule
+	API     *API
 }
 
 // File retains declarations and comments. Files combine in lexical filename
@@ -116,6 +119,7 @@ type File struct {
 type Union struct {
 	Position
 	Name, GoType, Tag string
+	Types             []string // Native tuple result types; storage fields are zero-based indices.
 	Exhaustive        bool
 	Variants          []*Variant
 	Comments          []string
@@ -148,6 +152,15 @@ type DecisionArm struct {
 type Record struct {
 	Position
 	Name, GoType string
+	View         bool // Read-only projection; permits partial and imported pointer storage.
 	Fields       []UnionField
 	Comments     []string
+}
+
+// API opts into a native parameter/result list. Total APIs declare a failure value.
+type API struct {
+	Position
+	Mode     string
+	Fallback *Expr
+	Comments []string
 }

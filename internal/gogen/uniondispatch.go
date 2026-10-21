@@ -111,7 +111,7 @@ func (e *emitter) emitDispatch(node *matchir.Node) error {
 		fmt.Fprintf(&e.out, "case %s:\n", variant.tag.Name())
 		e.established = variant
 		if validation := e.activeValidation(variant, valueName(node.Input)); validation != "" {
-			fmt.Fprintf(&e.out, "if !(%s) { var zero %s; return zero,false }\n", validation, e.host.typeName(e.host.Signature.Results().At(0).Type()))
+			fmt.Fprintf(&e.out, "if !(%s) { var zero %s; return zero,false }\n", validation, e.host.TypeName(e.host.Signature.Results().At(0).Type()))
 		}
 		if err := e.emitDecisions(alternative.Next, nil); err != nil {
 			return err

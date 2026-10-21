@@ -10,9 +10,21 @@ func (p *parser) unionDeclaration(position Position, comments []string) *Union {
 	union := &Union{Position: position, Name: p.identifier(), Comments: comments}
 	p.rule = union.Name
 	p.expect("=")
-	union.GoType = p.identifier()
+	if p.text == "(" {
+		p.next()
+		for p.failure == nil {
+			union.Types = append(union.Types, p.goType())
+			if p.text != "," {
+				break
+			}
+			p.next()
+		}
+		p.expect(")")
+	} else {
+		union.GoType = p.identifier()
+	}
 	p.expect("tag")
-	union.Tag = p.identifier()
+	union.Tag = p.storageName()
 	p.expect("{")
 	for p.text != "}" && p.token != scanner.EOF && p.failure == nil {
 		variant := &Variant{Position: p.position, Name: p.identifier()}
@@ -46,7 +58,11 @@ func formatUnion(union *Union) string {
 	if union.Exhaustive {
 		output.WriteString("exhaustive ")
 	}
-	fmt.Fprintf(&output, "union %s = %s tag %s {\n", union.Name, union.GoType, union.Tag)
+	storage := union.GoType
+	if len(union.Types) > 0 {
+		storage = "(" + strings.Join(union.Types, ", ") + ")"
+	}
+	fmt.Fprintf(&output, "union %s = %s tag %s {\n", union.Name, storage, union.Tag)
 	for _, variant := range union.Variants {
 		fmt.Fprintf(&output, "  %s", variant.Name)
 		if !variant.Implicit {

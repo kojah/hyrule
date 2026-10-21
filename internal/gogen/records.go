@@ -1,8 +1,10 @@
 package gogen
 
 import (
+	"fmt"
 	"go/token"
 	"go/types"
+	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
@@ -30,19 +32,26 @@ func (e *emitter) bindRecord(declaration *syntax.Record) error {
 	failure := func(message string) error {
 		return &syntax.Diagnostic{Position: declaration.Position, Message: message}
 	}
-	object, known := e.host.Package.Scope().Lookup(declaration.GoType).(*types.TypeName)
-	if !known || genericStorage(object.Type()) {
-		return failure("record requires a local non-generic Go type " + declaration.GoType)
+	typ, err := e.host.Type(declaration.GoType)
+	if err != nil || genericStorage(typ) {
+		return failure("record requires a non-generic Go type " + declaration.GoType)
 	}
-	structure, known := object.Type().Underlying().(*types.Struct)
+	storageType := typ
+	if pointer, ok := storageType.Underlying().(*types.Pointer); ok && declaration.View {
+		storageType = pointer.Elem()
+	}
+	if genericStorage(storageType) {
+		return failure("view storage requires a non-generic Go type")
+	}
+	structure, known := storageType.Underlying().(*types.Struct)
 	if !known {
-		return failure("record storage must be a Go struct")
+		return failure("record storage must be a Go struct (or pointer for a view)")
 	}
-	if e.unionFor(object.Type()) != nil || e.recordFor(object.Type()) != nil {
+	if !declaration.View && (e.unionFor(typ) != nil || e.recordFor(typ) != nil) {
 		return failure("Go type already bound to a record or union")
 	}
-	record := &boundRecord{declaration: declaration, typ: object.Type(),
-		schema: &matchir.RecordSchema{ID: matchir.RecordID(len(e.records)), Name: declaration.Name, Type: e.tables.typeID(object.Type())}}
+	record := &boundRecord{declaration: declaration, typ: typ,
+		schema: &matchir.RecordSchema{ID: matchir.RecordID(len(e.records)), Name: declaration.Name, Type: e.tables.typeID(typ)}}
 	names, storage := map[string]bool{}, map[string]bool{}
 	var results []*types.Var
 	for index, field := range declaration.Fields {
@@ -58,7 +67,7 @@ func (e *emitter) bindRecord(declaration *syntax.Record) error {
 		results = append(results, types.NewVar(token.NoPos, e.host.Package, field.Name, member.Type()))
 		record.schema.Fields = append(record.schema.Fields, matchir.FieldSchema{ID: matchir.FieldID(index), Name: field.Name, Type: e.tables.typeID(member.Type())})
 	}
-	for index := 0; index < structure.NumFields(); index++ {
+	for index := 0; !declaration.View && index < structure.NumFields(); index++ {
 		if field := structure.Field(index); field.Name() != "_" && !storage[field.Name()] {
 			return failure("record schema omits Go field " + field.Name())
 		}
@@ -73,7 +82,7 @@ func (e *emitter) bindRecord(declaration *syntax.Record) error {
 
 func (e *emitter) recordFor(typ types.Type) *boundRecord {
 	for _, record := range e.records {
-		if types.Identical(record.typ, typ) {
+		if !record.declaration.View && types.Identical(record.typ, typ) {
 			return record
 		}
 	}
@@ -87,4 +96,35 @@ func (e *emitter) recordSignature(record *boundRecord) *types.Signature {
 	}
 	result := types.NewTuple(types.NewVar(token.NoPos, e.host.Package, "", record.typ))
 	return types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), result, false)
+}
+
+// viewMatcher emits a read-only structural extraction. Interface inputs are
+// checked with a Go type assertion; nil pointers never expose fields. There is
+// no host callback to hide state changes inside the shared matching graph.
+func (e *emitter) viewMatcher(x *syntax.Expr, record *boundRecord, input types.Type) (string, *types.Signature, error) {
+	var parameters, values, assignments []string
+	for i, field := range record.fields {
+		name := fmt.Sprintf("hr%d", i)
+		parameters = append(parameters, name+" "+e.host.TypeName(field.Type()))
+		values = append(values, name)
+		assignments = append(assignments, name+" = hvalue."+field.Name())
+	}
+	parameters = append(parameters, "hok bool")
+	var extraction string
+	if types.Identical(input, record.typ) {
+		extraction = "hvalue := hinput\n"
+	} else if iface, ok := input.Underlying().(*types.Interface); ok && types.AssertableTo(iface, record.typ) {
+		extraction = "hvalue, hok := hinput.(" + e.host.TypeName(record.typ) + ")\nif !hok { return }\n"
+	} else {
+		return "", nil, e.fail(x, "view input must be its storage type or a compatible interface")
+	}
+	if _, pointer := record.typ.Underlying().(*types.Pointer); pointer {
+		extraction += "if hvalue == nil { hok = false; return }\n"
+	}
+	extraction += "_ = hvalue\n"
+	values = append(values, "true")
+	body := fmt.Sprintf("(func(hinput %s) (%s) { %s%s; return %s })",
+		e.host.TypeName(input), strings.Join(parameters, ","), extraction, strings.Join(assignments, ";"), strings.Join(values, ","))
+	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(types.NewVar(token.NoPos, e.host.Package, "input", input)), record.signature.Results(), false)
+	return body, sig, nil
 }

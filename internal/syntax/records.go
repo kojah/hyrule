@@ -10,7 +10,7 @@ func (p *parser) recordDeclaration(position Position, comments []string) *Record
 	record := &Record{Position: position, Name: p.identifier(), Comments: comments}
 	p.rule = record.Name
 	p.expect("=")
-	record.GoType = p.identifier()
+	record.GoType = p.goType()
 	p.expect("{")
 	for p.text != "}" && p.token != scanner.EOF && p.failure == nil {
 		record.Fields = append(record.Fields, p.storageField())
@@ -25,7 +25,11 @@ func (p *parser) recordDeclaration(position Position, comments []string) *Record
 
 func formatRecord(record *Record) string {
 	var output strings.Builder
-	fmt.Fprintf(&output, "record %s = %s {\n", record.Name, record.GoType)
+	kind := "record"
+	if record.View {
+		kind = "view"
+	}
+	fmt.Fprintf(&output, "%s %s = %s {\n", kind, record.Name, record.GoType)
 	for _, field := range record.Fields {
 		output.WriteString("  " + formatStorageField(field))
 	}
@@ -39,7 +43,7 @@ func (p *parser) storageField() UnionField {
 	field.Implicit = p.text != ":"
 	if !field.Implicit {
 		p.next()
-		field.GoName = p.identifier()
+		field.GoName = p.storageName()
 	}
 	p.expect(";")
 	return field

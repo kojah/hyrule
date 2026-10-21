@@ -9,7 +9,14 @@ import (
 // matcher resolves child positions once for both contract checking and emission.
 // Named fields refer to Go result names; the final success bool is never a child.
 func (e *emitter) matcher(x *syntax.Expr, input types.Type) (string, *types.Signature, []int, error) {
-	name, sig, err := e.matchSignature(x)
+	var name string
+	var sig *types.Signature
+	var err error
+	if record := e.recordNames[x.Name]; record != nil && record.declaration.View {
+		name, sig, err = e.viewMatcher(x, record, input)
+	} else {
+		name, sig, err = e.matchSignature(x)
+	}
 	if err != nil {
 		return "", nil, nil, err
 	}

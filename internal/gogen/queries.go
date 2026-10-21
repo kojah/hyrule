@@ -5,6 +5,7 @@ import (
 	"go/types"
 	"strings"
 
+	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
 )
@@ -23,14 +24,32 @@ func (e *emitter) queryValue(x *syntax.Expr, expected types.Type) (string, error
 	if call.Kind != syntax.Call || call.Bind != "" {
 		return "", e.fail(call, "query requires a query hook call")
 	}
-	name, sig, err := e.binding(call, "query")
+	expanded, err := e.forwardingCall(call, "query")
 	if err != nil {
 		return "", err
 	}
-	if sig.Results().Len() != 1 || sig.Params().Len() != len(call.Args) {
-		return "", e.fail(call, "query requires one result and one parameter per argument")
+	var name string
+	var sig *types.Signature
+	if expanded != call {
+		call = expanded
+		name, sig, err = e.host.Hook(call.Name)
+	} else {
+		name, sig, err = e.binding(call, "query")
 	}
-	union := e.unionFor(sig.Results().At(0).Type())
+	if err != nil {
+		return "", err
+	}
+	if sig.Results().Len() < 1 || sig.Params().Len() != len(call.Args) {
+		return "", e.fail(call, "query requires results and one parameter per argument")
+	}
+	if sig.Results().Len() == 1 && types.Identical(sig.Results().At(0).Type().Underlying(), types.Typ[types.Bool]) {
+		return e.booleanQuery(x, call, name, sig, expected)
+	}
+	resultType := sig.Results().At(0).Type()
+	if sig.Results().Len() > 1 {
+		resultType = hostapi.Tuple(e.host.Package, sig.Results())
+	}
+	union := e.unionFor(resultType)
 	if union == nil {
 		return "", e.fail(call, "query result must have a declared union")
 	}
@@ -49,11 +68,22 @@ func (e *emitter) queryValue(x *syntax.Expr, expected types.Type) (string, error
 	if x.Name != "" {
 		e.captures[x.Name] = capture{id, union.typ}
 	}
-	fmt.Fprintf(&e.out, "%s := %s(%s)\n", result, name, strings.Join(arguments, ","))
-	fmt.Fprintf(&e.out, "if !%s(%s) { var zero %s; return zero,false }\n", e.validator(union), result, e.host.typeName(sigOutput(e)))
+	if sig.Results().Len() == 1 {
+		fmt.Fprintf(&e.out, "%s := %s(%s)\n", result, name, strings.Join(arguments, ","))
+	} else {
+		vars, fields := []string{}, []string{}
+		for i := 0; i < sig.Results().Len(); i++ {
+			v := fmt.Sprintf("%spart%d", result, i)
+			vars = append(vars, v)
+			fields = append(fields, fmt.Sprintf("V%d:%s", i, v))
+		}
+		fmt.Fprintf(&e.out, "%s := %s(%s)\n%s := %s{%s}\n",
+			strings.Join(vars, ","), name, strings.Join(arguments, ","), result, e.host.TypeName(resultType), strings.Join(fields, ","))
+	}
+	fmt.Fprintf(&e.out, "if !%s(%s) { var zero %s; return zero,false }\n", e.validator(union), result, e.host.TypeName(sigOutput(e)))
 	e.serial++
 	output := fmt.Sprintf("hv%d", e.serial)
-	fmt.Fprintf(&e.out, "var %s %s\nswitch %s.%s {\n", output, e.host.typeName(expected), result, union.tag.Name())
+	fmt.Fprintf(&e.out, "var %s %s\nswitch %s.%s {\n", output, e.host.TypeName(expected), result, union.tag.Name())
 	base := e.captures
 	for _, arm := range x.Arms {
 		e.captures = cloneCaptures(base)
@@ -75,8 +105,8 @@ func (e *emitter) queryValue(x *syntax.Expr, expected types.Type) (string, error
 func (e *emitter) queryArguments(call *syntax.Expr, sig *types.Signature) ([]string, error) {
 	arguments := make([]string, len(call.Args))
 	for i, arg := range call.Args {
-		if arg.Field != "" || arg.Bind != "" || (arg.Kind != syntax.Variable && arg.Kind != syntax.Literal) {
-			return nil, e.fail(arg, "query arguments must be positional captures or literals")
+		if arg.Field != "" || arg.Bind != "" || (arg.Kind != syntax.Variable && arg.Kind != syntax.Literal && arg.Kind != syntax.Symbol) {
+			return nil, e.fail(arg, "query arguments must be positional captures, constants or literals")
 		}
 		value, err := e.value(arg, "build")
 		if err != nil {
@@ -84,7 +114,7 @@ func (e *emitter) queryArguments(call *syntax.Expr, sig *types.Signature) ([]str
 		}
 		e.serial++
 		arguments[i] = fmt.Sprintf("hv%d", e.serial)
-		fmt.Fprintf(&e.out, "var %s %s = %s\n", arguments[i], e.host.typeName(sig.Params().At(i).Type()), value)
+		fmt.Fprintf(&e.out, "var %s %s = %s\n", arguments[i], e.host.TypeName(sig.Params().At(i).Type()), value)
 	}
 	return arguments, nil
 }
@@ -119,7 +149,7 @@ func (e *emitter) checkDecision(x *syntax.Expr, union *boundUnion) error {
 				continue
 			}
 			_, exists := names[arg.Name]
-			if arg.Kind != syntax.Variable || exists {
+			if arg.Kind != syntax.Variable || exists || strings.Contains(arg.Name, ".") {
 				return e.fail(arg, "decision fields require fresh captures or wildcards; refinements are not exhaustive")
 			}
 			names[arg.Name] = struct{}{}
@@ -153,4 +183,49 @@ func (e *emitter) bindOutcome(pattern *syntax.Expr, variant *boundVariant, input
 		e.captures[arg.Name] = capture{id, field.Type()}
 	}
 	return nil
+}
+
+// Boolean outcomes are closed by the Go type itself; no schema or tag aliases
+// are needed. A named capture retains its exact (possibly named) Boolean type.
+func (e *emitter) booleanQuery(x, call *syntax.Expr, name string, sig *types.Signature, expected types.Type) (string, error) {
+	seen := map[string]bool{}
+	for _, arm := range x.Arms {
+		p := arm.Pattern
+		if p.Kind != syntax.Literal || (p.Name != "true" && p.Name != "false") || p.Bind != "" || p.Field != "" {
+			return "", e.fail(p, "Boolean decision arms require true and false")
+		}
+		if seen[p.Name] {
+			return "", e.fail(p, "duplicate Boolean decision arm "+p.Name)
+		}
+		seen[p.Name] = true
+	}
+	if !seen["true"] || !seen["false"] {
+		return "", e.fail(x, "non-exhaustive Boolean query decision: require true and false")
+	}
+	args, err := e.queryArguments(call, sig)
+	if err != nil {
+		return "", err
+	}
+	e.serial++
+	id := matchir.ValueID(e.serial)
+	result := valueName(id)
+	fmt.Fprintf(&e.out, "%s := %s(%s)\n", result, name, strings.Join(args, ","))
+	if x.Name != "" {
+		e.captures[x.Name] = capture{id, sig.Results().At(0).Type()}
+	}
+	e.serial++
+	output := fmt.Sprintf("hv%d", e.serial)
+	fmt.Fprintf(&e.out, "var %s %s\nswitch %s {\n", output, e.host.TypeName(expected), result)
+	base := e.captures
+	for _, arm := range x.Arms {
+		e.captures = cloneCaptures(base)
+		fmt.Fprintf(&e.out, "case %s:\n", arm.Pattern.Name)
+		value, err := e.resultValue(arm.Result, expected)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(&e.out, "%s = %s\n", output, value)
+	}
+	e.out.WriteString("}\n")
+	return output, nil
 }

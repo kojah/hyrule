@@ -6,6 +6,9 @@ import "github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
 // Constants retain symbol semantics. Nested bare names never become calls:
 // nested application requires explicit parentheses, even for nullary operations.
 func (program *Program) resolveApplications() {
+	if program.API != nil && program.API.Fallback != nil {
+		program.resolveApplication(program.API.Fallback)
+	}
 	for _, rule := range program.rules {
 		program.resolveApplication(rule.Match)
 		program.resolveApplication(rule.Build)
@@ -34,6 +37,9 @@ func (program *Program) resolveApplication(expression *syntax.Expr) {
 func (program *Program) operationName(name string) bool {
 	if binding := program.Bindings[name]; binding != nil {
 		return binding.Kind != "const"
+	}
+	if program.API != nil && (name == "inputs" || name == "outputs") {
+		return true
 	}
 	return program.Constructors[name] != nil || program.RecordNames[name] != nil || program.patterns[name] != nil
 }

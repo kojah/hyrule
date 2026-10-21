@@ -59,7 +59,7 @@ func (e *emitter) activeValidation(variant *boundVariant, value string) string {
 
 func (e *emitter) emitValidators() {
 	for _, union := range e.unions {
-		fmt.Fprintf(&e.out, "func %s(value %s) bool {\nswitch value.%s {\n", e.validator(union), e.host.typeName(union.typ), union.tag.Name())
+		fmt.Fprintf(&e.out, "func %s(value %s) bool {\nswitch value.%s {\n", e.validator(union), e.host.TypeName(union.typ), union.tag.Name())
 		for _, variant := range union.variants {
 			checked := e.activeValidation(variant, "value")
 			if checked == "" {
@@ -70,10 +70,13 @@ func (e *emitter) emitValidators() {
 		e.out.WriteString("}\nreturn false\n}\n")
 	}
 	for _, record := range e.records {
+		if record.declaration.View {
+			continue
+		}
 		checked := e.recordChecks(record, "value")
 		if checked == "" {
 			continue
 		}
-		fmt.Fprintf(&e.out, "func %s(value %s) bool { return %s }\n", e.recordValidator(record), e.host.typeName(record.typ), checked)
+		fmt.Fprintf(&e.out, "func %s(value %s) bool { return %s }\n", e.recordValidator(record), e.host.TypeName(record.typ), checked)
 	}
 }

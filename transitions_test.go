@@ -129,7 +129,7 @@ func TestQueryDecisionDiagnostics(t *testing.T) {
 		{"not query", `query $p = (Mark 0) decide $p {` + complete + `}`, "expected query binding"},
 		{"wrong arity", `query $p = (Ask) decide $p {` + complete + `}`, "one parameter per argument"},
 		{"argument type", `query $p = (Ask "bad") decide $p {` + complete + `}`, "cannot use"},
-		{"builder argument", `query $p = (Ask (Mark 0)) decide $p {` + complete + `}`, "captures or literals"},
+		{"builder argument", `query $p = (Ask (Mark 0)) decide $p {` + complete + `}`, "captures, constants or literals"},
 		{"escaped payload", `query $p = (Ask 0) decide $p {(Proven)=>effects [$why];(Disproven)=>effects [];(Unavailable reason:$why)=>effects [];}`,
 			"unbound capture"},
 		{"shadow query", `query $x = (Ask 0) decide $x {` + complete + `}`, "query capture shadows"},
@@ -210,7 +210,7 @@ func TestEffectsPreserveNamedArgumentOrderAndTypes(t *testing.T) {
 
 func TestQueryRequiresUnionAndAllBranchesTypeCheck(t *testing.T) {
 	for _, tt := range []struct{ declarations, result, want string }{
-		{`query Wrong = Wrong;`, `query $p = (Wrong 1) decide $p {(Proven)=>effects [];}`, "query result must have a declared union"},
+		{`query Wrong = Wrong;`, `query $p = (Wrong 1) decide $p {(Proven)=>effects [];}`, "Boolean decision arms require true and false"},
 		{``, `query $p = (Ask 0) decide $p {
     (Proven)=>effects []; (Disproven)=>effects []; (Unavailable)=>effects ["bad"];
    }`, "cannot use"},

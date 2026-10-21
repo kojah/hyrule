@@ -25,7 +25,7 @@ func (e *emitter) listValue(expression *syntax.Expr, expected types.Type) (strin
 		}
 		items[index] = e.structuralTemporary(collection.Elem(), value)
 	}
-	return e.host.typeName(expected) + "{" + strings.Join(items, ", ") + "}", nil
+	return e.host.TypeName(expected) + "{" + strings.Join(items, ", ") + "}", nil
 }
 
 func (e *emitter) listConstructionValue(list *matchir.ListConstruction) (string, error) {
@@ -39,7 +39,7 @@ func (e *emitter) listConstructionValue(list *matchir.ListConstruction) (string,
 		}
 		items[index] = e.structuralTemporary(e.tables.types[list.Element], value)
 	}
-	return e.host.typeName(e.tables.types[list.Type]) + "{" + strings.Join(items, ", ") + "}", nil
+	return e.host.TypeName(e.tables.types[list.Type]) + "{" + strings.Join(items, ", ") + "}", nil
 }
 
 // structuralTemporary sequences one field or element and validates declared
@@ -47,9 +47,9 @@ func (e *emitter) listConstructionValue(list *matchir.ListConstruction) (string,
 func (e *emitter) structuralTemporary(typ types.Type, value string) string {
 	e.serial++
 	name := fmt.Sprintf("hv%d", e.serial)
-	fmt.Fprintf(&e.out, "var %s %s = %s\n", name, e.host.typeName(typ), value)
+	fmt.Fprintf(&e.out, "var %s %s = %s\n", name, e.host.TypeName(typ), value)
 	if validation := e.validation(typ, name); validation != "" {
-		fmt.Fprintf(&e.out, "if !%s { var zero %s; return zero,false }\n", validation, e.host.typeName(e.host.Signature.Results().At(0).Type()))
+		fmt.Fprintf(&e.out, "if !%s { var zero %s; return zero,false }\n", validation, e.host.TypeName(e.host.Signature.Results().At(0).Type()))
 	}
 	return name
 }
@@ -163,13 +163,13 @@ func (e *emitter) typedValue(x *syntax.Expr, expected types.Type) (string, error
 		}
 		e.serial++
 		name := fmt.Sprintf("hv%d", e.serial)
-		fmt.Fprintf(&e.out, "var %s %s = %s\n", name, e.host.typeName(slice.Elem()), value)
+		fmt.Fprintf(&e.out, "var %s %s = %s\n", name, e.host.TypeName(slice.Elem()), value)
 		if union := e.unionFor(slice.Elem()); union != nil {
-			fmt.Fprintf(&e.out, "if !%s(%s) { var zero %s; return zero,false }\n", e.validator(union), name, e.host.typeName(sigOutput(e)))
+			fmt.Fprintf(&e.out, "if !%s(%s) { var zero %s; return zero,false }\n", e.validator(union), name, e.host.TypeName(sigOutput(e)))
 		}
 		elements = append(elements, name)
 	}
-	return e.host.typeName(expected) + "{" + strings.Join(elements, ",") + "}", nil
+	return e.host.TypeName(expected) + "{" + strings.Join(elements, ",") + "}", nil
 }
 
 func (e *emitter) resultValue(x *syntax.Expr, expected types.Type) (string, error) {
