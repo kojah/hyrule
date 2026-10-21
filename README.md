@@ -173,6 +173,11 @@ patterns. They also build tagged values directly; no matcher or builder hook is
 required for a declared constructor. A zero-argument constructor pattern tests
 its variant and ignores its fields; construction still requires every field.
 
+A variant may omit a same-name Go tag alias: `Lock { resource: Resource; };`
+means `Lock = Lock { resource: Resource; };`. Names are exact and case-sensitive.
+Each variant remains a separate declaration; explicit aliases can be mixed with
+shorthand variants, and formatting preserves both forms.
+
 Ordinary `union` declarations allow partial recognizers. `exhaustive union`
 requests a conservative coverage check for the target input: guarded or refined
 patterns do not discharge a variant, while an unguarded whole-input fallback

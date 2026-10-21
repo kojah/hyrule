@@ -64,3 +64,36 @@ func TestBindingShorthandFormatting(t *testing.T) {
 		})
 	}
 }
+
+func TestSameNameUnionVariants(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", unionHost+"\nconst (Number = NumberTag; Empty = EmptyTag; Wrapped = WrapTag)\n")
+	explicit := strings.NewReplacer("\n Number = NumberTag", "\n Number = Number", "\n Empty = EmptyTag", "\n Empty = Empty", "\n Wrapped = WrapTag", "\n Wrapped = Wrapped").Replace(unionSchema)
+	explicit += `rule Number: (Number $n) => (Number $n);
+ rule Empty: (Empty) => (Empty);
+ rule Wrapped: (Wrapped $atom) => (Wrapped $atom);`
+	write(t, root, "input.rules", explicit)
+	_, want := compile(t, root)
+	implicit := strings.NewReplacer("Number = Number {", "Number {", "Empty = Empty {", "Empty {", "Wrapped = Wrapped {", "Wrapped {").Replace(explicit)
+	write(t, root, "input.rules", implicit)
+	_, got := compile(t, root)
+	if !bytes.Equal(got[0].Data, want[0].Data) {
+		t.Fatal("same-name variants changed generated code")
+	}
+	formatted, err := hyrule.Format("input.rules", []byte(implicit))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(formatted, []byte("  Number {")) || !bytes.Contains(formatted, []byte("AtomNumber = NumberTag")) {
+		t.Fatalf("formatter lost shorthand or explicit alias:\n%s", formatted)
+	}
+	again, err := hyrule.Format("input.rules", formatted)
+	if err != nil || !bytes.Equal(formatted, again) {
+		t.Fatalf("format not idempotent: %v", err)
+	}
+	for _, bad := range []string{"Number = {};", "Number | Empty {};", "Number, Empty {};"} {
+		if _, err := hyrule.Format("input.rules", []byte("union Value = Value tag Kind {"+bad+"};")); err == nil {
+			t.Errorf("accepted malformed variant %q", bad)
+		}
+	}
+}

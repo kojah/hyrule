@@ -123,6 +123,7 @@ type Union struct {
 type Variant struct {
 	Position
 	Name, GoTag string
+	Implicit    bool // Preserve an omitted same-name tag alias when formatting.
 	Fields      []UnionField
 }
 

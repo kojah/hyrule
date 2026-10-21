@@ -16,8 +16,12 @@ func (p *parser) unionDeclaration(position Position, comments []string) *Union {
 	p.expect("{")
 	for p.text != "}" && p.token != scanner.EOF && p.failure == nil {
 		variant := &Variant{Position: p.position, Name: p.identifier()}
-		p.expect("=")
-		variant.GoTag = p.identifier()
+		variant.GoTag = variant.Name
+		variant.Implicit = p.text != "="
+		if !variant.Implicit {
+			p.next()
+			variant.GoTag = p.identifier()
+		}
 		p.expect("{")
 		for p.text != "}" && p.token != scanner.EOF && p.failure == nil {
 			field := UnionField{Position: p.position, Name: p.identifier()}
@@ -45,7 +49,11 @@ func formatUnion(union *Union) string {
 	}
 	fmt.Fprintf(&output, "union %s = %s tag %s {\n", union.Name, union.GoType, union.Tag)
 	for _, variant := range union.Variants {
-		fmt.Fprintf(&output, "  %s = %s {", variant.Name, variant.GoTag)
+		fmt.Fprintf(&output, "  %s", variant.Name)
+		if !variant.Implicit {
+			fmt.Fprintf(&output, " = %s", variant.GoTag)
+		}
+		output.WriteString(" {")
 		if len(variant.Fields) > 0 {
 			output.WriteByte('\n')
 		}
