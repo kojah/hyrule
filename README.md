@@ -47,6 +47,14 @@ rule LookupPayload:
 
 Declarations bind DSL operation names to Go functions or methods on the optional
 host argument. Rule names are stable diagnostic identities, unique per target.
+When the DSL and Go names are identical, omit the alias: `match lockCall;`
+means `match lockCall = lockCall;`. The same shorthand works for `build`,
+`guard`, `query`, and `const`. Names are exact and case-sensitive; no naming
+conversion is inferred. Several exact-name bindings of the same kind can share
+a declaration: `match lockCall, unlockCall, readLockCall;`. This also works for
+`build`, `guard`, `query`, and `const`. Explicit aliases use separate declarations.
+Formatting preserves groups and either spelling; each name receives the same
+Go type validation and duplicate-name checks as a separate declaration.
 `$name` binds a pattern value and references it on the right; `$name:(Op ...)`
 binds the entire input to that subpattern. `_` ignores a pattern value.
 Parenthesized calls nest. Literals use Go spelling for numbers, strings, raw

@@ -42,11 +42,7 @@ func Parse(name string, input io.Reader) (*File, error) {
 		p.next()
 		switch kind {
 		case "match", "build", "guard", "query", "const":
-			binding := &Binding{Position: pos, Kind: kind, Name: p.identifier(), Comments: comments}
-			p.expect("=")
-			binding.GoName = p.identifier()
-			p.expect(";")
-			file.Items = append(file.Items, Item{Binding: binding})
+			file.Items = append(file.Items, p.bindings(pos, kind, comments)...)
 		case "union", "exhaustive":
 			if kind == "exhaustive" {
 				p.expect("union")
@@ -265,7 +261,7 @@ func Format(name string, input []byte) ([]byte, error) {
 		if item.Binding != nil {
 			binding := item.Binding
 			comments(binding.Comments)
-			fmt.Fprintf(&out, "%s %s = %s;\n", binding.Kind, binding.Name, binding.GoName)
+			out.WriteString(formatBinding(file.Items, index))
 			continue
 		}
 		if item.Union != nil {

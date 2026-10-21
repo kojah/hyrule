@@ -59,10 +59,12 @@ type Expr struct {
 // Binding declares a named matcher, builder, pure guard or ordered host query.
 type Binding struct {
 	Position
-	Kind     string
-	Name     string
-	GoName   string
-	Comments []string
+	Kind      string
+	Name      string
+	GoName    string
+	Implicit  bool // Preserve alias-free spelling when formatting.
+	Continued bool // This name continues the preceding comma-separated declaration.
+	Comments  []string
 }
 
 // Rule is one match, ordered immutable bindings/guards and replacement.
