@@ -102,12 +102,13 @@ type Pattern struct {
 
 // Item preserves declaration order for formatting.
 type Item struct {
-	Binding *Binding
-	Pattern *Pattern
-	Union   *Union
-	Record  *Record
-	Rule    *Rule
-	API     *API
+	Derivation *Derivation
+	Binding    *Binding
+	Pattern    *Pattern
+	Union      *Union
+	Record     *Record
+	Rule       *Rule
+	API        *API
 }
 
 // File retains declarations and comments. Files combine in lexical filename

@@ -10,6 +10,7 @@ import (
 	"github.com/kojah/lockdoc/tools/hyrule/internal/compiler"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/recordgen"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
 )
 
@@ -48,6 +49,20 @@ func Generate(h Host, files []*syntax.File) ([]byte, error) {
 	program, err := compiler.Collect(files)
 	if err != nil {
 		return nil, err
+	}
+	if h.Signature == nil {
+		if program.API != nil || len(program.Bindings) != 0 || len(program.Unions) != 0 || program.HasRules() {
+			return nil, fmt.Errorf("schema target accepts only records and derivations")
+		}
+		e := emitter{host: &h}
+		if err := e.bindRecords(program.Records); err != nil {
+			return nil, err
+		}
+		body, err := recordgen.Generate(&h, program)
+		if err != nil {
+			return nil, err
+		}
+		return renderSource(&h, body)
 	}
 	native, err := nativeAPI(&h, program.API)
 	if err != nil {
@@ -111,15 +126,24 @@ func Generate(h Host, files []*syntax.File) ([]byte, error) {
 	}
 	e.out.WriteString("}\n")
 	e.emitValidators()
+	derived, err := recordgen.Generate(&h, program)
+	if err != nil {
+		return nil, err
+	}
+	e.out.WriteString(derived)
 	if native != nil {
 		if err := e.emitNativeAPI(native); err != nil {
 			return nil, err
 		}
 	}
+	return renderSource(&h, e.out.String())
+}
+
+func renderSource(h *Host, body string) ([]byte, error) {
 	var source strings.Builder
 	source.WriteString(Header)
 	fmt.Fprintf(&source, "\npackage %s\n", h.Package.Name())
-	used, err := hostapi.UsedQualifiers(e.out.String())
+	used, err := hostapi.UsedQualifiers(body)
 	if err != nil {
 		return nil, fmt.Errorf("parse generated body: %w", err)
 	}
@@ -133,7 +157,7 @@ func Generate(h Host, files []*syntax.File) ([]byte, error) {
 	for _, path := range paths {
 		fmt.Fprintf(&source, "import %s %q\n", h.Imports[path], path)
 	}
-	source.WriteString(e.out.String())
+	source.WriteString(body)
 	result, err := format.Source([]byte(source.String()))
 	if err != nil {
 		return nil, fmt.Errorf("format generated code: %w", err)

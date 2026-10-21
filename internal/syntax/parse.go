@@ -54,6 +54,8 @@ func Parse(name string, input io.Reader) (*File, error) {
 			record := p.recordDeclaration(pos, comments)
 			record.View = kind == "view"
 			file.Items = append(file.Items, Item{Record: record})
+		case "derive":
+			file.Items = append(file.Items, Item{Derivation: p.derivation(pos, comments)})
 		case "signature":
 			file.Items = append(file.Items, Item{API: p.apiDeclaration(pos, comments)})
 		case "pattern":
@@ -249,6 +251,11 @@ func Format(name string, input []byte) ([]byte, error) {
 		}
 	}
 	for index, item := range file.Items {
+		if item.Derivation != nil {
+			comments(item.Derivation.Comments)
+			out.WriteString(formatDerivation(item.Derivation))
+			continue
+		}
 		if item.API != nil {
 			comments(item.API.Comments)
 			out.WriteString(formatAPI(item.API))

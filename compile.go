@@ -32,8 +32,27 @@ func (c *Config) Compile(ctx context.Context, target string) ([]Artifact, error)
 		return nil, err
 	}
 	selected := []Target{}
+	parsed := map[string][]*syntax.File{}
 	for _, t := range c.Targets {
-		data, err := hostapi.Stub(filepath.Join(c.root, t.Bindings), t.Signature, t.Function)
+		files, err := c.rules(t)
+		if err != nil {
+			return nil, err
+		}
+		parsed[t.Name] = files
+		functions := []hostapi.FunctionStub{}
+		if !t.Schema {
+			functions = append(functions, hostapi.FunctionStub{Signature: t.Signature, Function: t.Function})
+		}
+		for _, file := range files {
+			for _, item := range file.Items {
+				if item.Derivation != nil {
+					for _, operation := range item.Derivation.Operations {
+						functions = append(functions, hostapi.FunctionStub{Signature: operation.Signature, Function: operation.Function})
+					}
+				}
+			}
+		}
+		data, err := hostapi.Stubs(filepath.Join(c.root, t.Bindings), functions)
 		if err != nil {
 			return nil, fmt.Errorf("target %s: %w", t.Name, err)
 		}
@@ -58,18 +77,19 @@ func (c *Config) Compile(ctx context.Context, target string) ([]Artifact, error)
 		if pkg == nil {
 			return nil, fmt.Errorf("target %s: package not loaded", t.Name)
 		}
-		obj := pkg.Types.Scope().Lookup(t.Signature)
-		if obj == nil {
-			return nil, fmt.Errorf("target %s: missing signature %s", t.Name, t.Signature)
+		var sig *types.Signature
+		if !t.Schema {
+			obj := pkg.Types.Scope().Lookup(t.Signature)
+			if obj == nil {
+				return nil, fmt.Errorf("target %s: missing signature %s", t.Name, t.Signature)
+			}
+			var ok bool
+			sig, ok = obj.Type().Underlying().(*types.Signature)
+			if !ok {
+				return nil, fmt.Errorf("%s is not a function signature", t.Signature)
+			}
 		}
-		sig, ok := obj.Type().Underlying().(*types.Signature)
-		if !ok {
-			return nil, fmt.Errorf("%s is not a function signature", t.Signature)
-		}
-		files, err := c.rules(t)
-		if err != nil {
-			return nil, err
-		}
+		files := parsed[t.Name]
 		names := map[string]*types.Package{}
 		for _, file := range pkg.Syntax {
 			if filepath.Clean(pkg.Fset.Position(file.Pos()).Filename) != filepath.Join(c.root, t.Bindings) {

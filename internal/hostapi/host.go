@@ -135,7 +135,7 @@ func (h *Host) Hook(name string) (string, *types.Signature, error) {
 		return h.Qualifier(pkg) + "." + member, sig, nil
 	}
 	var method types.Object
-	if h.Signature.Params().Len() == 2 {
+	if h.Signature != nil && h.Signature.Params().Len() == 2 {
 		method, _, _ = types.LookupFieldOrMethod(h.Signature.Params().At(1).Type(), true, h.Package, name)
 	}
 	if obj != nil && method != nil {

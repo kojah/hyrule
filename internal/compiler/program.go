@@ -11,6 +11,7 @@ import (
 
 // Program holds ordered source rules and their binding declarations.
 type Program struct {
+	Derivations  []*syntax.Derivation
 	API          *syntax.API
 	Bindings     map[string]*syntax.Binding
 	Unions       []*syntax.Union
@@ -28,7 +29,9 @@ func Collect(files []*syntax.File) (*Program, error) {
 	names := map[string]bool{}
 	for _, file := range files {
 		for _, item := range file.Items {
-			if api := item.API; api != nil {
+			if item.Derivation != nil {
+				program.Derivations = append(program.Derivations, item.Derivation)
+			} else if api := item.API; api != nil {
 				if program.API != nil {
 					return nil, &syntax.Diagnostic{Position: api.Position, Message: "duplicate signature declaration"}
 				}
@@ -84,7 +87,7 @@ func Collect(files []*syntax.File) (*Program, error) {
 			}
 		}
 	}
-	if len(program.rules) == 0 {
+	if len(program.rules) == 0 && len(program.Derivations) == 0 {
 		return nil, fmt.Errorf("ruleset is empty")
 	}
 	if err := program.collectUnions(); err != nil {
@@ -120,3 +123,6 @@ func (p *Program) Expand(check func(*syntax.Rule) error) ([]*syntax.Rule, error)
 func (p *Program) fail(x *syntax.Expr, message string) error {
 	return &syntax.Diagnostic{Position: x.Position, Rule: p.rule, Message: message}
 }
+
+// HasRules distinguishes matching targets from schema-only generation.
+func (p *Program) HasRules() bool { return len(p.rules) != 0 || len(p.patterns) != 0 }

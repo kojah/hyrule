@@ -1,0 +1,8 @@
+version: 1
+targets:
+  - name: representation
+    schema: true
+    package: .
+    rules: [snapshot.rules]
+    bindings: bindings.go
+    out: hyrule_snapshot_gen.go

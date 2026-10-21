@@ -287,8 +287,9 @@ and module dependencies must be available to type-check the host.
 Hyrule loads hosts with in-memory signature stubs, then checks the rendered output.
 This supports a host that calls its generated function before first generation,
 and regeneration after changing a signature. Stubs are never written to disk.
-All configured hosts load even when selecting one target; only selected rules and
-outputs are compiled. Checks do not run host code or tests.
+All configured hosts load even when selecting one target. Rule syntax for every
+target is parsed to recover generated derivation signatures; semantic compilation
+and output emission remain limited to selected targets. Checks do not run host code or tests.
 
 `.hyrule-manifest.json` records generated paths and hashes. Commit it with rules,
 bindings and generated outputs. Renamed/removed target outputs are deleted only
@@ -431,3 +432,13 @@ the Go adapter. See [the local append-plan example](examples/localplans/append.r
 for nested updates that preserve backing and source provenance while producing a
 copy-effect list. Its sum uses ordinary integer arithmetic; explicit guards admit
 only the geometry that the example can establish.
+
+## Schema-derived maintenance
+
+Complete record schemas can generate immutable copying, typed keys/equality,
+child visitors/transformers, bounded diagnostics and bounded exact snapshot
+storage. Each operation explicitly accounts for every field; custom domain
+operations remain typed host hooks. `schema: true` targets generate these APIs
+without a rewrite dispatcher. See [derivation contracts](DERIVATIONS.md) and
+[the complete example](examples/derived/snapshot.rules). Copied aggregate storage
+in `internal/lower/identity/value` uses derived traversal and transformation.
