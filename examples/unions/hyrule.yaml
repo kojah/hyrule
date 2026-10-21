@@ -1,0 +1,9 @@
+version: 1
+targets:
+  - name: union_rewrite
+    package: .
+    bindings: bindings.go
+    signature: RewriteSignature
+    function: Rewrite
+    rules: [rewrite.rules]
+    out: rewrite_gen.go

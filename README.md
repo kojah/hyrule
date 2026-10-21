@@ -2,9 +2,16 @@
 
 Hyrule compiles ordered structural rules into ordinary typed Go calls. It lives
 under `tools/hyrule` and has no Lockdoc analyzer dependencies. Generated code
-has no Hyrule runtime dependency. This first milestone is self-contained: the
-pipeline example demonstrates both lifting and lowering; production analyzer
-integration belongs to the consuming session.
+has no Hyrule runtime dependency. The pipeline example demonstrates both lifting and lowering. Production rules
+live under `internal/lower/memory` and `internal/lower/scalarop`: shared loads/stores, field/index projections
+stay in that package; `mapop`, `interfaceop`, `channelop` and `sliceop` own their typed family operations and original-source projections.
+The slicetransfer family lowers append/copy operations into complete exact, empty or conservative transfer plans consumed by symbolic summaries and native graph emission. Its clear rules choose empty, exact-span or possible-zero state effects; native emission applies those typed element writes without changing the slice header.
+Interface assertion lowering also selects retained-tag, copied-payload, typed-zero, panic-only or unsupported outcomes, shared by native graph emitters and public reads.
+The sliceheader family selects correlated nil/make/view/retype and append reuse/growth transitions, preserving explicitly partial capacity and possible bounds panics. Geometry and graph evidence remain host-owned.
+The mapstate family selects finite map write, clear, delete and paired lookup state transitions. Generic Go applies immutable entry edits; equality, provenance, graph traversal and evidence admission remain host responsibilities.
+The scalarop family recognizes original scalar literals, arithmetic, conversions, loads and input/call/tuple-result/phi boundaries. The bounded integer evaluator and native constant-control evaluator consume these descriptors; arithmetic, actual argument admission, work bounds and memory interpretation remain host policy.
+Matchers expose SSA structure and static types. Container state, identity,
+temporal interpretation and execution selection remain with their consumers.
 
 ```sh
 go run ./tools/hyrule/cmd/hyrule check
@@ -44,8 +51,77 @@ host argument. Rule names are stable diagnostic identities, unique per target.
 binds the entire input to that subpattern. `_` ignores a pattern value.
 Parenthesized calls nest. Literals use Go spelling for numbers, strings, raw
 strings, `true`, `false`, and `nil`; negative numeric literals are supported.
-A rule has at most one guard call after `&&`; implement compound predicates in Go.
+A rule may have multiple guard calls, each introduced by `&&`. Their preconditions and short-circuit meaning are preserved: a false guard falls through without constructing that rule's result. Matcher and guard invocation counts are not a language guarantee.
 Declarations and rules end with `;`. Line and block comments are accepted.
+
+Matcher children can be selected by the names of the Go matcher's result
+parameters (excluding its final success Boolean):
+
+```text
+(Write request:$request allocated:true unknownMembership:false resident:true)
+```
+
+Names are case-sensitive. Omitted named children act as wildcards. Named and
+positional children cannot be mixed in one call; unknown and duplicate names
+are errors. Positional patterns keep their existing arity contract. Named
+children are matched in written order, independent of the Go return order.
+
+Builder arguments can also use the names of the Go builder's input parameters:
+
+```text
+=> (SliceHeader backing:$backing offset:$start length:$len capacity:$cap)
+```
+
+Names are exact and case-sensitive. Every parameter must be supplied once;
+missing, duplicate, unknown names and mixed named/positional arguments are
+errors. Named calls require usable Go parameter names (neither unnamed nor `_`).
+Positional calls remain supported. Nested builders execute once in written
+order, even when arguments are rearranged into Go parameter order; typed
+assignment checks still apply. The optional host receiver is implicit and is
+not a builder argument. Guards continue to use positional arguments.
+
+Use `(or PATTERN PATTERN ...)` for ordered alternatives in match patterns:
+
+```text
+(Delete request:$request allocated:false
+  evidence:(or (ExactEvidence) (SafeUnknownEvidence)))
+```
+
+OR-patterns may nest. Every alternative must bind the same new capture names
+with identical Go types; captures from the surrounding pattern remain available.
+Each expanded alternative tries its match and the rule's ordered guards before
+the next alternative. A false guard can therefore fall through to another
+alternative of that rule. Builders run only for a successful alternative.
+Expansion is bounded to 64 variants per rule; oversized patterns are rejected
+before constructing their expansion. OR-patterns are not build expressions.
+Reusable match patterns give repeated shapes a name with explicit parameters:
+
+```text
+pattern FiniteWrite($request, $resident, $originKnown) =
+  (Write request:$request allocated:true unknownMembership:false
+    resident:$resident newOriginKnown:$originKnown evidence:(ExactEvidence));
+pattern SafeKey() = (or (ExactEvidence) (SafeUnknownEvidence));
+
+rule ReplaceKnown:
+  (FiniteWrite $request true true)
+  && (WithinBound $request)
+  => (ReplaceKnown $request);
+```
+
+Every capture in a definition must be a declared parameter; expansion cannot
+introduce hidden captures. Arguments are match expressions, including captures,
+literals, wildcards and nested patterns. A parameter used as a whole-input capture
+(`$value:(...)`) accepts a capture or `_`. Repeated arguments preserve ordinary
+capture equality checks. Named matcher fields, nested destructuring and OR
+patterns keep their existing contracts after expansion.
+
+Definitions are scoped to a target, may reference later declarations or other
+configured rule files, and do not affect rule precedence. Names cannot collide
+with hook names. Definitions have exact arity and are match-only; free captures,
+unknown references, duplicate or unused parameters and recursive definitions
+are rejected, including unused definitions. Expansion is bounded to depth 64 and 10,000 match nodes per rule before OR
+expansion; the 64-variant OR bound still applies. Reuse introduces no runtime
+registry, graph traversal or fixed-point evaluation.
 
 Files are sorted lexically; rules retain source order within each file. The first
 successful rule wins. Unknown operations, failed matchers and false guards fall
@@ -56,6 +132,38 @@ Repeated captures compare concrete comparable values using Go equality. Types
 containing interfaces are rejected because their dynamic values could make `==`
 panic. Use distinct captures and a typed equality guard for those cases. Matching
 does not infer structural equality, aliasing, pointer-analysis facts or semantics.
+
+## Tagged unions
+
+A schema declares exclusive constructors over existing Go struct storage:
+
+```text
+exhaustive union Value = Value tag Kind {
+  Number = NumberKind { value: Number; };
+  Empty = EmptyKind {};
+};
+
+rule Number: (Number value:$number) => (Number value:$number);
+rule Empty: (Empty) => (Empty);
+```
+
+Constructors support named-field and nested patterns, OR alternatives and reusable
+patterns. They also build tagged values directly; no matcher or builder hook is
+required for a declared constructor. A zero-argument constructor pattern tests
+its variant and ignores its fields; construction still requires every field.
+
+Ordinary `union` declarations allow partial recognizers. `exhaustive union`
+requests a conservative coverage check for the target input: guarded or refined
+patterns do not discharge a variant, while an unguarded whole-input fallback
+covers all declared variants. Missing coverage is a compilation diagnostic.
+
+The initial binding uses a local Go struct, a direct integer/string/Boolean tag
+field, distinct same-typed Go constants, and direct active fields. Undeclared
+input or output tags return `false`, including before a catchall; this is a
+checked closed-domain API, not an assertion that Go prevents invalid enum values.
+The root discriminator is read once for variant dispatch. Go still owns storage.
+See [union contracts and limitations](UNIONS.md) and the
+[union example](examples/unions/rewrite.rules).
 
 ## Go host contract
 
@@ -85,17 +193,38 @@ use a struct or slice for tuples, multiple effects, provenance and failure data.
 A guard decides whether a rule applies; a builder must produce its result once
 that guard succeeds. Nested replacement calls use `build` bindings.
 
-Match and guard callbacks should be read-only. Builders should construct complete
-results; callers apply their effects after matching. Hyrule cannot prove callback
-purity. Host code owns memory identity, soundness, unknown-value policy, lifecycle,
-control flow, budgets and scheduling. No effects should be applied speculatively
-inside matchers or guards.
+Matchers and guards **must be pure**: they must not mutate inputs, the host or
+externally observable state, and identical arguments against the same host
+snapshot must produce identical results. Analysis facts must remain stable for
+the whole matching invocation. Hyrule may skip, repeat or share these calls;
+call counts and evaluation order are not guaranteed. This is a language contract,
+not a property Hyrule can prove about arbitrary Go callbacks. Guard preconditions
+still apply: the compiler preserves ordered guard fallthrough and does not hoist
+partial guards before their required evidence.
 
-Generated functions use typed locals and per-rule helpers, with no term boxing,
-reflection or runtime capture maps. The initial compiler does not share matching
-work across rules. Its output is easy to inspect before considering dispatch
-optimization. Hook errors and malformed patterns carry source locations; Go type
-errors identify generated code and its nearby rule comment.
+Builders construct complete results and may allocate fresh objects. Their
+results are never cached or shared; replacement builders stay on the winning
+rule's execution path. The caller applies returned effects after matching.
+Host code owns memory identity, soundness, unknown-value policy, lifecycle,
+control flow, budgets and scheduling.
+
+The shared compiler expands reusable patterns and OR alternatives while retaining
+source priority. The matching IR uses opaque compiler-owned hook, type, value,
+literal and expression IDs; its optimizer and decision edges contain no Go
+syntax or `go/types` objects. The Go adapter discovers signatures, checks typed
+captures, maps IDs to Go types/functions, emits branches and formats imports.
+Go is the only implemented backend. A future backend can consume the matching
+IR with its own hook/type tables; a universal bindings language is not provided.
+
+The compiler folds adjacent identical pure matcher/test prefixes into an ordered
+decision DAG. Match failure and exhausted guard alternatives rejoin explicit
+fallback edges; builders remain separate leaves. It does not reorder unrelated
+rules or infer exclusivity for opaque hooks. Declared unions add exclusive
+variant/field knowledge to the portable IR and permit checked variant switches.
+Generated functions use typed locals and direct branches, with no runtime graph,
+term boxing, reflection or runtime capture maps. Unreachable declared rules
+remain type-checked. See [decision-graph measurements](DECISION_GRAPH.md) for
+reproduction commands, baseline scope and limitations.
 
 ## Configuration and ownership
 

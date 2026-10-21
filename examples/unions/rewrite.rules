@@ -1,0 +1,22 @@
+exhaustive union Value = Value tag Kind {
+  Number = NumberKind {
+    value: Number;
+  };
+  Empty = EmptyKind {};
+};
+guard Positive = Positive;
+build Increment = Increment;
+pattern NumberValue($number) = (Number value:$number);
+
+rule PositiveNumber:
+  (NumberValue $number)
+  && (Positive $number)
+  => (Number value:(Increment $number));
+
+rule OtherNumber:
+  (Number value:$number)
+  => (Number value:$number);
+
+rule EmptyValue:
+  (Empty)
+  => (Empty);

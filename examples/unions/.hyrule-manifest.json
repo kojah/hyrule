@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "targets": {
+    "union_rewrite": {
+      "path": "rewrite_gen.go",
+      "sha256": "ebaa452700f592379e7e28cd965d4cb8d33c90d9adeb05d3f073ffdd2ef1bf14"
+    }
+  }
+}

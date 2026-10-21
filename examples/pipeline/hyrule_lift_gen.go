@@ -3,27 +3,21 @@ package pipeline
 
 // Lift applies rules in source order; false means no rule matched.
 func Lift(harg0 Source, harg1 *Host) (Operation, bool) {
-	if result, ok := hyruleLiftRule0(harg0, harg1); ok {
-		return result, true
+	{
+		hv1, hv2, hv3, hv4, hok := MatchLookup(harg0)
+		_ = hv1
+		_ = hv2
+		_ = hv3
+		_ = hv4
+		if hok {
+			{
+				if harg1.IsReady() {
+					// Rule MapLookup (tools/hyrule/examples/pipeline/lift.rules:6).
+					return BuildRead(hv1, hv2, hv3, hv4), true
+				}
+			}
+		}
 	}
 	var zero Operation
 	return zero, false
-}
-
-// Rule MapLookup (tools/hyrule/examples/pipeline/lift.rules:6).
-func hyruleLiftRule0(harg0 Source, harg1 *Host) (Operation, bool) {
-	var zero Operation
-	hv1, hv2, hv3, hv4, hv5 := MatchLookup(harg0)
-	if !hv5 {
-		return zero, false
-	}
-	_ = hv1
-	_ = hv2
-	_ = hv3
-	_ = hv4
-	if !(harg1.IsReady()) {
-		return zero, false
-	}
-	_ = zero
-	return BuildRead(hv1, hv2, hv3, hv4), true
 }
