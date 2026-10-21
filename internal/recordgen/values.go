@@ -44,7 +44,24 @@ func (op *operation) freeze() error {
 func (op *operation) projection(field field, input string) (string, types.Type, error) {
 	value := input + "." + field.member.Name()
 	typ := field.member.Type()
-	if field.declaration.Policy != "keep" {
+	if strings.HasPrefix(field.declaration.Policy, "$") {
+		if op.declaration.Kind != "key" {
+			return "", nil, op.fail("parameter projections are only valid for key derivation")
+		}
+		name := strings.TrimPrefix(field.declaration.Policy, "$")
+		found := false
+		for i := 1; i < op.sig.Params().Len(); i++ {
+			parameter := op.sig.Params().At(i)
+			if parameter.Name() == name {
+				value, typ = fmt.Sprintf("h%d", i), parameter.Type()
+				found = true
+				break
+			}
+		}
+		if !found {
+			return "", nil, op.fail("unknown key projection parameter $" + name)
+		}
+	} else if field.declaration.Policy != "keep" {
 		function, sig, err := op.hook(field.declaration.Policy, []types.Type{typ}, 1)
 		if err != nil {
 			return "", nil, err
@@ -58,8 +75,18 @@ func (op *operation) projection(field field, input string) (string, types.Type, 
 }
 
 func (op *operation) key() error {
-	if err := op.signature(1, 1, nil); err != nil {
-		return err
+	if op.sig.Params().Len() < 1 || op.sig.Results().Len() != 1 {
+		return op.fail("key requires a record and optional named projection parameters with one result")
+	}
+	for i := 1; i < op.sig.Params().Len(); i++ {
+		name := op.sig.Params().At(i).Name()
+		used := false
+		for _, field := range op.fields {
+			used = used || field.declaration.Policy == "$"+name
+		}
+		if name == "" || name == "_" || !used {
+			return op.fail("key projection parameters must be named and used")
+		}
 	}
 	resultType := op.sig.Results().At(0).Type()
 	if !comparable(resultType) {

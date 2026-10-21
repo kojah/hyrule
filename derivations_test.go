@@ -155,3 +155,30 @@ func TestExactStorage(t *testing.T) {
 }`)
 	runUnionFixture(t, root, "TestExactStorage")
 }
+
+// Normalized IDs are issued by the caller's index. Passing them explicitly
+// keeps derived key projection pure, without invoking a mutable host interner.
+func TestDerivedKeyConsumesTypedNormalizedParameters(t *testing.T) {
+	root := fixture(t)
+	host := strings.Replace(deriveHost, "type KeySignature func(Snapshot)Key", "type KeySignature func(value Snapshot, backingID int)Key", 1)
+	schema := strings.Replace(deriveSchema, "key SnapshotKey = KeySignature { backing;", "key SnapshotKey = KeySignature { backing:$backingID;", 1)
+	write(t, root, "bindings.go", host)
+	write(t, root, "input.rules", schema)
+	config, artifacts := compile(t, root)
+	if err := config.Publish(artifacts, false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "behavior_test.go", `package fixture
+import "testing"
+func TestNormalizedKey(t *testing.T) {
+ if key:=SnapshotKey(Snapshot{Backing:2,Guard:9,Label:"source"},17);key.Backing!=17 {t.Fatal(key)}
+}`)
+	runUnionFixture(t, root, "TestNormalizedKey")
+	for _, bad := range []string{"$missing", "keep"} {
+		write(t, root, "input.rules", strings.Replace(schema, "$backingID", bad, 1))
+		_, err := config.Compile(context.Background(), "")
+		if err == nil {
+			t.Fatal("accepted missing or unused normalization parameter")
+		}
+	}
+}

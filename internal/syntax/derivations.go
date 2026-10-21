@@ -40,7 +40,12 @@ func (p *parser) derivation(position Position, comments []string) *Derivation {
 			field := DerivedField{Position: p.position, Name: p.identifier(), Policy: "keep"}
 			if p.text == ":" {
 				p.next()
-				field.Policy = p.hookName()
+				if p.text == "$" {
+					p.next()
+					field.Policy = "$" + p.identifier()
+				} else {
+					field.Policy = p.hookName()
+				}
 			}
 			p.expect(";")
 			operation.Fields = append(operation.Fields, field)

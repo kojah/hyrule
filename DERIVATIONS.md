@@ -120,3 +120,24 @@ The shared syntax/compiler own declaration structure, operation kinds, names and
 complete field policies. The Go-only `internal/recordgen` backend resolves Go
 storage, hook types and function bodies; no Go types enter the shared compiler.
 There is no runtime reflection, descriptor registry or Hyrule runtime dependency.
+
+A key may also take explicit, already-normalized typed arguments:
+
+```go
+type KeySignature func(value Component, valueID ValueID, tagID TypeID) ComponentKey
+```
+
+```text
+key ComponentKey = KeySignature {
+  value: $valueID;
+  dynamic: $tagID;
+  header: keep;
+  slice: keep;
+};
+```
+
+Every additional parameter must be named and used; unknown parameters and unsafe
+comparable types are rejected. The host issues IDs before invoking the projection.
+The generated function only copies immutable witnesses. A derivation never calls
+a mutable interner from a pure matcher or guard. Copied aggregate semantic and
+exact leaf keys use this contract, alongside generated traversal/transformation.
