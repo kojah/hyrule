@@ -5,9 +5,9 @@ under `tools/hyrule` and has no Lockdoc analyzer dependencies. Generated code
 has no Hyrule runtime dependency. The pipeline example demonstrates both lifting and lowering. Production rules
 live under `internal/lower/memory` and `internal/lower/scalarop`: shared loads/stores, field/index projections
 stay in that package; `mapop`, `interfaceop`, `channelop` and `sliceop` own their typed family operations and original-source projections.
-The slicetransfer family also lowers append/copy operations into complete exact, empty or conservative transfer plans consumed by symbolic summaries and native graph emission.
+The slicetransfer family lowers append/copy operations into complete exact, empty or conservative transfer plans consumed by symbolic summaries and native graph emission. Its clear rules choose empty, exact-span or possible-zero state effects; native emission applies those typed element writes without changing the slice header.
 Interface assertion lowering also selects retained-tag, copied-payload, typed-zero, panic-only or unsupported outcomes, shared by native graph emitters and public reads.
-The scalarop family recognizes original scalar literals, arithmetic, conversions, loads and input/call/phi boundaries. The bounded integer evaluator and native constant-control evaluator consume these descriptors; arithmetic, actual argument admission, work bounds and memory interpretation remain host policy.
+The scalarop family recognizes original scalar literals, arithmetic, conversions, loads and input/call/tuple-result/phi boundaries. The bounded integer evaluator and native constant-control evaluator consume these descriptors; arithmetic, actual argument admission, work bounds and memory interpretation remain host policy.
 Matchers expose SSA structure and static types. Container state, identity,
 temporal interpretation and execution selection remain with their consumers.
 
