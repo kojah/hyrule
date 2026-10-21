@@ -3,7 +3,7 @@
   "targets": {
     "transitions": {
       "path": "transitions_gen.go",
-      "sha256": "beb78968096ea4d1fa57d3dd9896f0e5140c35af0ca15c3bb0b33c516655e8c6"
+      "sha256": "2af0477351d90b427cb7133b881c9e0d854283b873195d3a36b46716c79a73e0"
     }
   }
 }

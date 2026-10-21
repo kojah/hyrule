@@ -107,7 +107,7 @@ func Generate(h Host, files []*syntax.File) ([]byte, error) {
 	e.emitValidators()
 	var source strings.Builder
 	source.WriteString(Header)
-	fmt.Fprintf(&source, "package %s\n", h.Package.Name())
+	fmt.Fprintf(&source, "\npackage %s\n", h.Package.Name())
 	paths := []string{}
 	for path := range h.imports {
 		paths = append(paths, path)

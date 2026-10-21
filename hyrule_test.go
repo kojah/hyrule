@@ -3,6 +3,9 @@ package hyrule_test
 import (
 	"bytes"
 	"context"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -303,5 +306,18 @@ func TestMultipleGuardsShortCircuitAndFallThrough(t *testing.T) {
 	command.Env = append(os.Environ(), "GOWORK=off")
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("guard behavior: %v\n%s", err, output)
+	}
+}
+
+// The ownership marker must remain a generated-code marker without becoming a
+// second package doc when the host supplies its own package documentation.
+func TestGeneratedMarkerIsNotPackageDocumentation(t *testing.T) {
+	_, artifacts := compile(t, fixture(t))
+	file, err := parser.ParseFile(token.NewFileSet(), "generated.go", artifacts[0].Data, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ast.IsGenerated(file) || file.Doc != nil {
+		t.Fatal("generated marker is missing or attached as package documentation")
 	}
 }

@@ -3,7 +3,7 @@
   "targets": {
     "decisionbench": {
       "path": "optimized_gen.go",
-      "sha256": "8ea93d53f64ef9dd6cb2412199b9fc396c661a36cec93e337fde790c0e9adfef"
+      "sha256": "32f6830480383d77fe4935e4ed212c86e55d86bd26aaacd1b2fbaa782602d111"
     }
   }
 }
