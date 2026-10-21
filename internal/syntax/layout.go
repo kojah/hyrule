@@ -5,6 +5,9 @@ import "strings"
 // renderLayout keeps short patterns compact and exposes long matcher fields and
 // OR arms on separate lines. Indent is the expression's first-column offset.
 func renderLayout(expression *Expr, indent int) string {
+	if expression.Kind == Effects || expression.Kind == Query {
+		return renderResult(expression, indent)
+	}
 	inline := render(expression)
 	if indent+len(inline) <= 100 || len(expression.Args) == 0 {
 		return inline

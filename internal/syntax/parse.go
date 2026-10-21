@@ -41,7 +41,7 @@ func Parse(name string, input io.Reader) (*File, error) {
 		pos, kind := p.position, p.text
 		p.next()
 		switch kind {
-		case "match", "build", "guard":
+		case "match", "build", "guard", "query":
 			binding := &Binding{Position: pos, Kind: kind, Name: p.identifier(), Comments: comments}
 			p.expect("=")
 			binding.GoName = p.identifier()
@@ -77,7 +77,7 @@ func Parse(name string, input io.Reader) (*File, error) {
 			file.Items = append(file.Items, Item{Rule: rule})
 			p.rule = ""
 		default:
-			p.fail(pos, "expected match, build, guard, pattern or rule declaration")
+			p.fail(pos, "expected match, build, guard, query, union, pattern or rule declaration")
 		}
 	}
 	file.Trailing = p.comments
@@ -143,6 +143,10 @@ func (p *parser) expression(depth int) *Expr {
 		return result
 	}
 	switch {
+	case p.text == "effects":
+		return p.effects(depth)
+	case p.text == "query":
+		return p.query(depth)
 	case p.text == "(":
 		p.next()
 		result.Kind, result.Name = Call, p.identifier()
@@ -209,6 +213,12 @@ func (p *parser) argument(depth int) *Expr {
 		value.Field = name
 		return value
 	}
+	if name == "effects" {
+		return p.effectsBody(position, depth)
+	}
+	if name == "query" {
+		return p.queryBody(position, depth)
+	}
 	if name == "_" {
 		return &Expr{Position: position, Kind: Wildcard}
 	}
@@ -271,6 +281,8 @@ func Format(name string, input []byte) ([]byte, error) {
 
 func render(expression *Expr) string {
 	switch expression.Kind {
+	case Effects, Query:
+		return renderResult(expression, 0)
 	case Wildcard:
 		return "_"
 	case Variable:

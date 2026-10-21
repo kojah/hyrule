@@ -70,7 +70,7 @@ func (e *emitter) orderedDecisions(rules []*syntax.Rule, input types.Type) (*mat
 			}
 			e.cursor.Guard(e.expressionID(rule, condition))
 		}
-		if _, err := e.value(rule.Build, "build"); err != nil {
+		if _, err := e.resultValue(rule.Build, sigOutput(e)); err != nil {
 			return nil, err
 		}
 		node := e.cursor.Build(e.expressionID(rule, rule.Build))

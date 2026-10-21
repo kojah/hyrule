@@ -35,6 +35,8 @@ const (
 	Wildcard
 	Literal
 	Alternation
+	Effects
+	Query
 )
 
 // Expr is a pattern or construction expression. Bind names an entire matched
@@ -47,9 +49,10 @@ type Expr struct {
 	// Field selects a named matcher result when this expression is a child.
 	Field string
 	Args  []*Expr
+	Arms  []DecisionArm
 }
 
-// Binding declares a named matcher, builder or guard implemented by Go.
+// Binding declares a named matcher, builder, pure guard or ordered host query.
 type Binding struct {
 	Position
 	Kind     string
@@ -113,4 +116,10 @@ type Variant struct {
 type UnionField struct {
 	Position
 	Name, GoName string
+}
+
+// DecisionArm handles one complete query outcome without refinement or fallthrough.
+type DecisionArm struct {
+	Pattern *Expr
+	Result  *Expr
 }

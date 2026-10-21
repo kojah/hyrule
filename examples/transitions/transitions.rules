@@ -1,0 +1,48 @@
+match Event = MatchEvent;
+query Exclusive = Exclusive;
+union Proof = Proof tag Kind {
+  Proven = Proven {};
+  Disproven = Disproven {};
+  Unknown = Unknown {
+    reason: Reason;
+  };
+};
+union Effect = Effect tag Kind {
+  Acquire = Acquire {
+    lock: Lock;
+  };
+  Release = ReleaseNow {
+    lock: Lock;
+  };
+  DeferRelease = DeferRelease {
+    lock: Lock;
+  };
+  Order = Order {
+    lock: Lock;
+  };
+  Uncertain = Uncertain {
+    lock: Lock;
+    reason: Reason;
+  };
+};
+
+rule DeferredRelease:
+  (Event lock:$lock release:true deferred:true)
+  => effects [(DeferRelease lock:$lock)];
+
+rule ImmediateRelease:
+  (Event lock:$lock release:true deferred:false)
+  => effects [(Release lock:$lock)];
+
+rule DeferredAcquisition:
+  (Event release:false deferred:true)
+  => effects [];
+
+rule Acquisition:
+  (Event lock:$lock release:false deferred:false)
+  => query $proof = (Exclusive $lock)
+     decide $proof {
+       (Proven) => effects [(Acquire lock:$lock)];
+       (Disproven) => effects [(Acquire lock:$lock), (Order lock:$lock)];
+       (Unknown reason:$reason) => effects [(Acquire lock:$lock), (Uncertain lock:$lock reason:$reason)];
+     };

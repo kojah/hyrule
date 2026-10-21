@@ -1,0 +1,9 @@
+version: 1
+targets:
+  - name: transitions
+    package: .
+    bindings: bindings.go
+    signature: PlanSignature
+    function: Plan
+    rules: [transitions.rules]
+    out: transitions_gen.go

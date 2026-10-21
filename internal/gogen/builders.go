@@ -16,14 +16,14 @@ func (e *emitter) valueArguments(x *syntax.Expr, signature *types.Signature, kin
 		return nil, err
 	}
 	arguments := make([]string, len(x.Args))
-	ordered := containsNamedArguments(x)
+	ordered := requiresWrittenOrder(x)
 	for written, argument := range x.Args {
-		value, err := e.value(argument, "build")
+		parameter := indices[written]
+		value, err := e.typedValue(argument, signature.Params().At(parameter).Type())
 		if err != nil {
 			return nil, err
 		}
-		parameter := indices[written]
-		if ordered && argument.Kind == syntax.Call {
+		if ordered && (argument.Kind == syntax.Call || argument.Kind == syntax.Effects) {
 			e.serial++
 			name := fmt.Sprintf("hv%d", e.serial)
 			fmt.Fprintf(&e.out, "var %s %s = %s\n", name, e.host.typeName(signature.Params().At(parameter).Type()), value)
@@ -78,11 +78,11 @@ func (e *emitter) builderPositions(x *syntax.Expr, signature *types.Signature, k
 	return indices, nil
 }
 
-// Positional parents must also sequence earlier siblings before a named child
-// emits its temporaries. Entirely positional trees retain their existing output.
-func containsNamedArguments(expression *syntax.Expr) bool {
+// Positional parents must sequence earlier siblings before named children or
+// effect lists emit temporaries. Other positional trees retain their output.
+func requiresWrittenOrder(expression *syntax.Expr) bool {
 	for _, argument := range expression.Args {
-		if argument.Field != "" || containsNamedArguments(argument) {
+		if argument.Field != "" || argument.Kind == syntax.Effects || requiresWrittenOrder(argument) {
 			return true
 		}
 	}

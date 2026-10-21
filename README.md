@@ -133,6 +133,19 @@ containing interfaces are rejected because their dynamic values could make `==`
 panic. Use distinct captures and a typed equality guard for those cases. Matching
 does not infer structural equality, aliasing, pointer-analysis facts or semantics.
 
+## Queries and effect lists
+
+A selected rule can run an explicitly effectful `query` and exhaustively
+`decide` its tagged outcome. Queries run exactly once when reached, after pure
+matching succeeds; they never fall through to another rule. Outcome branches
+can issue further queries without evaluating unselected branches. Pure matchers
+and guards retain their existing optimization contract.
+
+`effects [...]` constructs a typed slice in written order, either as the target
+result or a builder argument. The host applies the resulting plan afterward.
+See [queries and transition plans](TRANSITIONS.md) for syntax, execution and
+exhaustiveness rules, and `examples/transitions` for a runnable lock-state plan.
+
 ## Tagged unions
 
 A schema declares exclusive constructors over existing Go struct storage:

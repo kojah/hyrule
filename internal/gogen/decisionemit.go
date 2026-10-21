@@ -22,6 +22,9 @@ func (e *emitter) decisionValue(node *matchir.Node, kind string) (string, error)
 	expression := e.tables.expressions[node.Expression]
 	e.rule = expression.rule.Name
 	e.captures = expression.captures
+	if kind == "build" {
+		return e.resultValue(expression.expression, sigOutput(e))
+	}
 	return e.value(expression.expression, kind)
 }
 

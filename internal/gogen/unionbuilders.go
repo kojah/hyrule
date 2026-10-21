@@ -58,11 +58,11 @@ func (e *emitter) constructionValue(construction *matchir.Construction) (string,
 	for _, field := range construction.Fields {
 		expression := e.tables.expressions[field.Expression]
 		e.rule, e.captures = expression.rule.Name, expression.captures
-		value, err := e.value(expression.expression, "build")
+		value, err := e.typedValue(expression.expression, variant.fields[field.Field].Type())
 		if err != nil {
 			return "", err
 		}
-		if expression.expression.Kind == syntax.Call {
+		if expression.expression.Kind == syntax.Call || expression.expression.Kind == syntax.Effects {
 			e.serial++
 			temporary := fmt.Sprintf("hv%d", e.serial)
 			fmt.Fprintf(&e.out, "var %s %s = %s\n", temporary, e.host.typeName(variant.fields[field.Field].Type()), value)

@@ -161,6 +161,10 @@ func (e *emitter) value(x *syntax.Expr, kind string) (string, error) {
 			return "", err
 		}
 		return name + "(" + strings.Join(args, ", ") + ")", nil
+	case syntax.Query:
+		return "", e.fail(x, "query is only allowed as a rule result or decision arm")
+	case syntax.Effects:
+		return "", e.fail(x, "effects requires a typed build context")
 	case syntax.Alternation:
 		return "", e.fail(x, "or is only allowed in matcher patterns")
 	default:
