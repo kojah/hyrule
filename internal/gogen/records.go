@@ -109,6 +109,16 @@ func (e *emitter) viewMatcher(x *syntax.Expr, record *boundRecord, input types.T
 		values = append(values, name)
 		assignments = append(assignments, name+" = hvalue."+field.Name())
 	}
+	var results []*types.Var
+	for i := 0; i < record.signature.Results().Len()-1; i++ {
+		results = append(results, record.signature.Results().At(i))
+	}
+	if x.Bind != "" {
+		parameters = append(parameters, "hwhole "+e.host.TypeName(record.typ))
+		values = append(values, "hvalue")
+		results = append(results, types.NewVar(token.NoPos, e.host.Package, "hwhole", record.typ))
+	}
+	results = append(results, types.NewVar(token.NoPos, e.host.Package, "matched", types.Typ[types.Bool]))
 	parameters = append(parameters, "hok bool")
 	var extraction string
 	if types.Identical(input, record.typ) {
@@ -125,6 +135,19 @@ func (e *emitter) viewMatcher(x *syntax.Expr, record *boundRecord, input types.T
 	values = append(values, "true")
 	body := fmt.Sprintf("(func(hinput %s) (%s) { %s%s; return %s })",
 		e.host.TypeName(input), strings.Join(parameters, ","), extraction, strings.Join(assignments, ";"), strings.Join(values, ","))
-	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(types.NewVar(token.NoPos, e.host.Package, "input", input)), record.signature.Results(), false)
+	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(types.NewVar(token.NoPos, e.host.Package, "input", input)), types.NewTuple(results...), false)
 	return body, sig, nil
+}
+
+// A whole view capture is the successfully asserted storage value, rather than
+// its wider input interface. It has the same identity and is usable by hooks
+// requiring that concrete Go type. The extra matcher output is not a field.
+func (e *emitter) capturedView(x *syntax.Expr) *boundRecord {
+	if x.Kind != syntax.Call || x.Bind == "" {
+		return nil
+	}
+	if record := e.recordNames[x.Name]; record != nil && record.declaration.View {
+		return record
+	}
+	return nil
 }

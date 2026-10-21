@@ -74,7 +74,12 @@ query transferred($instruction, $obligation) =
 
 The left side defines positional value parameters. The right side names an
 existing Go function or legacy host method; qualified imported functions use the
-binding file's actual import aliases. Its arguments are captures, projections,
+binding file's actual import aliases. `Classifier.method` binds a local Go
+receiver method as an explicit method expression: pass its receiver as the first
+argument. Value methods take `Classifier`; pointer-only methods take
+`*Classifier`. This also works for matchers, guards and builders. It adds no
+implicit state or invocation before the binding's ordinary execution phase.
+Its arguments are captures, projections,
 constants or literals. Parameter captures are substituted, while other captures
 (such as `$evidence`) come from the calling rule's lexical scope. Every invocation
 is type checked. Forwarded arguments cannot hide nested calls or query execution.
@@ -145,3 +150,13 @@ match. Promoted fields must be read through an explicit captured field path.
 Views cannot construct or update values. They add no mutation, recursive
 traversal, implicit unwrapping or semantic proof. Pure extraction can be shared
 by the matching graph, while ordered query calls remain separate continuations.
+
+A whole view capture, such as `$deferred:(Deferred)`, binds the concrete storage
+value that passed the assertion. A hook taking `*ssa.Defer` can therefore use
+`$deferred` directly even when the original input was `ssa.Instruction`. Identity
+is preserved. View fields and positional arity are unchanged; the concrete
+whole value is not an additional field. Repeated whole captures compare the
+asserted values under the ordinary identical/comparable capture contract.
+
+For alternatives with different storage types, bind the surrounding `or` when
+the whole capture should retain the original input interface type instead.

@@ -110,11 +110,17 @@ func (h *Host) TypeName(t types.Type) string {
 	return types.TypeString(t, h.Qualifier)
 }
 
-// Hook resolves a non-generic function or a legacy host method.
+// Hook resolves a non-generic function, explicit receiver method, or legacy host method.
 func (h *Host) Hook(name string) (string, *types.Signature, error) {
 	obj := h.Package.Scope().Lookup(name)
 	if label, member, qualified := strings.Cut(name, "."); qualified {
 		pkg := h.ImportNames[label]
+		if receiver, ok := h.Package.Scope().Lookup(label).(*types.TypeName); ok {
+			if pkg != nil {
+				return "", nil, fmt.Errorf("ambiguous receiver and import %s", label)
+			}
+			return h.methodExpression(receiver.Type(), member)
+		}
 		if pkg == nil {
 			return "", nil, fmt.Errorf("unknown import %s", label)
 		}

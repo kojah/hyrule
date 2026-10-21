@@ -191,3 +191,67 @@ func TestNativeBooleanResultIsData(t *testing.T) {
  func TestBehavior(t *testing.T){h:=&Host{};if !Rewrite(false,h)||Rewrite(true,h)||h.Calls!=2{t.Fatalf("Boolean output confused with success flag: calls=%d",h.Calls)}}`)
 	runGeneratedTransitionTest(t, root)
 }
+
+func TestNativeExplicitReceiverMethods(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", `package fixture
+ type Host struct { Calls int; Offset int }
+ type Signature func(int,*Host)(int,bool)
+ func(h *Host) ready(n int)bool{h.Calls++;return n>0}
+ func(h Host) adjusted(n int)int{return n+h.Offset}
+ `)
+	write(t, root, "input.rules", `signature partial;
+ query ready($n)=Host.ready $host $n;
+ build adjusted=Host.adjusted;
+ rule Main: inputs $n $host => query ready $n {
+  true=>outputs (adjusted (copy $host) $n);
+  false=>outputs 0;
+ };
+ build copy=copyHost;
+ `)
+	// A value method's receiver stays a value; the explicit copy is ordinary Go.
+	write(t, root, "copy.go", `package fixture;func copyHost(h *Host)Host{return *h}`)
+	c, a := compile(t, root)
+	if err := c.Publish(a, false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "behavior_test.go", `package fixture
+ import "testing"
+ func TestBehavior(t *testing.T){
+ h:=&Host{Offset:7};a,ok:=Rewrite(3,h);b,again:=Rewrite(0,h)
+ if !ok||!again||a!=10||b!=0||h.Calls!=2{t.Fatalf("receiver binding: %d,%d,%v,%v calls=%d",a,b,ok,again,h.Calls)}
+ }`)
+	runGeneratedTransitionTest(t, root)
+}
+
+func TestNativeWholeViewCaptureKeepsConcreteTypeAndIdentity(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", `package fixture
+ import goast "go/ast"
+ type Signature func(any,any)(*goast.Ident,bool)
+ var Calls int
+ func valid(node *goast.Ident)bool{Calls++;return node.Name!=""}
+ `)
+	write(t, root, "input.rules", `signature partial;
+ view Entry=*goast.Ident { name:Name; };
+ query valid;
+ rule Same: inputs $node:(Entry name:$name) $node:(Entry) => query valid $node {
+  true=>outputs $node;
+  false=>outputs nil;
+ };
+ `)
+	c, a := compile(t, root)
+	if err := c.Publish(a, false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "behavior_test.go", `package fixture
+ import("go/ast";"testing")
+ func TestBehavior(t *testing.T){
+ node:=&ast.Ident{Name:"ok"};other:=&ast.Ident{Name:"ok"};empty:=&ast.Ident{}
+ for _,tt:=range []struct{a,b any;want *ast.Ident;ok bool;calls int}{
+ {node,node,node,true,1},{node,other,nil,false,0},{nil,nil,nil,false,0},
+ {(*ast.Ident)(nil),(*ast.Ident)(nil),nil,false,0},{42,42,nil,false,0},{empty,empty,nil,true,1},
+ }{Calls=0;got,ok:=Rewrite(tt.a,tt.b);if got!=tt.want||ok!=tt.ok||Calls!=tt.calls{t.Fatalf("%v,%v: %p,%v calls=%d",tt.a,tt.b,got,ok,Calls)}}
+ }`)
+	runGeneratedTransitionTest(t, root)
+}

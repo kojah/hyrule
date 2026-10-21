@@ -27,9 +27,13 @@ func (e *emitter) matcher(x *syntax.Expr, input types.Type) (string, *types.Sign
 	if !types.AssignableTo(input, sig.Params().At(0).Type()) {
 		return "", nil, nil, e.fail(x, "matcher input type mismatch")
 	}
+	children := n - 1
+	if e.capturedView(x) != nil {
+		children--
+	}
 	indices := make([]int, len(x.Args))
 	named := len(x.Args) > 0 && x.Args[0].Field != ""
-	if !named && len(x.Args) != n-1 && (e.constructors[x.Name] == nil && e.recordNames[x.Name] == nil || len(x.Args) != 0) {
+	if !named && len(x.Args) != children && (e.constructors[x.Name] == nil && e.recordNames[x.Name] == nil || len(x.Args) != 0) {
 		return "", nil, nil, e.fail(x, "matcher requires one result per pattern argument followed by bool")
 	}
 	seen := map[string]struct{}{}
@@ -46,7 +50,7 @@ func (e *emitter) matcher(x *syntax.Expr, input types.Type) (string, *types.Sign
 		}
 		seen[arg.Field] = struct{}{}
 		indices[i] = -1
-		for result := 0; result < n-1; result++ {
+		for result := 0; result < children; result++ {
 			if sig.Results().At(result).Name() == arg.Field {
 				indices[i] = result
 				break
@@ -63,7 +67,11 @@ func (e *emitter) matcher(x *syntax.Expr, input types.Type) (string, *types.Sign
 // hide a missing binding. It never invokes a host hook or constructs effects.
 func (e *emitter) checkPattern(x *syntax.Expr, input types.Type) error {
 	if x.Bind != "" {
-		if err := e.bind(x, x.Bind, 0, input); err != nil {
+		captured := input
+		if view := e.capturedView(x); view != nil {
+			captured = view.typ
+		}
+		if err := e.bind(x, x.Bind, 0, captured); err != nil {
 			return err
 		}
 	}

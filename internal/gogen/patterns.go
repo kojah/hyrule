@@ -48,7 +48,8 @@ func (e *emitter) pattern(x *syntax.Expr, value matchir.ValueID, t types.Type) e
 	if x.Kind == syntax.Variable && strings.Contains(x.Name, ".") {
 		return e.fail(x, "field projections are read-only values, not capture patterns")
 	}
-	if x.Bind != "" {
+	view := e.capturedView(x)
+	if x.Bind != "" && view == nil {
 		if err := e.bind(x, x.Bind, value, t); err != nil {
 			return err
 		}
@@ -91,6 +92,11 @@ func (e *emitter) pattern(x *syntax.Expr, value matchir.ValueID, t types.Type) e
 		}
 		for _, id := range outputs {
 			e.serial = max(e.serial, int(id))
+		}
+		if view != nil {
+			if err := e.bind(x, x.Bind, outputs[len(outputs)-1], view.typ); err != nil {
+				return err
+			}
 		}
 		for child, arg := range x.Args {
 			index := indices[child]
