@@ -81,6 +81,7 @@ type Pattern struct {
 type Item struct {
 	Binding *Binding
 	Pattern *Pattern
+	Union   *Union
 	Rule    *Rule
 }
 
@@ -89,4 +90,27 @@ type Item struct {
 type File struct {
 	Items    []Item
 	Trailing []string
+}
+
+// Union declares a closed variant domain bound to existing host storage.
+// Exhaustive requests proof that unconditional rules cover every input variant.
+type Union struct {
+	Position
+	Name, GoType, Tag string
+	Exhaustive        bool
+	Variants          []*Variant
+	Comments          []string
+}
+
+// Variant binds one constructor and its active fields to a distinct host tag.
+type Variant struct {
+	Position
+	Name, GoTag string
+	Fields      []UnionField
+}
+
+// UnionField maps a language field name to one direct host storage field.
+type UnionField struct {
+	Position
+	Name, GoName string
 }

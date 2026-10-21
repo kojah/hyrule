@@ -20,15 +20,18 @@ type capture struct {
 	typ types.Type
 }
 type emitter struct {
-	host     *Host
-	bindings map[string]*syntax.Binding
-	captures map[string]capture
-	out      strings.Builder
-	rule     string
-	serial   int
-	cursor   *matchir.Cursor
-	graph    *matchir.Graph
-	tables   decisionTables
+	host         *Host
+	bindings     map[string]*syntax.Binding
+	captures     map[string]capture
+	out          strings.Builder
+	rule         string
+	serial       int
+	cursor       *matchir.Cursor
+	graph        *matchir.Graph
+	tables       decisionTables
+	unions       []*boundUnion
+	constructors map[string]*boundVariant
+	established  *boundVariant
 }
 
 // Generate validates structural contracts and emits a single ordered dispatcher.
@@ -45,6 +48,9 @@ func Generate(h Host, files []*syntax.File) ([]byte, error) {
 		return nil, err
 	}
 	e := emitter{host: &h, bindings: program.Bindings}
+	if err := e.bindUnions(program.Unions); err != nil {
+		return nil, err
+	}
 	for _, file := range files {
 		for _, item := range file.Items {
 			if binding := item.Binding; binding != nil {
@@ -55,7 +61,7 @@ func Generate(h Host, files []*syntax.File) ([]byte, error) {
 		}
 	}
 	rules, err := program.Expand(func(rule *syntax.Rule) error {
-		checker := emitter{host: e.host, bindings: e.bindings, captures: map[string]capture{}, rule: rule.Name}
+		checker := emitter{host: e.host, bindings: e.bindings, constructors: e.constructors, captures: map[string]capture{}, rule: rule.Name}
 		return checker.checkPattern(rule.Match, sig.Params().At(0).Type())
 	})
 	if err != nil {
@@ -83,6 +89,7 @@ func Generate(h Host, files []*syntax.File) ([]byte, error) {
 		fmt.Fprintf(&e.out, "var zero %s; return zero, false\n", output)
 	}
 	e.out.WriteString("}\n")
+	e.emitValidators()
 	var source strings.Builder
 	source.WriteString(Header)
 	fmt.Fprintf(&source, "package %s\n", h.Package.Name())
@@ -133,6 +140,12 @@ func (e *emitter) value(x *syntax.Expr, kind string) (string, error) {
 	case syntax.Literal:
 		return x.Name, nil
 	case syntax.Call:
+		if constructor := e.constructors[x.Name]; constructor != nil {
+			if kind != "build" {
+				return "", e.fail(x, "union constructors are not guard expressions")
+			}
+			return e.constructorValue(x, constructor)
+		}
 		name, sig, err := e.binding(x, kind)
 		if err != nil {
 			return "", err

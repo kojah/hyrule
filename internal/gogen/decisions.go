@@ -55,7 +55,7 @@ func (e *emitter) expressionID(rule *syntax.Rule, expression *syntax.Expr) match
 
 // decisions adapts resolved Go hook signatures to the neutral matching graph.
 // The graph owns extraction identity, pure-prefix sharing and fallback edges.
-func (e *emitter) decisions(rules []*syntax.Rule, input types.Type) (*matchir.Node, error) {
+func (e *emitter) orderedDecisions(rules []*syntax.Rule, input types.Type) (*matchir.Node, error) {
 	e.graph = matchir.New(e.tables.typeID(input))
 	for _, rule := range rules {
 		e.rule = rule.Name
@@ -73,7 +73,12 @@ func (e *emitter) decisions(rules []*syntax.Rule, input types.Type) (*matchir.No
 		if _, err := e.value(rule.Build, "build"); err != nil {
 			return nil, err
 		}
-		e.cursor.Build(e.expressionID(rule, rule.Build))
+		node := e.cursor.Build(e.expressionID(rule, rule.Build))
+		construction, err := e.construction(rule, rule.Build)
+		if err != nil {
+			return nil, err
+		}
+		node.Construction = construction
 	}
 	e.cursor = nil
 	return e.graph.Root(), nil

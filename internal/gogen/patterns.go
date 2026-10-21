@@ -68,7 +68,12 @@ func (e *emitter) pattern(x *syntax.Expr, value matchir.ValueID, t types.Type) e
 		for index := range outputTypes {
 			outputTypes[index] = e.tables.typeID(sig.Results().At(index).Type())
 		}
-		outputs := e.cursor.Match(e.tables.hookID(name), value, outputTypes)
+		var outputs []matchir.ValueID
+		if constructor := e.constructors[x.Name]; constructor != nil {
+			outputs = e.cursor.Variant(constructor.union.schema, constructor.id, value)
+		} else {
+			outputs = e.cursor.Match(e.tables.hookID(name), value, outputTypes)
+		}
 		for _, id := range outputs {
 			e.serial = max(e.serial, int(id))
 		}

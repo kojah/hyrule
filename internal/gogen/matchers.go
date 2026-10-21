@@ -9,7 +9,7 @@ import (
 // matcher resolves child positions once for both contract checking and emission.
 // Named fields refer to Go result names; the final success bool is never a child.
 func (e *emitter) matcher(x *syntax.Expr, input types.Type) (string, *types.Signature, []int, error) {
-	name, sig, err := e.binding(x, "match")
+	name, sig, err := e.matchSignature(x)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -22,7 +22,7 @@ func (e *emitter) matcher(x *syntax.Expr, input types.Type) (string, *types.Sign
 	}
 	indices := make([]int, len(x.Args))
 	named := len(x.Args) > 0 && x.Args[0].Field != ""
-	if !named && len(x.Args) != n-1 {
+	if !named && len(x.Args) != n-1 && (e.constructors[x.Name] == nil || len(x.Args) != 0) {
 		return "", nil, nil, e.fail(x, "matcher requires one result per pattern argument followed by bool")
 	}
 	seen := map[string]struct{}{}
@@ -113,4 +113,11 @@ func sameCaptures(left, right map[string]capture) bool {
 		}
 	}
 	return true
+}
+
+func (e *emitter) matchSignature(x *syntax.Expr) (string, *types.Signature, error) {
+	if constructor := e.constructors[x.Name]; constructor != nil {
+		return x.Name, constructor.signature, nil
+	}
+	return e.binding(x, "match")
 }

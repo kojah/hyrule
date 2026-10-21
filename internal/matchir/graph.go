@@ -28,6 +28,8 @@ const (
 	Test
 	Guard
 	Build
+	Variant
+	Dispatch
 )
 
 // OperandKind distinguishes established values from frontend-owned literals.
@@ -75,6 +77,10 @@ type Node struct {
 	Expression     ExprID
 	Origin         Origin
 	Next, Fallback *Node
+	Union          *UnionSchema
+	Variant        VariantID
+	Cases          []VariantCase
+	Construction   *Construction
 }
 
 type branch struct{ attempts []*attempt }

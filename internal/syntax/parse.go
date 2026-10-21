@@ -47,6 +47,13 @@ func Parse(name string, input io.Reader) (*File, error) {
 			binding.GoName = p.identifier()
 			p.expect(";")
 			file.Items = append(file.Items, Item{Binding: binding})
+		case "union", "exhaustive":
+			if kind == "exhaustive" {
+				p.expect("union")
+			}
+			union := p.unionDeclaration(pos, comments)
+			union.Exhaustive = kind == "exhaustive"
+			file.Items = append(file.Items, Item{Union: union})
 		case "pattern":
 			pattern := p.patternDeclaration(pos, comments)
 			file.Items = append(file.Items, Item{Pattern: pattern})
@@ -230,6 +237,11 @@ func Format(name string, input []byte) ([]byte, error) {
 			binding := item.Binding
 			comments(binding.Comments)
 			fmt.Fprintf(&out, "%s %s = %s;\n", binding.Kind, binding.Name, binding.GoName)
+			continue
+		}
+		if item.Union != nil {
+			comments(item.Union.Comments)
+			out.WriteString(formatUnion(item.Union))
 			continue
 		}
 		if item.Pattern != nil {

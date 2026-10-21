@@ -67,7 +67,7 @@ func (e *Program) validatePatternBody(x *syntax.Expr, parameters, used map[strin
 			if err := visit(x.Name); err != nil {
 				return err
 			}
-		} else if binding := e.Bindings[x.Name]; binding == nil || binding.Kind != "match" {
+		} else if binding := e.Bindings[x.Name]; e.Constructors[x.Name] == nil && (binding == nil || binding.Kind != "match") {
 			return e.fail(x, "unknown match pattern "+x.Name)
 		}
 	}

@@ -133,6 +133,38 @@ containing interfaces are rejected because their dynamic values could make `==`
 panic. Use distinct captures and a typed equality guard for those cases. Matching
 does not infer structural equality, aliasing, pointer-analysis facts or semantics.
 
+## Tagged unions
+
+A schema declares exclusive constructors over existing Go struct storage:
+
+```text
+exhaustive union Value = Value tag Kind {
+  Number = NumberKind { value: Number; };
+  Empty = EmptyKind {};
+};
+
+rule Number: (Number value:$number) => (Number value:$number);
+rule Empty: (Empty) => (Empty);
+```
+
+Constructors support named-field and nested patterns, OR alternatives and reusable
+patterns. They also build tagged values directly; no matcher or builder hook is
+required for a declared constructor. A zero-argument constructor pattern tests
+its variant and ignores its fields; construction still requires every field.
+
+Ordinary `union` declarations allow partial recognizers. `exhaustive union`
+requests a conservative coverage check for the target input: guarded or refined
+patterns do not discharge a variant, while an unguarded whole-input fallback
+covers all declared variants. Missing coverage is a compilation diagnostic.
+
+The initial binding uses a local Go struct, a direct integer/string/Boolean tag
+field, distinct same-typed Go constants, and direct active fields. Undeclared
+input or output tags return `false`, including before a catchall; this is a
+checked closed-domain API, not an assertion that Go prevents invalid enum values.
+The root discriminator is read once for variant dispatch. Go still owns storage.
+See [union contracts and limitations](UNIONS.md) and the
+[union example](examples/unions/rewrite.rules).
+
 ## Go host contract
 
 Declare a named function type directly in the configured binding file:
@@ -187,7 +219,8 @@ IR with its own hook/type tables; a universal bindings language is not provided.
 The compiler folds adjacent identical pure matcher/test prefixes into an ordered
 decision DAG. Match failure and exhausted guard alternatives rejoin explicit
 fallback edges; builders remain separate leaves. It does not reorder unrelated
-rules, infer mutually exclusive operation kinds or generate structural switches.
+rules or infer exclusivity for opaque hooks. Declared unions add exclusive
+variant/field knowledge to the portable IR and permit checked variant switches.
 Generated functions use typed locals and direct branches, with no runtime graph,
 term boxing, reflection or runtime capture maps. Unreachable declared rules
 remain type-checked. See [decision-graph measurements](DECISION_GRAPH.md) for

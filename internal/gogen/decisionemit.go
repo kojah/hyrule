@@ -2,7 +2,6 @@ package gogen
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
 )
@@ -31,21 +30,27 @@ func (e *emitter) decisionValue(node *matchir.Node, kind string) (string, error)
 func (e *emitter) emitDecisions(node, stop *matchir.Node) error {
 	for node != nil && node != stop && node.Kind != matchir.Fail {
 		switch node.Kind {
-		case matchir.Match:
-			outputs := make([]string, 0, len(node.Outputs)+1)
-			for _, output := range node.Outputs {
-				outputs = append(outputs, valueName(output))
-			}
-			outputs = append(outputs, "hok")
-			fmt.Fprintf(&e.out, "{\n%s := %s(%s)\n", strings.Join(outputs, ", "), e.tables.hooks[node.Hook], valueName(node.Input))
-			for _, output := range node.Outputs {
-				fmt.Fprintf(&e.out, "_ = %s\n", valueName(output))
-			}
-			e.out.WriteString("if hok {\n")
-			if err := e.emitDecisions(node.Next, node.Fallback); err != nil {
+		case matchir.Dispatch:
+			if err := e.emitDispatch(node); err != nil {
 				return err
 			}
-			e.out.WriteString("}\n}\n")
+		case matchir.Variant:
+			terminal := e.variantReturns(node)
+			if terminal {
+				if err := e.emitDeadSuffix(node.Fallback, stop); err != nil {
+					return err
+				}
+			}
+			if err := e.emitVariant(node); err != nil {
+				return err
+			}
+			if terminal {
+				return nil
+			}
+		case matchir.Match:
+			if err := e.emitMatch(node); err != nil {
+				return err
+			}
 		case matchir.Test:
 			fmt.Fprintf(&e.out, "if %s == %s {\n", e.operand(node.Left), e.operand(node.Right))
 			if err := e.emitDecisions(node.Next, node.Fallback); err != nil {
@@ -53,16 +58,9 @@ func (e *emitter) emitDecisions(node, stop *matchir.Node) error {
 			}
 			e.out.WriteString("}\n")
 		case matchir.Guard:
-			e.out.WriteString("{\n")
-			condition, err := e.decisionValue(node, "guard")
-			if err != nil {
+			if err := e.emitGuard(node); err != nil {
 				return err
 			}
-			fmt.Fprintf(&e.out, "if %s {\n", condition)
-			if err := e.emitDecisions(node.Next, node.Fallback); err != nil {
-				return err
-			}
-			e.out.WriteString("}\n}\n")
 		case matchir.Build:
 			return e.emitBuild(node, stop)
 		}
@@ -82,18 +80,37 @@ func decisionReturns(node *matchir.Node) bool {
 }
 
 func (e *emitter) emitBuild(node, stop *matchir.Node) error {
-	if node.Fallback != nil && node.Fallback != stop && node.Fallback.Kind != matchir.Fail {
-		e.out.WriteString("if false { // Unreachable rules retain Go type validation.\n")
-		if err := e.emitDecisions(node.Fallback, stop); err != nil {
-			return err
-		}
-		e.out.WriteString("}\n")
+	if err := e.emitDeadSuffix(node.Fallback, stop); err != nil {
+		return err
 	}
 	fmt.Fprintf(&e.out, "// Rule %s (%s:%d).\n", node.Origin.Rule, node.Origin.File, node.Origin.Line)
-	build, err := e.decisionValue(node, "build")
+	var build string
+	var err error
+	if node.Construction != nil {
+		build, err = e.constructionValue(node.Construction)
+	} else {
+		build, err = e.decisionValue(node, "build")
+	}
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(&e.out, "return %s, true\n", build)
+	if union := e.unionFor(e.host.Signature.Results().At(0).Type()); union != nil {
+		fmt.Fprintf(&e.out, "hresult := %s\nif !%s(hresult) { var zero %s; return zero,false }\nreturn hresult,true\n",
+			build, e.validator(union), e.host.typeName(union.typ))
+	} else {
+		fmt.Fprintf(&e.out, "return %s, true\n", build)
+	}
+	return nil
+}
+
+func (e *emitter) emitDeadSuffix(node, stop *matchir.Node) error {
+	if node == nil || node == stop || node.Kind == matchir.Fail {
+		return nil
+	}
+	e.out.WriteString("if false { // Unreachable rules retain Go type validation.\n")
+	if err := e.emitDecisions(node, stop); err != nil {
+		return err
+	}
+	e.out.WriteString("}\n")
 	return nil
 }

@@ -11,15 +11,17 @@ import (
 
 // Program holds ordered source rules and their binding declarations.
 type Program struct {
-	Bindings map[string]*syntax.Binding
-	patterns map[string]*syntax.Pattern
-	rules    []*syntax.Rule
-	rule     string
+	Bindings     map[string]*syntax.Binding
+	Unions       []*syntax.Union
+	Constructors map[string]*syntax.Variant
+	patterns     map[string]*syntax.Pattern
+	rules        []*syntax.Rule
+	rule         string
 }
 
 // Collect validates names independently of any target-language hook discovery.
 func Collect(files []*syntax.File) (*Program, error) {
-	program := &Program{Bindings: map[string]*syntax.Binding{}, patterns: map[string]*syntax.Pattern{}}
+	program := &Program{Bindings: map[string]*syntax.Binding{}, patterns: map[string]*syntax.Pattern{}, Constructors: map[string]*syntax.Variant{}}
 	names := map[string]bool{}
 	for _, file := range files {
 		for _, item := range file.Items {
@@ -31,6 +33,8 @@ func Collect(files []*syntax.File) (*Program, error) {
 					return nil, &syntax.Diagnostic{Position: b.Position, Message: "duplicate binding " + b.Name}
 				}
 				program.Bindings[b.Name] = b
+			} else if union := item.Union; union != nil {
+				program.Unions = append(program.Unions, union)
 			} else if pattern := item.Pattern; pattern != nil {
 				if program.patterns[pattern.Name] != nil {
 					return nil, &syntax.Diagnostic{Position: pattern.Position, Message: "duplicate pattern " + pattern.Name}
@@ -47,6 +51,9 @@ func Collect(files []*syntax.File) (*Program, error) {
 	}
 	if len(program.rules) == 0 {
 		return nil, fmt.Errorf("ruleset is empty")
+	}
+	if err := program.collectUnions(); err != nil {
+		return nil, err
 	}
 	return program, nil
 }
