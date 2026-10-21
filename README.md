@@ -7,6 +7,7 @@ live under `internal/lower/memory` and `internal/lower/scalarop`: shared loads/s
 stay in that package; `mapop`, `interfaceop`, `channelop` and `sliceop` own their typed family operations and original-source projections.
 The slicetransfer family lowers append/copy operations into complete exact, empty or conservative transfer plans consumed by symbolic summaries and native graph emission. Its clear rules choose empty, exact-span or possible-zero state effects; native emission applies those typed element writes without changing the slice header.
 Interface assertion lowering also selects retained-tag, copied-payload, typed-zero, panic-only or unsupported outcomes, shared by native graph emitters and public reads.
+The sliceheader family selects correlated nil/make/view/retype and append reuse/growth transitions, preserving explicitly partial capacity and possible bounds panics. Geometry and graph evidence remain host-owned.
 The mapstate family selects finite map write, clear, delete and paired lookup state transitions. Generic Go applies immutable entry edits; equality, provenance, graph traversal and evidence admission remain host responsibilities.
 The scalarop family recognizes original scalar literals, arithmetic, conversions, loads and input/call/tuple-result/phi boundaries. The bounded integer evaluator and native constant-control evaluator consume these descriptors; arithmetic, actual argument admission, work bounds and memory interpretation remain host policy.
 Matchers expose SSA structure and static types. Container state, identity,
