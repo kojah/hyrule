@@ -173,6 +173,12 @@ func (e *emitter) typedValue(x *syntax.Expr, expected types.Type) (string, error
 }
 
 func (e *emitter) resultValue(x *syntax.Expr, expected types.Type) (string, error) {
+	if x.Kind == syntax.Do {
+		return e.resultValue(x.Args[0], expected)
+	}
+	if x.Kind == syntax.Decline {
+		return "", e.fail(x, "decline requires an enclosing ordered alternative")
+	}
 	if x.Kind == syntax.OrderedAlternatives {
 		return e.alternativesValue(x, expected)
 	}

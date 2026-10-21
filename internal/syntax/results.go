@@ -70,6 +70,12 @@ func (p *parser) queryBody(position Position, depth int) *Expr {
 }
 
 func renderResult(expression *Expr, indent int) string {
+	if expression.Kind == Do {
+		return renderDo(expression, indent)
+	}
+	if expression.Kind == Decline {
+		return "decline"
+	}
 	if expression.Kind == OrderedAlternatives || expression.Kind == Selection || expression.Kind == Pure {
 		return renderAlternatives(expression, indent)
 	}

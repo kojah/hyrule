@@ -85,14 +85,11 @@ func (e *emitter) queryResult(x *syntax.Expr, expected types.Type, answered stri
 		if err := e.bindOutcome(arm.Pattern, variant, result); err != nil {
 			return "", err
 		}
-		value, err := e.resultValue(arm.Result, expected)
+		value, err := e.answerValue(arm.Result, expected, answered)
 		if err != nil {
 			return "", err
 		}
 		fmt.Fprintf(&e.out, "%s = %s\n", output, value)
-		if answered != "" {
-			fmt.Fprintf(&e.out, "%s = true\n", answered)
-		}
 	}
 	e.out.WriteString("}\n")
 	return output, nil
@@ -291,14 +288,11 @@ func (e *emitter) booleanQuery(x, call *syntax.Expr, name string, sig *types.Sig
 	for _, arm := range x.Arms {
 		e.captures = cloneCaptures(base)
 		fmt.Fprintf(&e.out, "case %s:\n", arm.Pattern.Name)
-		value, err := e.resultValue(arm.Result, expected)
+		value, err := e.answerValue(arm.Result, expected, answered)
 		if err != nil {
 			return "", err
 		}
 		fmt.Fprintf(&e.out, "%s = %s\n", output, value)
-		if answered != "" {
-			fmt.Fprintf(&e.out, "%s = true\n", answered)
-		}
 	}
 	e.out.WriteString("}\n")
 	return output, nil
@@ -332,10 +326,16 @@ func (e *emitter) alternativesValue(x *syntax.Expr, expected types.Type) (string
 			}
 			fmt.Fprintf(&e.out, "%s = %s\n", output, value)
 		} else {
-			if alternative.Kind != syntax.Selection {
-				return "", e.fail(alternative, "ordered alternative requires query ... select or a final pure fallback")
+			if alternative.Kind != syntax.Selection && alternative.Kind != syntax.Do {
+				return "", e.fail(alternative, "ordered alternative requires query ... select, do, or a final pure fallback")
 			}
-			value, err := e.queryResult(alternative, expected, answered)
+			var value string
+			var err error
+			if alternative.Kind == syntax.Selection {
+				value, err = e.queryResult(alternative, expected, answered)
+			} else {
+				value, err = e.answerValue(alternative, expected, answered)
+			}
 			if err != nil {
 				return "", err
 			}
@@ -344,4 +344,30 @@ func (e *emitter) alternativesValue(x *syntax.Expr, expected types.Type) (string
 		e.out.WriteString("}\n")
 	}
 	return output, nil
+}
+
+// An answer flag belongs to the nearest ordered choice. Nested queries propagate
+// it without declaring success until a terminal result is constructed. Decline
+// leaves it false; effects already performed by queries are never rolled back.
+func (e *emitter) answerValue(x *syntax.Expr, expected types.Type, answered string) (string, error) {
+	if answered == "" {
+		return e.resultValue(x, expected)
+	}
+	switch x.Kind {
+	case syntax.Do:
+		return e.answerValue(x.Args[0], expected, answered)
+	case syntax.Query:
+		return e.queryResult(x, expected, answered)
+	case syntax.Decline:
+		e.serial++
+		zero := fmt.Sprintf("hv%d", e.serial)
+		fmt.Fprintf(&e.out, "var %s %s\n", zero, e.host.TypeName(expected))
+		return zero, nil
+	default:
+		value, err := e.resultValue(x, expected)
+		if err == nil {
+			fmt.Fprintf(&e.out, "%s = true\n", answered)
+		}
+		return value, err
+	}
 }

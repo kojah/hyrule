@@ -172,7 +172,7 @@ func (e *emitter) forwardingCall(x *syntax.Expr, kind string) (*syntax.Expr, err
 }
 
 func containsQuery(x *syntax.Expr) bool {
-	if x.Kind == syntax.Query || x.Kind == syntax.Selection {
+	if x.Kind == syntax.Query || x.Kind == syntax.Selection || x.Kind == syntax.Do || x.Kind == syntax.Decline {
 		return true
 	}
 	for _, child := range x.Args {

@@ -175,7 +175,8 @@ rule Classify:
      <|> pure outputs (Opaque reasonUnknown);
 ```
 
-Each alternative is an explicit `query` followed by `select Pattern => result`.
+A query alternative is an explicit `query` followed by `select Pattern => result`.
+A non-final alternative may also be a `do` block (described below).
 The pattern selects a complete union variant or Boolean literal. A top-level
 OR such as `select (or (Proven reason:$why) (Unavailable reason:$why)) => result`
 shares one result between complete variants. A named selection,
@@ -208,3 +209,89 @@ Chains are available as rule results and inside ordinary exhaustive decision
 arms. A selection requires a chain with a final `pure` fallback. Ordinary query
 decisions retain mandatory exhaustive coverage. The compiler emits direct Go
 branches and locals; it adds no optional-result adapters or runtime dependency.
+
+## Sequential queries with `do`
+
+A `do` block writes a dependent query pipeline top-to-bottom. Each binding names
+one complete outcome that continues the block; its `else` arms handle every
+remaining outcome. The block ends with a `pure` result:
+
+```text
+rule Read:
+  inputs $request $host
+  => do {
+       Found node:$node <- query FindNode $host $request
+         else {
+           Missing => outputs Unavailable;
+         };
+       Exact value:$value <- query ReadNode $host $node
+         else {
+           Incomplete => outputs Unavailable;
+           Interfered => outputs Interfered;
+         };
+       pure outputs $value;
+     };
+```
+
+The hook and variant names above are illustrative; bindings must declare their
+actual host signatures and outcome domains. Query arguments remain positional
+captures, field projections, constants or literals. Parentheses around calls and
+outcome patterns remain optional. Payload captures from a successful binding are
+available in subsequent steps and the final result, but not in that binding's
+`else` arms. Earlier captures are available in later `else` arms. Shadowing is
+rejected. An `else` arm produces the block's result immediately: later steps and
+the final construction do not execute.
+
+Each step uses the existing exhaustive query contract. For Boolean queries,
+select `true` or `false` and handle the other literal. Tagged outcomes and native
+tuple outcomes work identically to ordinary decisions. No variant is implicitly
+regarded as success or failure. If the selected variant is the whole domain,
+`else` can be omitted. Otherwise missing arms are errors. OR/refined patterns and
+whole-result variable binds are not supported in steps; use explicit decisions
+when multiple outcomes continue differently. A block may contain only its final
+`pure` result. `pure` cannot contain queries, `do`, or `decline`.
+
+### Composing sequencing with alternatives
+
+A block can be a non-final operand of `<|>`. Use `decline` in an outcome arm to
+abandon that strategy and continue with the next alternative:
+
+```text
+=> do {
+     Found node:$node <- query FindNode $host $request
+       else { Missing => decline; };
+     Exact value:$value <- query ReadNode $host $node
+       else {
+         Incomplete => decline;
+         Interfered => outputs Interfered;
+       };
+     pure outputs $value;
+   }
+   <|> query ReadSummary $host $request
+         select Exact value:$value => outputs $value
+   <|> pure outputs Unavailable
+```
+
+Only `decline` requests fallback. An ordinary result from an `else` arm is an
+answer and skips the remaining alternatives, just like the final `pure` result.
+This lets a procedure distinguish an unavailable strategy from interference or
+an exhausted budget that must stop the procedure. Choosing which outcomes may
+fall back is an explicit domain policy.
+
+`decline` is legal only within an enclosing ordered alternative, including its
+nested query decisions or `do` blocks. It targets the nearest enclosing choice;
+an inner `<|>` has its own required final `pure` fallback. Captures cannot escape
+their block or alternative. Standalone `decline` has no meaning and is rejected.
+
+Reached queries execute once, in source order. Declining does not undo queries,
+refund budgets, restore caches, or retry another rule. Invalid tags and invalid
+active nested payloads still terminate conservatively, without trying later
+steps, alternatives or rules. The host applies returned effects afterward.
+
+The parser lowers each step into the same exhaustive query continuation used by
+nested `query`/`decide`, retaining a wrapper for formatting. There is no new
+runtime or loop construct, and query work never moves into the pure matching
+DAG. Sequence length consumes the existing expression-nesting budget, preventing
+a flat block from bypassing compiler depth limits. Public compiler tests in
+`sequencing_test.go` exercise execution, dependent captures, explicit early
+results, fallback, invalid outcomes, formatting and publication.

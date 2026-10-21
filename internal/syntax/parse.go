@@ -158,6 +158,11 @@ func (p *parser) expression(depth int) *Expr {
 		return result
 	}
 	switch {
+	case p.text == "do":
+		return p.doExpression(depth)
+	case p.text == "decline":
+		result.Kind = Decline
+		p.next()
 	case p.text == "effects":
 		return p.effects(depth)
 	case p.text == "query":
@@ -308,7 +313,7 @@ func Format(name string, input []byte) ([]byte, error) {
 
 func render(expression *Expr) string {
 	switch expression.Kind {
-	case Effects, Query, Selection, OrderedAlternatives, Pure:
+	case Effects, Query, Selection, OrderedAlternatives, Pure, Do, Decline:
 		return renderResult(expression, 0)
 	case Wildcard:
 		return "_"

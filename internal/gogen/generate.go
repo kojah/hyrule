@@ -263,8 +263,8 @@ func (e *emitter) valueExpected(x *syntax.Expr, kind string, expected types.Type
 			return "", err
 		}
 		return name + "(" + strings.Join(args, ", ") + ")", nil
-	case syntax.Query:
-		return "", e.fail(x, "query is only allowed as a rule result or decision arm")
+	case syntax.Query, syntax.Do, syntax.Decline:
+		return "", e.fail(x, "query/do/decline is only allowed as a rule result or decision arm")
 	case syntax.Effects:
 		if kind != "build" || expected == nil {
 			return "", e.fail(x, "effects requires a typed build context")

@@ -6,7 +6,7 @@ import "strings"
 // OR arms on separate lines. Indent is the expression's first-column offset.
 func renderLayout(expression *Expr, indent int) string {
 	switch expression.Kind {
-	case Effects, Query, Selection, OrderedAlternatives, Pure:
+	case Effects, Query, Selection, OrderedAlternatives, Pure, Do, Decline:
 		return renderResult(expression, indent)
 	}
 	inline := render(expression)

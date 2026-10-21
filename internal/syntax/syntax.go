@@ -44,6 +44,8 @@ const (
 	OrderedAlternatives
 	Selection
 	Pure
+	Do
+	Decline
 )
 
 // Expr is a pattern or construction expression. Bind names an entire matched
@@ -59,6 +61,8 @@ type Expr struct {
 	Arms  []DecisionArm
 	// Unparenthesized marks an outer application or unresolved outer name.
 	Unparenthesized bool
+	// Sequential marks a query produced by a do binding, preserving its formatting.
+	Sequential bool
 }
 
 // Binding declares a named matcher, builder, pure guard or ordered host query.

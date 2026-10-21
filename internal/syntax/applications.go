@@ -28,7 +28,7 @@ func (p *parser) applicationBoundary() bool {
 		return true
 	}
 	switch p.text {
-	case ";", "=", "&", "when", "let", "decide", "select", "{", "}", ")", "]", ",", "<", ">", "!":
+	case ";", "=", "&", "when", "let", "else", "decide", "select", "{", "}", ")", "]", ",", "<", ">", "!":
 		return true
 	}
 	return false
