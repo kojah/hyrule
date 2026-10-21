@@ -2,6 +2,8 @@ package hyrule_test
 
 import (
 	"bytes"
+	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -95,5 +97,50 @@ func TestSameNameUnionVariants(t *testing.T) {
 		if _, err := hyrule.Format("input.rules", []byte("union Value = Value tag Kind {"+bad+"};")); err == nil {
 			t.Errorf("accepted malformed variant %q", bad)
 		}
+	}
+}
+
+func TestSameNameStorageFields(t *testing.T) {
+	for _, test := range []struct{ name, schema string }{
+		{"record", `record Value = Value { kind: Kind; Number: Number; Atom: Atom; };`},
+		{"union", `union Value = Value tag Kind { NumberTag { Number: Number; }; EmptyTag {}; WrapTag { Atom: Atom; }; };`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := fixture(t)
+			write(t, root, "bindings.go", unionHost)
+			rule := "\nrule Identity: $value => $value;\n"
+			write(t, root, "input.rules", test.schema+rule)
+			_, want := compile(t, root)
+			shorthand := strings.NewReplacer("Number: Number;", "Number;", "Atom: Atom;", "Atom;").Replace(test.schema)
+			write(t, root, "input.rules", shorthand+rule)
+			_, got := compile(t, root)
+			if !bytes.Equal(got[0].Data, want[0].Data) {
+				t.Fatal("same-name fields changed generated code")
+			}
+			formatted, err := hyrule.Format("input.rules", []byte(shorthand+rule))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Contains(formatted, []byte("Number;")) || bytes.Contains(formatted, []byte("Number: Number")) {
+				t.Fatalf("formatter lost field shorthand:\n%s", formatted)
+			}
+			if test.name == "record" && !bytes.Contains(formatted, []byte("kind: Kind;")) {
+				t.Fatal("formatter lost explicit mapping")
+			}
+			again, err := hyrule.Format("input.rules", formatted)
+			if err != nil || !bytes.Equal(formatted, again) {
+				t.Fatalf("format not idempotent: %v", err)
+			}
+			for _, invalid := range []string{"number;", "Number; Number;"} {
+				write(t, root, "input.rules", strings.Replace(shorthand, "Number;", invalid, 1)+rule)
+				config, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := config.Compile(context.Background(), ""); err == nil {
+					t.Errorf("accepted invalid field mapping %q", invalid)
+				}
+			}
+		})
 	}
 }

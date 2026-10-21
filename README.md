@@ -178,6 +178,12 @@ means `Lock = Lock { resource: Resource; };`. Names are exact and case-sensitive
 Each variant remains a separate declaration; explicit aliases can be mixed with
 shorthand variants, and formatting preserves both forms.
 
+Record and union fields may likewise omit a same-name storage mapping:
+`start;` means `start: start;`. Explicit mappings such as `resource: Resource;`
+remain available. Field names are exact and case-sensitive, and each field still
+ends with `;`. This shorthand changes schema declarations only, not named
+arguments in patterns, constructors, or record updates.
+
 Ordinary `union` declarations allow partial recognizers. `exhaustive union`
 requests a conservative coverage check for the target input: guarded or refined
 patterns do not discharge a variant, while an unguarded whole-input fallback

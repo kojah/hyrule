@@ -131,6 +131,7 @@ type Variant struct {
 type UnionField struct {
 	Position
 	Name, GoName string
+	Implicit     bool // Preserve an omitted same-name storage mapping when formatting.
 }
 
 // DecisionArm handles one complete query outcome without refinement or fallthrough.
