@@ -77,7 +77,7 @@ func TestPatternContractDiagnostics(t *testing.T) {
 		{"or arity", `(or _)`, `0`, "at least two alternatives"},
 		{"or labels", `(or left:_ _)`, `0`, "cannot have field names"},
 		{"or build", `_`, `(or 1 2)`, "only allowed in matcher patterns"},
-		{"named build", `_`, `(Sum left:1 2)`, "only allowed in matcher patterns"},
+		{"named build", `_`, `(Sum left:1 2)`, "cannot mix named and positional builder arguments"},
 		{"interface equality", `(Any left:$x right:$x)`, `0`, "may contain an interface"},
 		{"expansion bound", `(Pair left:(or 1 2 3 4 5 6 7 8 9) right:(or 1 2 3 4 5 6 7 8))`, `0`, "exceeds 64 alternatives"},
 	}

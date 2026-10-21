@@ -175,22 +175,15 @@ func (e *emitter) value(x *syntax.Expr, kind string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if sig.Params().Len() != len(x.Args) || sig.Results().Len() != 1 {
+		if sig.Results().Len() != 1 || sig.Params().Len() != len(x.Args) && !hasNamedArguments(x) {
 			return "", e.fail(x, "hook arity mismatch: require one result and one parameter per argument")
 		}
 		if kind == "guard" && !types.Identical(sig.Results().At(0).Type(), types.Typ[types.Bool]) {
 			return "", e.fail(x, "guard must return bool")
 		}
-		args := []string{}
-		for _, arg := range x.Args {
-			if arg.Field != "" {
-				return "", e.fail(arg, "named fields are only allowed in matcher patterns")
-			}
-			value, err := e.value(arg, "build")
-			if err != nil {
-				return "", err
-			}
-			args = append(args, value)
+		args, err := e.valueArguments(x, sig, kind)
+		if err != nil {
+			return "", err
 		}
 		return name + "(" + strings.Join(args, ", ") + ")", nil
 	case syntax.Alternation:

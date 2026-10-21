@@ -66,6 +66,20 @@ positional children cannot be mixed in one call; unknown and duplicate names
 are errors. Positional patterns keep their existing arity contract. Named
 children are matched in written order, independent of the Go return order.
 
+Builder arguments can also use the names of the Go builder's input parameters:
+
+```text
+=> (SliceHeader backing:$backing offset:$start length:$len capacity:$cap)
+```
+
+Names are exact and case-sensitive. Every parameter must be supplied once;
+missing, duplicate, unknown names and mixed named/positional arguments are
+errors. Named calls require usable Go parameter names (neither unnamed nor `_`).
+Positional calls remain supported. Nested builders execute once in written
+order, even when arguments are rearranged into Go parameter order; typed
+assignment checks still apply. The optional host receiver is implicit and is
+not a builder argument. Guards continue to use positional arguments.
+
 Use `(or PATTERN PATTERN ...)` for ordered alternatives in match patterns:
 
 ```text

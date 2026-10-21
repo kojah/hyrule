@@ -4,4 +4,4 @@ build Plan = BuildPlan;
 // Lower the semantic operation to a complete bundle before applying effects.
 rule MapRead:
   (Read $origin $map $key $tuple)
-  => (Plan $origin $map $key $tuple);
+  => (Plan origin:$origin m:$map key:$key tuple:$tuple);
