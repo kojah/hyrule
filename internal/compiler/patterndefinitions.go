@@ -1,10 +1,10 @@
-package gogen
+package compiler
 
 import "github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
 
 // validateDefinition checks the entire declaration graph, including unused
 // definitions, without expansion. Every capture is an explicit parameter.
-func (e *emitter) validateDefinition(name string, checked, active map[string]struct{}) error {
+func (e *Program) validateDefinition(name string, checked, active map[string]struct{}) error {
 	definition := e.patterns[name]
 	e.rule = name
 	if _, ok := active[name]; ok {
@@ -19,7 +19,7 @@ func (e *emitter) validateDefinition(name string, checked, active map[string]str
 	if name == "or" {
 		return e.fail(definition.Body, "or is reserved for alternatives")
 	}
-	for _, binding := range e.bindings {
+	for _, binding := range e.Bindings {
 		if binding.Name == name || binding.GoName == name {
 			return e.fail(definition.Body, "pattern collides with Go hook "+name)
 		}
@@ -50,7 +50,7 @@ func (e *emitter) validateDefinition(name string, checked, active map[string]str
 	return nil
 }
 
-func (e *emitter) validatePatternBody(x *syntax.Expr, parameters, used map[string]struct{}, visit func(string) error) error {
+func (e *Program) validatePatternBody(x *syntax.Expr, parameters, used map[string]struct{}, visit func(string) error) error {
 	for _, capture := range []string{x.Bind, captureName(x)} {
 		if capture != "" {
 			used[capture] = struct{}{}
@@ -67,7 +67,7 @@ func (e *emitter) validatePatternBody(x *syntax.Expr, parameters, used map[strin
 			if err := visit(x.Name); err != nil {
 				return err
 			}
-		} else if binding := e.bindings[x.Name]; binding == nil || binding.Kind != "match" {
+		} else if binding := e.Bindings[x.Name]; binding == nil || binding.Kind != "match" {
 			return e.fail(x, "unknown match pattern "+x.Name)
 		}
 	}

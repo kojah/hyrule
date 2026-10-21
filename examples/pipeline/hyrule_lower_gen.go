@@ -3,24 +3,17 @@ package pipeline
 
 // Lower applies rules in source order; false means no rule matched.
 func Lower(harg0 Operation) (Plan, bool) {
-	if result, ok := hyruleLowerRule0(harg0); ok {
-		return result, true
+	{
+		hv1, hv2, hv3, hv4, hok := MatchRead(harg0)
+		_ = hv1
+		_ = hv2
+		_ = hv3
+		_ = hv4
+		if hok {
+			// Rule MapRead (tools/hyrule/examples/pipeline/lower.rules:5).
+			return BuildPlan(hv1, hv2, hv3, hv4), true
+		}
 	}
 	var zero Plan
 	return zero, false
-}
-
-// Rule MapRead (tools/hyrule/examples/pipeline/lower.rules:5).
-func hyruleLowerRule0(harg0 Operation) (Plan, bool) {
-	var zero Plan
-	hv1, hv2, hv3, hv4, hv5 := MatchRead(harg0)
-	if !hv5 {
-		return zero, false
-	}
-	_ = hv1
-	_ = hv2
-	_ = hv3
-	_ = hv4
-	_ = zero
-	return BuildPlan(hv1, hv2, hv3, hv4), true
 }

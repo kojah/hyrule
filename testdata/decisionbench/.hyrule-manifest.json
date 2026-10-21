@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "targets": {
+    "decisionbench": {
+      "path": "optimized_gen.go",
+      "sha256": "8ea93d53f64ef9dd6cb2412199b9fc396c661a36cec93e337fde790c0e9adfef"
+    }
+  }
+}

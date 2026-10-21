@@ -1,0 +1,9 @@
+version: 1
+targets:
+ - name: decisionbench
+   package: .
+   bindings: bindings.go
+   signature: Signature
+   function: Optimized
+   rules: [input.rules]
+   out: optimized_gen.go

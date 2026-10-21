@@ -1,7 +1,6 @@
-package gogen
+package compiler
 
 import (
-	"go/types"
 	"iter"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
@@ -12,15 +11,14 @@ const maxAlternatives = 64
 
 // expandRules gives OR the semantics of adjacent source rules: a failed guard
 // retries the next alternative, and builders run only after all guards succeed.
-func (e *emitter) expandRules(rules iter.Seq[*syntax.Rule], input types.Type) ([]*syntax.Rule, error) {
+func (e *Program) expandRules(rules iter.Seq[*syntax.Rule], check func(*syntax.Rule) error) ([]*syntax.Rule, error) {
 	var expanded []*syntax.Rule
 	for rule := range rules {
 		e.rule = rule.Name
 		if _, err := e.variantCount(rule.Match); err != nil {
 			return nil, err
 		}
-		checker := emitter{host: e.host, bindings: e.bindings, captures: map[string]capture{}, rule: e.rule}
-		if err := checker.checkPattern(rule.Match, input); err != nil {
+		if err := check(rule); err != nil {
 			return nil, err
 		}
 		for _, pattern := range expandPattern(rule.Match) {
@@ -32,7 +30,7 @@ func (e *emitter) expandRules(rules iter.Seq[*syntax.Rule], input types.Type) ([
 	return expanded, nil
 }
 
-func (e *emitter) variantCount(x *syntax.Expr) (int, error) {
+func (e *Program) variantCount(x *syntax.Expr) (int, error) {
 	count := 1
 	if x.Kind == syntax.Alternation {
 		count = 0

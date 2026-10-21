@@ -1,4 +1,4 @@
-package gogen
+package compiler
 
 import (
 	"iter"
@@ -18,11 +18,11 @@ type patternArgument struct {
 }
 
 type patternExpansion struct {
-	emitter   *emitter
+	emitter   *Program
 	remaining int
 }
 
-func (e *emitter) reuseRules(rules iter.Seq[*syntax.Rule]) ([]*syntax.Rule, error) {
+func (e *Program) reuseRules(rules iter.Seq[*syntax.Rule]) ([]*syntax.Rule, error) {
 	names := make([]string, 0, len(e.patterns))
 	for name := range e.patterns {
 		names = append(names, name)

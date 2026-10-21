@@ -1,5 +1,5 @@
 // Package hyrule compiles declarative, ordered tree patterns into typed Go.
-// Host matchers expose structure; guards establish facts; builders return complete
+// Pure host matchers expose structure; pure guards establish facts; builders return complete
 // results. Generated code has no dependency on Hyrule. The host owns traversal,
 // effects, scheduling and any fixed point. Compile never executes host callbacks.
 package hyrule

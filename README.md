@@ -51,7 +51,7 @@ host argument. Rule names are stable diagnostic identities, unique per target.
 binds the entire input to that subpattern. `_` ignores a pattern value.
 Parenthesized calls nest. Literals use Go spelling for numbers, strings, raw
 strings, `true`, `false`, and `nil`; negative numeric literals are supported.
-A rule may have multiple guard calls, each introduced by `&&`. Guards run in source order and short-circuit: a false guard skips later guards and the builder, then tries the next rule.
+A rule may have multiple guard calls, each introduced by `&&`. Their preconditions and short-circuit meaning are preserved: a false guard falls through without constructing that rule's result. Matcher and guard invocation counts are not a language guarantee.
 Declarations and rules end with `;`. Line and block comments are accepted.
 
 Matcher children can be selected by the names of the Go matcher's result
@@ -161,17 +161,37 @@ use a struct or slice for tuples, multiple effects, provenance and failure data.
 A guard decides whether a rule applies; a builder must produce its result once
 that guard succeeds. Nested replacement calls use `build` bindings.
 
-Match and guard callbacks should be read-only. Builders should construct complete
-results; callers apply their effects after matching. Hyrule cannot prove callback
-purity. Host code owns memory identity, soundness, unknown-value policy, lifecycle,
-control flow, budgets and scheduling. No effects should be applied speculatively
-inside matchers or guards.
+Matchers and guards **must be pure**: they must not mutate inputs, the host or
+externally observable state, and identical arguments against the same host
+snapshot must produce identical results. Analysis facts must remain stable for
+the whole matching invocation. Hyrule may skip, repeat or share these calls;
+call counts and evaluation order are not guaranteed. This is a language contract,
+not a property Hyrule can prove about arbitrary Go callbacks. Guard preconditions
+still apply: the compiler preserves ordered guard fallthrough and does not hoist
+partial guards before their required evidence.
 
-Generated functions use typed locals and per-rule helpers, with no term boxing,
-reflection or runtime capture maps. The initial compiler does not share matching
-work across rules. Its output is easy to inspect before considering dispatch
-optimization. Hook errors and malformed patterns carry source locations; Go type
-errors identify generated code and its nearby rule comment.
+Builders construct complete results and may allocate fresh objects. Their
+results are never cached or shared; replacement builders stay on the winning
+rule's execution path. The caller applies returned effects after matching.
+Host code owns memory identity, soundness, unknown-value policy, lifecycle,
+control flow, budgets and scheduling.
+
+The shared compiler expands reusable patterns and OR alternatives while retaining
+source priority. The matching IR uses opaque compiler-owned hook, type, value,
+literal and expression IDs; its optimizer and decision edges contain no Go
+syntax or `go/types` objects. The Go adapter discovers signatures, checks typed
+captures, maps IDs to Go types/functions, emits branches and formats imports.
+Go is the only implemented backend. A future backend can consume the matching
+IR with its own hook/type tables; a universal bindings language is not provided.
+
+The compiler folds adjacent identical pure matcher/test prefixes into an ordered
+decision DAG. Match failure and exhausted guard alternatives rejoin explicit
+fallback edges; builders remain separate leaves. It does not reorder unrelated
+rules, infer mutually exclusive operation kinds or generate structural switches.
+Generated functions use typed locals and direct branches, with no runtime graph,
+term boxing, reflection or runtime capture maps. Unreachable declared rules
+remain type-checked. See [decision-graph measurements](DECISION_GRAPH.md) for
+reproduction commands, baseline scope and limitations.
 
 ## Configuration and ownership
 

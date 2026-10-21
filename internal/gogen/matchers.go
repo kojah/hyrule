@@ -56,13 +56,13 @@ func (e *emitter) matcher(x *syntax.Expr, input types.Type) (string, *types.Sign
 // hide a missing binding. It never invokes a host hook or constructs effects.
 func (e *emitter) checkPattern(x *syntax.Expr, input types.Type) error {
 	if x.Bind != "" {
-		if err := e.bind(x, x.Bind, "", input); err != nil {
+		if err := e.bind(x, x.Bind, 0, input); err != nil {
 			return err
 		}
 	}
 	switch x.Kind {
 	case syntax.Variable:
-		return e.bind(x, x.Name, "", input)
+		return e.bind(x, x.Name, 0, input)
 	case syntax.Call:
 		_, sig, indices, err := e.matcher(x, input)
 		if err != nil {
