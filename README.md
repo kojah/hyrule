@@ -79,7 +79,34 @@ the next alternative. A false guard can therefore fall through to another
 alternative of that rule. Builders run only for a successful alternative.
 Expansion is bounded to 64 variants per rule; oversized patterns are rejected
 before constructing their expansion. OR-patterns are not build expressions.
-Named reusable subpattern declarations are not implemented.
+Reusable match patterns give repeated shapes a name with explicit parameters:
+
+```text
+pattern FiniteWrite($request, $resident, $originKnown) =
+  (Write request:$request allocated:true unknownMembership:false
+    resident:$resident newOriginKnown:$originKnown evidence:(ExactEvidence));
+pattern SafeKey() = (or (ExactEvidence) (SafeUnknownEvidence));
+
+rule ReplaceKnown:
+  (FiniteWrite $request true true)
+  && (WithinBound $request)
+  => (ReplaceKnown $request);
+```
+
+Every capture in a definition must be a declared parameter; expansion cannot
+introduce hidden captures. Arguments are match expressions, including captures,
+literals, wildcards and nested patterns. A parameter used as a whole-input capture
+(`$value:(...)`) accepts a capture or `_`. Repeated arguments preserve ordinary
+capture equality checks. Named matcher fields, nested destructuring and OR
+patterns keep their existing contracts after expansion.
+
+Definitions are scoped to a target, may reference later declarations or other
+configured rule files, and do not affect rule precedence. Names cannot collide
+with hook names. Definitions have exact arity and are match-only; free captures,
+unknown references, duplicate or unused parameters and recursive definitions
+are rejected, including unused definitions. Expansion is bounded to depth 64 and 10,000 match nodes per rule before OR
+expansion; the 64-variant OR bound still applies. Reuse introduces no runtime
+registry, graph traversal or fixed-point evaluation.
 
 Files are sorted lexically; rules retain source order within each file. The first
 successful rule wins. Unknown operations, failed matchers and false guards fall

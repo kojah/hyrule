@@ -21,6 +21,7 @@ type capture struct {
 type emitter struct {
 	host     *Host
 	bindings map[string]*syntax.Binding
+	patterns map[string]*syntax.Pattern
 	captures map[string]capture
 	out      strings.Builder
 	rule     string
@@ -36,8 +37,12 @@ func Generate(h Host, files []*syntax.File) ([]byte, error) {
 		!types.Identical(sig.Results().At(1).Type(), types.Typ[types.Bool]) || sig.Variadic() || sig.TypeParams().Len() != 0 {
 		return nil, fmt.Errorf("signature must be func(Input[, Host]) (Output, bool)")
 	}
-	e := emitter{host: &h, bindings: map[string]*syntax.Binding{}}
+	e := emitter{host: &h, bindings: map[string]*syntax.Binding{}, patterns: map[string]*syntax.Pattern{}}
 	rules, err := e.collect(files)
+	if err != nil {
+		return nil, err
+	}
+	rules, err = e.reuseRules(slices.Values(rules))
 	if err != nil {
 		return nil, err
 	}
@@ -117,6 +122,11 @@ func (e *emitter) collect(files []*syntax.File) ([]*syntax.Rule, error) {
 					return nil, &syntax.Diagnostic{Position: b.Position, Message: err.Error()}
 				}
 				e.bindings[b.Name] = b
+			} else if pattern := item.Pattern; pattern != nil {
+				if e.patterns[pattern.Name] != nil {
+					return nil, &syntax.Diagnostic{Position: pattern.Position, Message: "duplicate pattern " + pattern.Name}
+				}
+				e.patterns[pattern.Name] = pattern
 			} else {
 				if names[item.Rule.Name] {
 					return nil, &syntax.Diagnostic{Position: item.Rule.Position, Message: "duplicate rule " + item.Rule.Name}

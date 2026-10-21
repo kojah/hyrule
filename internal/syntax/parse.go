@@ -47,6 +47,9 @@ func Parse(name string, input io.Reader) (*File, error) {
 			binding.GoName = p.identifier()
 			p.expect(";")
 			file.Items = append(file.Items, Item{Binding: binding})
+		case "pattern":
+			pattern := p.patternDeclaration(pos, comments)
+			file.Items = append(file.Items, Item{Pattern: pattern})
 		case "rule":
 			rule := &Rule{Position: pos, Name: p.identifier(), Comments: comments}
 			p.rule = rule.Name
@@ -67,7 +70,7 @@ func Parse(name string, input io.Reader) (*File, error) {
 			file.Items = append(file.Items, Item{Rule: rule})
 			p.rule = ""
 		default:
-			p.fail(pos, "expected match, build, guard or rule declaration")
+			p.fail(pos, "expected match, build, guard, pattern or rule declaration")
 		}
 	}
 	file.Trailing = p.comments
@@ -227,6 +230,16 @@ func Format(name string, input []byte) ([]byte, error) {
 			binding := item.Binding
 			comments(binding.Comments)
 			fmt.Fprintf(&out, "%s %s = %s;\n", binding.Kind, binding.Name, binding.GoName)
+			continue
+		}
+		if item.Pattern != nil {
+			pattern := item.Pattern
+			comments(pattern.Comments)
+			parameters := make([]string, len(pattern.Parameters))
+			for i, name := range pattern.Parameters {
+				parameters[i] = "$" + name
+			}
+			fmt.Fprintf(&out, "pattern %s(%s) =\n  %s;\n", pattern.Name, strings.Join(parameters, ", "), renderLayout(pattern.Body, 2))
 			continue
 		}
 		if index != 0 {

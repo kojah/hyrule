@@ -68,9 +68,19 @@ type Rule struct {
 	Comments []string
 }
 
+// Pattern declares a reusable match with explicit, hygienic capture parameters.
+type Pattern struct {
+	Position
+	Name       string
+	Parameters []string
+	Body       *Expr
+	Comments   []string
+}
+
 // Item preserves declaration order for formatting.
 type Item struct {
 	Binding *Binding
+	Pattern *Pattern
 	Rule    *Rule
 }
 
