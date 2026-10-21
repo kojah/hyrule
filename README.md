@@ -150,7 +150,10 @@ can issue further queries without evaluating unselected branches. Pure matchers
 and guards retain their existing optimization contract.
 
 For dependent queries, `do { Pattern <- query Hook ... else { ... }; pure result; }`
-flattens nested decisions while retaining exhaustive outcome handling. An early
+flattens nested decisions while retaining exhaustive outcome handling. Boolean
+steps also accept `false <- query Hook ... else result;` (or `true`), which
+handles the opposite literal without a one-arm block. Tagged outcomes retain
+explicit arms. An early
 result ends the block; explicit `decline` inside an enclosing ordered alternative
 tries its next strategy. See [sequential queries](TRANSITIONS.md#sequential-queries-with-do).
 

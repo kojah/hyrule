@@ -242,6 +242,19 @@ available in subsequent steps and the final result, but not in that binding's
 rejected. An `else` arm produces the block's result immediately: later steps and
 the final construction do not execute.
 
+A Boolean binding may use a single-expression `else` instead of a one-arm block:
+
+```text
+false <- query Overrides $host $function
+  else outputs Unavailable;
+```
+
+This means `else { true => outputs Unavailable; }`. A `true` binding similarly
+handles `false`. The formatter preserves either spelling. The expression may be
+any ordinary result, including a nested query or a locally valid `decline`.
+Tagged outcomes still require explicit named arms; this shorthand never hides
+new variants or implicitly chooses a success outcome.
+
 Each step uses the existing exhaustive query contract. For Boolean queries,
 select `true` or `false` and handle the other literal. Tagged outcomes and native
 tuple outcomes work identically to ordinary decisions. No variant is implicitly

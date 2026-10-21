@@ -63,6 +63,8 @@ type Expr struct {
 	Unparenthesized bool
 	// Sequential marks a query produced by a do binding, preserving its formatting.
 	Sequential bool
+	// ExpressionElse preserves a Boolean do step's single-expression else.
+	ExpressionElse bool
 }
 
 // Binding declares a named matcher, builder, pure guard or ordered host query.

@@ -209,3 +209,74 @@ func TestDoRejectsUnboundedSyntaxAndImpurePlacement(t *testing.T) {
 		}
 	}
 }
+
+func TestDoBooleanExpressionElse(t *testing.T) {
+	root := fixture(t)
+	host := nativeHost + `
+type Flag bool
+func Gate(h *Host,n,stage int)Flag {
+ h.Calls=append(h.Calls,[]string{"first","second","last"}[stage])
+ return Flag(n & (1<<stage) != 0)
+}`
+	rules := `signature total fallback outputs 0 -1;
+query gate = Gate;
+query ready = Ready;
+rule Main:
+ inputs _ $n $host
+ => do {
+   true <- query gate $host $n 0 else outputs 10 1;
+   false <- query gate $host $n 1 else decline;
+   true <- query gate $host $n 2
+     else query ready $host "ok" {
+       true => outputs 50 5;
+       false => outputs 60 6;
+     };
+   pure outputs 30 3;
+ } <|> pure outputs 40 4;
+`
+	formatted, err := hyrule.Format("input.rules", []byte(rules))
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := hyrule.Format("input.rules", formatted)
+	if err != nil || string(again) != string(formatted) {
+		t.Fatalf("unstable expression else formatting: %v\n%s", err, formatted)
+	}
+	if !strings.Contains(string(formatted), "else outputs 10 1;") || !strings.Contains(string(formatted), "else decline;") {
+		t.Fatalf("formatter lost expression else shorthand:\n%s", formatted)
+	}
+	write(t, root, "bindings.go", host)
+	write(t, root, "input.rules", string(formatted))
+	c, artifacts := compile(t, root)
+	if err := c.Publish(artifacts, false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "behavior_test.go", `package fixture
+import("reflect";"testing")
+func TestBehavior(t *testing.T){
+ for _,tt:=range []struct{n,a,b int;calls []string}{
+  {0,10,1,[]string{"first"}},
+  {1,50,5,[]string{"first","second","last","ready"}},
+  {3,40,4,[]string{"first","second"}},
+  {5,30,3,[]string{"first","second","last"}},
+ }{
+  h:=&Host{};a,b:=Rewrite(nil,tt.n,h)
+  if a!=tt.a||b!=tt.b||!reflect.DeepEqual(h.Calls,tt.calls){t.Fatalf("%+v: %d,%d calls=%v",tt,a,b,h.Calls)}
+ }
+}`)
+	runGeneratedTransitionTest(t, root)
+}
+
+func TestDoExpressionElseRequiresBooleanPattern(t *testing.T) {
+	for _, pattern := range []string{"Proven reason:$why", "_", "$answer", "0", "(or true false)"} {
+		t.Run(pattern, func(t *testing.T) {
+			_, err := hyrule.Format("input.rules", []byte(`rule Main: $input => do {
+ `+pattern+` <- query Ask $input else outputs 0;
+ pure outputs 1;
+};`))
+			if err == nil || !strings.Contains(err.Error(), "single-expression else requires a true or false do binding") {
+				t.Fatalf("want Boolean-only expression else error, got %v", err)
+			}
+		})
+	}
+}

@@ -28,16 +28,7 @@ func (p *parser) doExpression(depth int) *Expr {
 			Arms: []DecisionArm{{Pattern: pattern}}}
 		if p.text == "else" {
 			p.next()
-			p.expect("{")
-			for p.text != "}" && p.token != scanner.EOF && p.failure == nil {
-				other := p.outerExpression(depth + len(steps) + 1)
-				p.expect("=")
-				p.expect(">")
-				answer := p.resultExpression(depth + len(steps) + 1)
-				p.expect(";")
-				step.Arms = append(step.Arms, DecisionArm{Pattern: other, Result: answer})
-			}
-			p.expect("}")
+			p.doElse(step, depth+len(steps)+1)
 		}
 		p.expect(";")
 		steps = append(steps, step)
@@ -56,6 +47,38 @@ func (p *parser) doExpression(depth int) *Expr {
 	return result
 }
 
+// Expression else is deliberately Boolean-only: the complementary literal is
+// explicit after lowering, so tagged domains retain named, exhaustive arms.
+func (p *parser) doElse(step *Expr, depth int) {
+	if p.text != "{" {
+		pattern := step.Arms[0].Pattern
+		if pattern.Kind != Literal || (pattern.Name != "true" && pattern.Name != "false") || pattern.Bind != "" {
+			p.fail(pattern.Position, "single-expression else requires a true or false do binding")
+			return
+		}
+		other := "true"
+		if pattern.Name == "true" {
+			other = "false"
+		}
+		step.ExpressionElse = true
+		step.Arms = append(step.Arms, DecisionArm{
+			Pattern: &Expr{Position: pattern.Position, Kind: Literal, Name: other},
+			Result:  p.resultExpression(depth),
+		})
+		return
+	}
+	p.expect("{")
+	for p.text != "}" && p.token != scanner.EOF && p.failure == nil {
+		other := p.outerExpression(depth)
+		p.expect("=")
+		p.expect(">")
+		answer := p.resultExpression(depth)
+		p.expect(";")
+		step.Arms = append(step.Arms, DecisionArm{Pattern: other, Result: answer})
+	}
+	p.expect("}")
+}
+
 func renderDo(expression *Expr, indent int) string {
 	pad := strings.Repeat(" ", indent)
 	var out strings.Builder
@@ -64,7 +87,9 @@ func renderDo(expression *Expr, indent int) string {
 	for step.Kind == Query && step.Sequential {
 		prefix := renderLayout(step.Arms[0].Pattern, indent+2) + " <- query "
 		out.WriteString("\n" + pad + "  " + prefix + renderLayout(step.Args[0], indent+2+len(prefix)))
-		if len(step.Arms) > 1 {
+		if step.ExpressionElse {
+			out.WriteString("\n" + pad + "    else " + renderLayout(step.Arms[1].Result, indent+9))
+		} else if len(step.Arms) > 1 {
 			out.WriteString("\n" + pad + "    else {")
 			for _, arm := range step.Arms[1:] {
 				out.WriteString("\n" + pad + "      " + render(arm.Pattern) + " => " + renderLayout(arm.Result, indent+6) + ";")
