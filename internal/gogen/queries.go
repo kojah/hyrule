@@ -19,6 +19,7 @@ func (e *emitter) queryValue(x *syntax.Expr, expected types.Type) (string, error
 }
 
 func (e *emitter) queryResult(x *syntax.Expr, expected types.Type, answered string) (string, error) {
+	x = selectionOutcomes(x)
 	outer := e.captures
 	e.captures = cloneCaptures(outer)
 	defer func() { e.captures = outer }()
@@ -134,8 +135,8 @@ func (e *emitter) queryArguments(call *syntax.Expr, sig *types.Signature) ([]str
 }
 
 // Each arm handles a complete variant, and payloads stay inside that arm.
-// Ordinary decisions require all variants. A selection deliberately handles one
-// variant, but cannot refine it or turn captures into equality tests.
+// Ordinary decisions require all variants. A selection deliberately handles chosen
+// variants, but cannot refine them or turn captures into equality tests.
 func (e *emitter) checkDecision(x *syntax.Expr, union *boundUnion) error {
 	seen := map[string]struct{}{}
 	for _, arm := range x.Arms {
@@ -177,6 +178,62 @@ func (e *emitter) checkDecision(x *syntax.Expr, union *boundUnion) error {
 	}
 	if len(missing) != 0 && x.Kind != syntax.Selection {
 		return e.fail(x, "non-exhaustive query decision: missing "+strings.Join(missing, ", "))
+	}
+	if x.Kind == syntax.Selection && len(x.Arms) > 1 {
+		return e.checkSelectionCaptures(x, union)
+	}
+	return nil
+}
+
+// A selected OR expands into switch arms after one query. It never expands the
+// query itself, so state and budget charges occur once for the whole selection.
+func selectionOutcomes(x *syntax.Expr) *syntax.Expr {
+	if x.Kind != syntax.Selection || len(x.Arms) != 1 {
+		return x
+	}
+	pattern := x.Arms[0].Pattern
+	if pattern.Kind != syntax.Alternation || pattern.Bind != "" || pattern.Field != "" {
+		return x
+	}
+	copy := *x
+	copy.Arms = nil
+	for _, pattern := range x.Arms[0].Pattern.Args {
+		copy.Arms = append(copy.Arms, syntax.DecisionArm{Pattern: pattern, Result: x.Arms[0].Result})
+	}
+	return &copy
+}
+
+// Every selected variant exposes the same typed scope to the shared result.
+// Field names and positions may differ; capture names and Go types must agree.
+func (e *emitter) checkSelectionCaptures(x *syntax.Expr, union *boundUnion) error {
+	var common map[string]types.Type
+	for _, arm := range x.Arms {
+		pattern := arm.Pattern
+		variant := e.constructors[pattern.Name]
+		_, _, indices, err := e.matcher(pattern, union.typ)
+		if err != nil {
+			return err
+		}
+		captures := map[string]types.Type{}
+		for i, arg := range pattern.Args {
+			if arg.Kind == syntax.Variable {
+				captures[arg.Name] = variant.fields[indices[i]].Type()
+			}
+		}
+		if common == nil {
+			common = captures
+			continue
+		}
+		compatible := len(common) == len(captures)
+		for name, typ := range common {
+			other, found := captures[name]
+			if !found || !types.Identical(typ, other) {
+				compatible = false
+			}
+		}
+		if !compatible {
+			return e.fail(pattern, "selected alternatives must bind the same captures with identical types")
+		}
 	}
 	return nil
 }

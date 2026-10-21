@@ -34,7 +34,11 @@ func renderAlternatives(expression *Expr, indent int) string {
 		return "pure " + renderLayout(expression.Args[0], indent+5)
 	case Selection:
 		arm := expression.Arms[0]
-		return "query " + renderLayout(expression.Args[0], indent+6) +
+		prefix := "query "
+		if expression.Name != "" {
+			prefix += "$" + expression.Name + " = "
+		}
+		return prefix + renderLayout(expression.Args[0], indent+len(prefix)) +
 			"\n" + strings.Repeat(" ", indent+2) + "select " + render(arm.Pattern) + " => " + renderLayout(arm.Result, indent+2)
 	default:
 		parts := make([]string, len(expression.Args))

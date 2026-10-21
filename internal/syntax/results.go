@@ -40,7 +40,7 @@ func (p *parser) queryBody(position Position, depth int) *Expr {
 		p.expect("=")
 	}
 	result.Args = []*Expr{p.outerExpression(depth + 1)}
-	if result.Name != "" {
+	if result.Name != "" && p.text != "select" {
 		p.expect("decide")
 		p.expect("$")
 		if name := p.identifier(); name != result.Name {
@@ -48,9 +48,6 @@ func (p *parser) queryBody(position Position, depth int) *Expr {
 		}
 	}
 	if p.text == "select" {
-		if result.Name != "" {
-			p.fail(position, "select requires an anonymous query; capture fields in its pattern")
-		}
 		p.next()
 		result.Kind = Selection
 		pattern := p.outerExpression(depth + 1)

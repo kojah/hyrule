@@ -207,3 +207,143 @@ func TestBehavior(t *testing.T){
 }`)
 	runGeneratedTransitionTest(t, root)
 }
+
+func TestOrderedSelectionAlternation(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", nativeHost+`func mark(h *Host,n int)int{h.Calls=append(h.Calls,"mark");return n}`)
+	rules := strings.Replace(alternativesRules, "select Proven reason:$why", "select (or (Proven reason:$why) (Unavailable reason:$why))", 1)
+	formatted, err := hyrule.Format("input.rules", []byte(rules))
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := hyrule.Format("input.rules", formatted)
+	if err != nil || string(again) != string(formatted) {
+		t.Fatalf("format roundtrip: %v", err)
+	}
+	write(t, root, "input.rules", string(formatted))
+	c, artifacts := compile(t, root)
+	if err := c.Publish(artifacts, false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "behavior_test.go", `package fixture
+import("go/ast";"reflect";"testing")
+func TestBehavior(t *testing.T){
+ for _,tt:=range []struct{n,a,b int;calls []string}{
+ {0,9,1,[]string{"ask","mark"}},
+ {2,9,1,[]string{"ask","mark"}},
+ {1,20,4,[]string{"ask","ready","ask","mark"}},
+ {99,0,-1,[]string{"ask"}},
+ }{
+ h:=&Host{};h.Offset.Value=2;if tt.n==1{h.Offset.Value=1}
+ a,b:=Rewrite(&ast.Ident{Name:"ok"},tt.n,h)
+ if a!=tt.a||b!=tt.b||!reflect.DeepEqual(h.Calls,tt.calls){t.Fatalf("%+v: %d,%d calls %v",tt,a,b,h.Calls)}
+ }
+}`)
+	runGeneratedTransitionTest(t, root)
+}
+
+func TestOrderedSelectionAlternationDiagnostics(t *testing.T) {
+	for _, tt := range []struct{ name, selection, want string }{
+		{"duplicate", "(or (Proven reason:$why) (Proven reason:$why))", "duplicate decision variant"},
+		{"capture names", "(or (Proven reason:$why) (Unavailable reason:$other))", "same captures with identical types"},
+		{"missing capture", "(or (Proven reason:$why) (Unavailable))", "same captures with identical types"},
+		{"refinement", "(or (Proven reason:$why) (Unavailable reason:7))", "fresh captures"},
+		{"nested", "(or (Proven reason:$why) (or (Unavailable reason:$why) (Disproven)))", "decision arm must name a variant"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := fixture(t)
+			write(t, root, "bindings.go", nativeHost+"\nfunc mark(h *Host,n int)int{return n}\n")
+			write(t, root, "input.rules", strings.Replace(alternativesRules, "Proven reason:$why", tt.selection, 1))
+			c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = c.Compile(context.Background(), "")
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("want %q: %v", tt.want, err)
+			}
+		})
+	}
+}
+
+func TestNamedOrderedSelection(t *testing.T) {
+	root := fixture(t)
+	host := strings.Replace(nativeHost, "type Signature func(any, int, *Host) (int, int)", "type Signature func(int,*Host)(Kind,int)", 1)
+	write(t, root, "bindings.go", host)
+	rules := `signature total fallback outputs No -1;
+ const No;
+ query ask=Ask;
+ union Proof=(Kind,int) tag 0 {Proven=Yes;Disproven=No;Unavailable=Unknown;};
+ rule Main: inputs $n $host
+ => query $answer=ask $host $n 0 select (or (Proven) (Unavailable)) => $answer
+ <|> pure outputs No 0;
+ `
+	formatted, err := hyrule.Format("input.rules", []byte(rules))
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := hyrule.Format("input.rules", formatted)
+	if err != nil || string(again) != string(formatted) {
+		t.Fatalf("format roundtrip: %v", err)
+	}
+	write(t, root, "input.rules", string(formatted))
+	c, artifacts := compile(t, root)
+	if err := c.Publish(artifacts, false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "behavior_test.go", `package fixture
+ import("reflect";"testing")
+ func TestBehavior(t *testing.T){
+ for _,tt:=range []struct{n int;kind Kind;value int}{{0,Yes,7},{2,Unknown,7},{1,No,0},{99,No,-1}}{
+ h:=&Host{};kind,value:=Rewrite(tt.n,h)
+ if kind!=tt.kind||value!=tt.value||!reflect.DeepEqual(h.Calls,[]string{"ask"}){t.Fatalf("%+v: %v,%d calls %v",tt,kind,value,h.Calls)}
+ }
+ }`)
+	runGeneratedTransitionTest(t, root)
+}
+
+func TestOrderedSelectionCaptureTypes(t *testing.T) {
+	root := fixture(t)
+	host := strings.Replace(nativeHost, "func Ask(h *Host,n,offset int)(Kind,int)", "func Ask(h *Host,n,offset int)(Kind,int,string)", 1)
+	host = strings.Replace(host, "return Kind(n),offset+7", "return Kind(n),offset+7,\"\"", 1)
+	write(t, root, "bindings.go", host+"\nfunc mark(h *Host,n int)int{return n}\n")
+	rules := strings.Replace(alternativesRules, "(Kind, int)", "(Kind, int, string)", 1)
+	rules = strings.Replace(rules, "Unavailable = Unknown { reason:1; }", "Unavailable = Unknown { reason:2; }", 1)
+	rules = strings.Replace(rules, "select Proven reason:$why", "select (or (Proven reason:$why) (Unavailable reason:$why))", 1)
+	write(t, root, "input.rules", rules)
+	c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.Compile(context.Background(), "")
+	if err == nil || !strings.Contains(err.Error(), "same captures with identical types") {
+		t.Fatalf("incompatible shared payload: %v", err)
+	}
+}
+
+func TestNamedBooleanSelectionAlternation(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", `package fixture
+type Signature func(bool,*Host)bool
+type Host struct{Calls int}
+func ask(h *Host,value bool)bool{h.Calls++;return value}
+func fallback(h *Host)bool{h.Calls++;return true}
+`)
+	write(t, root, "input.rules", `signature total fallback outputs true;
+ query ask;build fallback;
+ rule Main:inputs $value $host
+ =>query $answer=ask $host $value select (or true false) => outputs $answer
+ <|>pure outputs (fallback $host);
+ `)
+	c, artifacts := compile(t, root)
+	if err := c.Publish(artifacts, false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "behavior_test.go", `package fixture
+ import "testing"
+ func TestBehavior(t *testing.T){for _,value:=range []bool{true,false}{
+ h:=&Host{};got:=Rewrite(value,h)
+ if got!=value||h.Calls!=1{t.Fatalf("%v: %v calls %d",value,got,h.Calls)}
+ }} `)
+	runGeneratedTransitionTest(t, root)
+}

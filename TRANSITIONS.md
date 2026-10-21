@@ -176,8 +176,16 @@ rule Classify:
 ```
 
 Each alternative is an explicit `query` followed by `select Pattern => result`.
-The pattern selects one complete union variant or Boolean literal. Payloads
-allow fresh captures or wildcards, under the same restrictions as exhaustive
+The pattern selects a complete union variant or Boolean literal. A top-level
+OR such as `select (or (Proven reason:$why) (Unavailable reason:$why)) => result`
+shares one result between complete variants. A named selection,
+`query $proof = ask $x select Proven => $proof`, retains the complete typed
+query result in the selected answer; that capture cannot escape the alternative.
+This also forwards native tuples without rebuilding their fields. Every OR
+alternative must bind the same capture names with identical Go types; payload fields may have different names
+or positions. The query still executes exactly once. Duplicate variants, nested
+patterns and payload refinements remain invalid. Boolean OR can select both
+literals. Payloads allow fresh captures or wildcards, under the same restrictions as exhaustive
 decision arms. Other valid outcomes mean no answer from this alternative.
 Adding a variant to the declared domain does not require extending a selection;
 use an exhaustive query decision when every outcome needs explicit handling.
