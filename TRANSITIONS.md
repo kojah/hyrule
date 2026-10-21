@@ -45,9 +45,10 @@ types. Builders and other queries cannot be hidden inside an argument.
 A query is a rule result or an outcome arm's result. It executes exactly once
 when that occurrence is reached, after all preceding matching and guards. The
 host may spend a counted budget, fill caches, or record query evidence. The
-query must preserve the meaning of captured input values; it must not mutate
-source IR behind captures or reenter the generated planner. Hyrule cannot
-verify these host obligations.
+query may update explicitly caller-owned analysis state. Later reads observe
+those updates through ordinary Go aliases; this is not an immutable snapshot or
+a transaction. It must not mutate source IR or facts used by the matching DAG,
+or reenter the generated planner. Hyrule cannot verify these host obligations.
 
 The immediately following `decide` must name the query's fresh capture. Each
 arm handles one declared constructor. A branch may issue another query; only
@@ -255,13 +256,13 @@ any ordinary result, including a nested query or a locally valid `decline`.
 Tagged outcomes still require explicit named arms; this shorthand never hides
 new variants or implicitly chooses a success outcome.
 
-Each step uses the existing exhaustive query contract. For Boolean queries,
+Each conditional step uses the existing exhaustive query contract. For Boolean queries,
 select `true` or `false` and handle the other literal. Tagged outcomes and native
 tuple outcomes work identically to ordinary decisions. No variant is implicitly
 regarded as success or failure. If the selected variant is the whole domain,
-`else` can be omitted. Otherwise missing arms are errors. OR/refined patterns and
-whole-result variable binds are not supported in steps; use explicit decisions
-when multiple outcomes continue differently. A block may contain only its final
+`else` can be omitted. Otherwise missing arms are errors. OR/refined patterns
+remain unsupported. Whole-result variable binds are described below. Use explicit
+decisions when multiple outcomes continue differently. A block may contain only its final
 `pure` result. `pure` cannot contain queries, `do`, or `decline`.
 
 ### Composing sequencing with alternatives
@@ -308,3 +309,30 @@ DAG. Sequence length consumes the existing expression-nesting budget, preventing
 a flat block from bypassing compiler depth limits. Public compiler tests in
 `sequencing_test.go` exercise execution, dependent captures, explicit early
 results, fallback, invalid outcomes, formatting and publication.
+
+### Unconditional query bindings
+
+Use a fresh variable when every returned value continues the sequence:
+
+```text
+=> do {
+     $prepared <- query Prepare $host $instruction $state;
+     true <- query Order $host $prepared else outputs $prepared;
+     $held <- query Acquire $host $prepared;
+     pure outputs $held;
+   };
+```
+
+The hook may return a scalar, record, collection, Boolean, or native tuple.
+A tuple capture denotes the complete result, just as a named query capture does;
+it can be forwarded as a whole result. Field projections on a captured record
+remain checked against its Go type. The capture must be fresh and stays within
+this block and its continuations. There is no implicit success/failure polarity.
+An unconditional binding cannot have `else`: use a constructor or Boolean
+pattern when an outcome must select an early answer or decline a strategy.
+
+Every reached call still runs exactly once in order. A later decline retains
+its effects and budget charges. When the result has a declared union domain,
+its tag and active nested payload are validated before continuing, even when
+the whole capture is unused. Undeclared result types have their ordinary Go
+meaning; Hyrule does not infer variants, errors, or ownership contracts for them.

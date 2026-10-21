@@ -6,7 +6,7 @@ import (
 )
 
 // A do block retains its surface wrapper while each binding becomes an ordinary
-// exhaustive query. The first arm continues the block; else arms exit it. This
+// committed query. The first arm continues the block; else arms exit it. This
 // keeps capture scoping and outcome validation on the existing compiler path.
 func (p *parser) doExpression(depth int) *Expr {
 	result := &Expr{Position: p.position, Kind: Do}
@@ -27,6 +27,9 @@ func (p *parser) doExpression(depth int) *Expr {
 		step := &Expr{Position: position, Kind: Query, Args: []*Expr{call}, Sequential: true,
 			Arms: []DecisionArm{{Pattern: pattern}}}
 		if p.text == "else" {
+			if pattern.Kind == Variable {
+				p.fail(pattern.Position, "whole-result query binding cannot have else")
+			}
 			p.next()
 			p.doElse(step, depth+len(steps)+1)
 		}

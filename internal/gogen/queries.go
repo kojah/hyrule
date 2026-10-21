@@ -48,6 +48,9 @@ func (e *emitter) queryResult(x *syntax.Expr, expected types.Type, answered stri
 	if sig.Results().Len() < 1 || sig.Params().Len() != len(call.Args) {
 		return "", e.fail(call, "query requires results and one parameter per argument")
 	}
+	if x.Sequential && x.Arms[0].Pattern.Kind == syntax.Variable {
+		return e.bindQueryResult(x, call, name, sig, expected, answered)
+	}
 	if sig.Results().Len() == 1 && types.Identical(sig.Results().At(0).Type().Underlying(), types.Typ[types.Bool]) {
 		return e.booleanQuery(x, call, name, sig, expected, answered)
 	}
@@ -93,6 +96,32 @@ func (e *emitter) queryResult(x *syntax.Expr, expected types.Type, answered stri
 	}
 	e.out.WriteString("}\n")
 	return output, nil
+}
+
+// A whole-result binding consumes every result without choosing a success tag.
+// Declared union values still cross the same validation boundary as decisions.
+func (e *emitter) bindQueryResult(
+	x, call *syntax.Expr, name string, sig *types.Signature, expected types.Type, answered string,
+) (string, error) {
+	pattern := x.Arms[0].Pattern
+	if _, exists := e.captures[pattern.Name]; exists || strings.Contains(pattern.Name, ".") || pattern.Bind != "" || pattern.Field != "" {
+		return "", e.fail(pattern, "whole-result query binding requires a fresh capture")
+	}
+	resultType := sig.Results().At(0).Type()
+	if sig.Results().Len() > 1 {
+		resultType = hostapi.Tuple(e.host.Package, sig.Results())
+	}
+	arguments, err := e.queryArguments(call, sig)
+	if err != nil {
+		return "", err
+	}
+	id := e.emitQueryCall(name, sig, arguments, resultType)
+	fmt.Fprintf(&e.out, "_ = %s\n", valueName(id))
+	if union := e.unionFor(resultType); union != nil {
+		fmt.Fprintf(&e.out, "if !%s(%s) { var zero %s; return zero,false }\n", e.validator(union), valueName(id), e.host.TypeName(sigOutput(e)))
+	}
+	e.captures[pattern.Name] = capture{id, resultType}
+	return e.answerValue(x.Arms[0].Result, expected, answered)
 }
 
 func (e *emitter) emitQueryCall(name string, sig *types.Signature, arguments []string, resultType types.Type) matchir.ValueID {

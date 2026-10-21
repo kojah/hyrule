@@ -268,7 +268,7 @@ func TestBehavior(t *testing.T){
 }
 
 func TestDoExpressionElseRequiresBooleanPattern(t *testing.T) {
-	for _, pattern := range []string{"Proven reason:$why", "_", "$answer", "0", "(or true false)"} {
+	for _, pattern := range []string{"Proven reason:$why", "_", "0", "(or true false)"} {
 		t.Run(pattern, func(t *testing.T) {
 			_, err := hyrule.Format("input.rules", []byte(`rule Main: $input => do {
  `+pattern+` <- query Ask $input else outputs 0;
