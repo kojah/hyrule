@@ -41,7 +41,8 @@ the shared working tree were excluded.
 | Map insertion | 117.50 | 34.39 | 3.42× | 0 |
 
 The small `testdata/decisionbench` slice-state fixture retains the actual legacy
-generator's output in `legacy_test.go`; regenerate only the graph version. Its
+generator's output in `legacy_test.go.txt`. `make generate-go` copies it to the
+ignored `legacy_test.go` and regenerates the graph version. Its
 counter is observational benchmark instrumentation and never affects decisions.
 It checks both versions on 243 inputs before benchmarking.
 
@@ -66,6 +67,7 @@ is fixed. Repeat on representative full workloads before making that claim.
 Run from the repository root, through `agent-test` on Xenia:
 
 ```sh
+make generate-go
 go test -p=1 -parallel=4 ./tools/hyrule/... ./tools/hyrule/testdata/decisionbench
 go test -p=1 -parallel=4 -run '^$' -bench BenchmarkDecisions -benchtime=200ms -count=3 ./tools/hyrule/testdata/decisionbench
 go test -p=1 -parallel=4 -run '^$' -bench 'Benchmark(Header|Map)RulePlans' -benchtime=200ms -count=3 ./internal/lower/memory/sliceheader ./internal/lower/mapstate

@@ -290,8 +290,11 @@ Rule comments and output bytes contain no timestamps or machine-specific paths.
 `make hyrule-check`, `make hyrule-generate`, and `make hyrule-generated-check`
 use the repository's resource-bounded launcher. `make generate` runs Hyrule before
 API references and diagrams. `make generated-check` includes its freshness check,
-so the existing architecture workflow checks committed generated code. Normal
-builds compile committed code without invoking the generator.
+after CI prepares local outputs with `make generate-go`. Generated Go and
+ownership manifests are ignored build artifacts. `make build` and canonical
+validation targets regenerate them; run `make generate-go` before raw Go commands
+in a fresh checkout. Hyrule generation also prepares the standalone example and
+benchmark configurations.
 
 The public library surface is `Load`, `Config.Compile`, `Config.Publish`, and
 `Format`. The CLI is a small adapter. Syntax and Go emission are private packages.

@@ -1,9 +1,0 @@
-{
-  "version": 1,
-  "targets": {
-    "append_plan": {
-      "path": "hyrule_plan_gen.go",
-      "sha256": "de8984176e4bb1e3462df5a22e79b1e248664f03daa6b146e1a4f65d5fd812ef"
-    }
-  }
-}

@@ -1,9 +1,0 @@
-{
-  "version": 1,
-  "targets": {
-    "transitions": {
-      "path": "transitions_gen.go",
-      "sha256": "2af0477351d90b427cb7133b881c9e0d854283b873195d3a36b46716c79a73e0"
-    }
-  }
-}
