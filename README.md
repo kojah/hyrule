@@ -2,9 +2,11 @@
 
 Hyrule compiles ordered structural rules into ordinary typed Go calls. It lives
 under `tools/hyrule` and has no Lockdoc analyzer dependencies. Generated code
-has no Hyrule runtime dependency. This first milestone is self-contained: the
-pipeline example demonstrates both lifting and lowering; production analyzer
-integration belongs to the consuming session.
+has no Hyrule runtime dependency. The pipeline example demonstrates both lifting and lowering. Production map
+operation recognition lives in `internal/lower/memory/rules`: generated
+`MapAt`, `MapPayload`, `MapPresence` and `MapIteration` preserve the original SSA
+observation. Match hooks expose structure and static types; map state, identity,
+temporal interpretation and execution selection remain with their consumers.
 
 ```sh
 go run ./tools/hyrule/cmd/hyrule check
