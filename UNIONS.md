@@ -117,3 +117,22 @@ backend.
 The example has its own configuration. From `tools/hyrule`, compile/generate it
 with `go run ./cmd/hyrule generate --config examples/unions/hyrule.yaml` (under
 `agent-test` on Xenia). This does not alter the repository's root target list.
+
+## Empty variant shorthand
+
+A variant without payload fields may omit its empty braces:
+
+```text
+union Outcome = Outcome tag Kind {
+  Success;
+  Failure = FailureKind;
+  Unknown { reason; };
+};
+```
+
+`Success;` means `Success = Success {};`, and `Failure = FailureKind;`
+means `Failure = FailureKind {};`. The terminating semicolon remains required.
+Braces are still required around the union and around nonempty field lists.
+Explicit empty braces remain valid, and formatting preserves either spelling.
+Tag identity, active fields, runtime validation and exhaustive matching are
+unchanged.

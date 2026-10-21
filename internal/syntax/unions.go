@@ -22,11 +22,14 @@ func (p *parser) unionDeclaration(position Position, comments []string) *Union {
 			p.next()
 			variant.GoTag = p.identifier()
 		}
-		p.expect("{")
-		for p.text != "}" && p.token != scanner.EOF && p.failure == nil {
-			variant.Fields = append(variant.Fields, p.storageField())
+		variant.OmitFields = p.text == ";"
+		if !variant.OmitFields {
+			p.expect("{")
+			for p.text != "}" && p.token != scanner.EOF && p.failure == nil {
+				variant.Fields = append(variant.Fields, p.storageField())
+			}
+			p.expect("}")
 		}
-		p.expect("}")
 		p.expect(";")
 		union.Variants = append(union.Variants, variant)
 	}
@@ -48,6 +51,10 @@ func formatUnion(union *Union) string {
 		fmt.Fprintf(&output, "  %s", variant.Name)
 		if !variant.Implicit {
 			fmt.Fprintf(&output, " = %s", variant.GoTag)
+		}
+		if variant.OmitFields {
+			output.WriteString(";\n")
+			continue
 		}
 		output.WriteString(" {")
 		if len(variant.Fields) > 0 {

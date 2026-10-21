@@ -171,3 +171,50 @@ func runUnionFixture(t *testing.T, root, name string) {
 		t.Fatalf("union behavior: %v\n%s", err, output)
 	}
 }
+
+func TestEmptyVariantBracesOptional(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", unionHost)
+	schema := strings.Replace(unionSchema, "\n Empty = EmptyTag {};", "\n EmptyTag = EmptyTag {};", 1)
+	rules := `rule Number: Number value:$n => Number value:$n;
+ rule Empty: EmptyTag => EmptyTag;
+ rule Wrapped: Wrapped atom:$atom => Wrapped atom:$atom;`
+	write(t, root, "input.rules", schema+rules)
+	_, expected := compile(t, root)
+	shorthand := strings.ReplaceAll(schema, " = EmptyTag {};", " = EmptyTag;")
+	shorthand = strings.Replace(shorthand, "EmptyTag = EmptyTag;", "EmptyTag;", 1)
+	write(t, root, "input.rules", shorthand+rules)
+	_, actual := compile(t, root)
+	if string(actual[0].Data) != string(expected[0].Data) {
+		t.Fatal("omitting empty variant braces changed generated Go")
+	}
+	for _, input := range []string{schema + rules, shorthand + rules} {
+		formatted, err := hyrule.Format("union.rules", []byte(input))
+		if err != nil {
+			t.Fatal(err)
+		}
+		again, err := hyrule.Format("union.rules", formatted)
+		if err != nil || string(again) != string(formatted) {
+			t.Fatalf("format not idempotent: %v", err)
+		}
+		want := "EmptyTag = EmptyTag {};"
+		if input == shorthand+rules {
+			want = "  EmptyTag;"
+		}
+		if !strings.Contains(string(formatted), want) {
+			t.Fatalf("formatter changed variant spelling:\n%s", formatted)
+		}
+		if !strings.Contains(string(formatted), "Number = NumberTag {") {
+			t.Fatal("formatter removed nonempty field braces")
+		}
+	}
+	for _, input := range []string{
+		"union Value = Value tag Kind { EmptyTag };",
+		"union Value = Value tag Kind { EmptyTag Wrapped {}; };",
+		"union Value = Value tag Kind { Number = NumberTag value: Number; };",
+	} {
+		if _, err := hyrule.Format("union.rules", []byte(input)); err == nil {
+			t.Fatalf("accepted malformed declaration %q", input)
+		}
+	}
+}

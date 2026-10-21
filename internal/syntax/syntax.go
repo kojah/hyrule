@@ -126,6 +126,7 @@ type Variant struct {
 	Position
 	Name, GoTag string
 	Implicit    bool // Preserve an omitted same-name tag alias when formatting.
+	OmitFields  bool // Preserve an omitted empty field block when formatting.
 	Fields      []UnionField
 }
 
