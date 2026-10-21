@@ -216,7 +216,8 @@ still apply: the compiler preserves ordered guard fallthrough and does not hoist
 partial guards before their required evidence.
 
 Builders construct complete results and may allocate fresh objects. Their
-results are never cached or shared; replacement builders stay on the winning
+callbacks must likewise leave inputs, host state and externally observable state
+unchanged. Results are never cached or shared; replacement builders stay on the winning
 rule's execution path. The caller applies returned effects after matching.
 Host code owns memory identity, soundness, unknown-value policy, lifecycle,
 control flow, budgets and scheduling.
@@ -278,3 +279,114 @@ The public library surface is `Load`, `Config.Compile`, `Config.Publish`, and
 To extract Hyrule later, move this directory into its own module, change internal
 import prefixes, and retain the public contract tests. The only external library
 dependencies are YAML configuration decoding and Go package loading.
+
+## Local semantic plans
+
+One invocation computes a result from an immutable snapshot. The host decides
+when to invoke it and applies the returned plan. Mutable storage, graph traversal,
+worklists, fixed points, I/O and concurrency stay in the host. Pure host functions
+remain appropriate for domain operations; unrestricted
+loops and recursion are not part of the rule language.
+
+Typed constants bind local Go constants directly, without builder callbacks:
+
+```text
+const Reference = Reference;
+const ValueCopy = ValueCopy;
+const NilZero = NilZero;
+record Plan = Plan {
+  kind: Kind;
+  copy: Copy;
+  zero: Zero;
+};
+```
+
+A construction can then use `(Plan kind:Reference copy:ValueCopy zero:NilZero)`.
+Bare names resolve only through declared constant bindings; variables, functions
+and host methods cannot be bound as constants. Named enum types retain their Go
+assignment and comparison rules. Literal range and assignment checks still run
+before generated output is published.
+
+Records bind a local, non-generic Go struct and explicitly name every direct
+nonblank storage field. Duplicate fields, omitted storage fields, inaccessible
+fields and duplicate record/union storage bindings are errors. Patterns use the
+same named and positional field contracts as union constructors; omitted named
+fields are wildcards. Construction requires every declared field exactly once.
+No pointer dereference or graph traversal is implied by record destructuring.
+Nested declared value unions remain checked closed domains, including through
+records and whole-input fallbacks.
+
+Comparisons can appear as guards, with `when` or the existing `&&` introducer:
+
+```text
+rule Bounded:
+  (Input index:$index length:$length)
+  when $index >= 0
+  && $index < $length
+  => (Located offset:$index);
+```
+
+Operands are captures, literals or declared constants. Supported relations are
+`==`, `!=`, `<`, `<=`, `>` and `>=`. Ordered relations require compatible ordered
+scalar types. Equality refuses unsafe interface-containing comparisons. Guards
+retain their order and fall through on failure; comparison nodes participate in
+pure-prefix sharing. Native Boolean disjunction is not implemented yet.
+
+Immutable local bindings and integer arithmetic can express derived values:
+
+```text
+rule Fits:
+  $request:(Request length:$length capacity:$capacity count:$count)
+  let $end = (add $length $count)
+  && $end >= $length
+  && $end <= $capacity
+  => (update $request length:$end);
+```
+
+`add`, `sub`, `mul`, `div` and `rem` take two positional integer operands.
+Operations use ordinary Go integer semantics, including overflow wraparound.
+No automatic overflow checks or overflow fallthrough branches are generated.
+Division and remainder retain Go's zero-divisor behavior; rules must establish
+valid divisors when their inputs may be zero. Container bounds and valid-state
+conditions remain explicit domain guards, independent of arithmetic semantics.
+
+A `let $name = expression` binding is immutable, inferred from its expression,
+and visible only in later clauses and the result of that alternative. Names
+cannot shadow captures or earlier locals. Bind domain function results before
+using them as arithmetic operands. Local expressions may construct records,
+updates and nonempty lists; an empty list or untyped nil needs a typed context.
+Local construction occurs where the binding is written, so later guard failure
+can discard a freshly allocated local. Builders still must not mutate host or
+input state. Unrestricted loops and recursive evaluation are unsupported.
+
+Explicit record updates copy a captured record before changing named fields:
+
+```text
+=> (update $request outcome:Located offset:$physical)
+```
+
+The base must have a declared record schema. Unmentioned fields are preserved;
+duplicate or unknown updates are errors. Updates evaluate in written order and
+never mutate the matched input. This is a value copy, so preserved references
+continue to point to the same objects. Union updates require an explicit
+constructor instead of a record update.
+
+Lists construct ordered effect bundles in a known slice context:
+
+```text
+=> [(Observe domain:Contents), (Observe domain:Iterator), (Change domain:Iterator)]
+```
+
+The context comes from the generated result, a record field or a builder
+parameter. Elements are evaluated once in written order and checked against the
+element type; declared value schemas are validated before publication. `[]`
+constructs a non-nil empty slice. List matching and dynamic collection
+transformations are not implemented. List size is statically bounded by the
+rule source; host helpers must retain explicit bounds for dynamic collections.
+
+The neutral matching IR retains typed constant identities, record schemas and
+extractions, comparison operators, ordered list construction and explicit
+preserved-base updates. Go names, selectors, concrete types and syntax remain in
+the Go adapter. See [the local append-plan example](examples/localplans/append.rules)
+for nested updates that preserve backing and source provenance while producing a
+copy-effect list. Its checked sum remains a pure Go hook.

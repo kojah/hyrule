@@ -35,6 +35,25 @@ func (e *emitter) constructorSignature(variant *boundVariant) *types.Signature {
 }
 
 func (e *emitter) construction(rule *syntax.Rule, expression *syntax.Expr) (*matchir.Construction, error) {
+	if expression.Kind == syntax.Update {
+		return e.updateConstruction(rule, expression)
+	}
+	if expression.Kind == syntax.List {
+		collection, known := e.host.Signature.Results().At(0).Type().Underlying().(*types.Slice)
+		if !known {
+			return nil, e.fail(expression, "list construction requires a slice result type")
+		}
+		list := &matchir.ListConstruction{Type: e.tables.typeID(e.host.Signature.Results().At(0).Type()), Element: e.tables.typeID(collection.Elem())}
+		for _, item := range expression.Args {
+			list.Items = append(list.Items, e.expressionID(rule, item))
+		}
+		return &matchir.Construction{List: list}, nil
+	}
+	if expression.Kind == syntax.Call {
+		if record := e.recordNames[expression.Name]; record != nil {
+			return e.recordConstruction(rule, expression, record)
+		}
+	}
 	variant := e.constructors[expression.Name]
 	if expression.Kind != syntax.Call || variant == nil {
 		return nil, nil
@@ -52,6 +71,15 @@ func (e *emitter) construction(rule *syntax.Rule, expression *syntax.Expr) (*mat
 }
 
 func (e *emitter) constructionValue(construction *matchir.Construction) (string, error) {
+	if construction.Update != nil {
+		return e.updateConstructionValue(construction.Update)
+	}
+	if construction.List != nil {
+		return e.listConstructionValue(construction.List)
+	}
+	if construction.Record != nil {
+		return e.recordConstructionValue(construction)
+	}
 	union := e.unions[construction.Union.ID]
 	variant := union.variants[construction.Variant]
 	arguments := make([]string, len(variant.fields))

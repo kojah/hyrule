@@ -37,6 +37,10 @@ const (
 	Alternation
 	Effects
 	Query
+	Symbol
+	Comparison
+	List
+	Update
 )
 
 // Expr is a pattern or construction expression. Bind names an entire matched
@@ -61,14 +65,21 @@ type Binding struct {
 	Comments []string
 }
 
-// Rule is one ordered match, ordered short-circuit guards and replacement.
+// Rule is one match, ordered immutable bindings/guards and replacement.
 type Rule struct {
 	Position
 	Name     string
 	Match    *Expr
-	Guards   []*Expr
+	Clauses  []Clause
 	Build    *Expr
 	Comments []string
+}
+
+// Clause preserves evaluation order. A nonempty Name declares an immutable
+// local; an empty Name requires Value to establish a true Boolean guard.
+type Clause struct {
+	Name  string
+	Value *Expr
 }
 
 // Pattern declares a reusable match with explicit, hygienic capture parameters.
@@ -85,6 +96,7 @@ type Item struct {
 	Binding *Binding
 	Pattern *Pattern
 	Union   *Union
+	Record  *Record
 	Rule    *Rule
 }
 
@@ -122,4 +134,13 @@ type UnionField struct {
 type DecisionArm struct {
 	Pattern *Expr
 	Result  *Expr
+}
+
+// Record describes complete direct-field storage without a discriminator.
+// Construction supplies every declared field; patterns may omit named fields.
+type Record struct {
+	Position
+	Name, GoType string
+	Fields       []UnionField
+	Comments     []string
 }

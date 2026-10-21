@@ -91,7 +91,7 @@ func (cursor *Cursor) predicate(node *Node) *Node {
 	cursor.check()
 	if previous := cursor.previous(); previous != nil && previous.node.Kind == node.Kind {
 		old := previous.node
-		if old.Left == node.Left && old.Right == node.Right && old.Expression == node.Expression {
+		if old.Left == node.Left && old.Right == node.Right && old.Expression == node.Expression && old.Comparison == node.Comparison {
 			cursor.branch = &previous.children
 			return old
 		}

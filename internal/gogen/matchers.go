@@ -22,7 +22,7 @@ func (e *emitter) matcher(x *syntax.Expr, input types.Type) (string, *types.Sign
 	}
 	indices := make([]int, len(x.Args))
 	named := len(x.Args) > 0 && x.Args[0].Field != ""
-	if !named && len(x.Args) != n-1 && (e.constructors[x.Name] == nil || len(x.Args) != 0) {
+	if !named && len(x.Args) != n-1 && (e.constructors[x.Name] == nil && e.recordNames[x.Name] == nil || len(x.Args) != 0) {
 		return "", nil, nil, e.fail(x, "matcher requires one result per pattern argument followed by bool")
 	}
 	seen := map[string]struct{}{}
@@ -63,6 +63,8 @@ func (e *emitter) checkPattern(x *syntax.Expr, input types.Type) error {
 	switch x.Kind {
 	case syntax.Variable:
 		return e.bind(x, x.Name, 0, input)
+	case syntax.Symbol:
+		return e.checkConstant(x, input)
 	case syntax.Call:
 		_, sig, indices, err := e.matcher(x, input)
 		if err != nil {
@@ -116,6 +118,9 @@ func sameCaptures(left, right map[string]capture) bool {
 }
 
 func (e *emitter) matchSignature(x *syntax.Expr) (string, *types.Signature, error) {
+	if record := e.recordNames[x.Name]; record != nil {
+		return x.Name, record.signature, nil
+	}
 	if constructor := e.constructors[x.Name]; constructor != nil {
 		return x.Name, constructor.signature, nil
 	}

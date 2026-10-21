@@ -59,6 +59,12 @@ func (e *emitter) pattern(x *syntax.Expr, value matchir.ValueID, t types.Type) e
 	case syntax.Literal:
 		e.cursor.Test(matchir.Value(value), matchir.Literal(e.tables.literalID(x.Name)))
 		return nil
+	case syntax.Symbol:
+		if err := e.checkConstant(x, t); err != nil {
+			return err
+		}
+		e.cursor.Test(matchir.Value(value), matchir.Constant(e.constants[x.Name].schema.ID))
+		return nil
 	case syntax.Call:
 		name, sig, indices, err := e.matcher(x, t)
 		if err != nil {
@@ -69,7 +75,9 @@ func (e *emitter) pattern(x *syntax.Expr, value matchir.ValueID, t types.Type) e
 			outputTypes[index] = e.tables.typeID(sig.Results().At(index).Type())
 		}
 		var outputs []matchir.ValueID
-		if constructor := e.constructors[x.Name]; constructor != nil {
+		if record := e.recordNames[x.Name]; record != nil {
+			outputs = e.cursor.Record(record.schema, value)
+		} else if constructor := e.constructors[x.Name]; constructor != nil {
 			outputs = e.cursor.Variant(constructor.union.schema, constructor.id, value)
 		} else {
 			outputs = e.cursor.Match(e.tables.hookID(name), value, outputTypes)

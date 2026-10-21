@@ -19,6 +19,12 @@ func (e *Program) validateDefinition(name string, checked, active map[string]str
 	if name == "or" {
 		return e.fail(definition.Body, "or is reserved for alternatives")
 	}
+	if name == "update" {
+		return e.fail(definition.Body, "update is reserved for record updates")
+	}
+	if _, intrinsic := Arithmetic(name); intrinsic {
+		return e.fail(definition.Body, "arithmetic operation is reserved: "+name)
+	}
 	for _, binding := range e.Bindings {
 		if binding.Name == name || binding.GoName == name {
 			return e.fail(definition.Body, "pattern collides with Go hook "+name)
@@ -67,8 +73,13 @@ func (e *Program) validatePatternBody(x *syntax.Expr, parameters, used map[strin
 			if err := visit(x.Name); err != nil {
 				return err
 			}
-		} else if binding := e.Bindings[x.Name]; e.Constructors[x.Name] == nil && (binding == nil || binding.Kind != "match") {
+		} else if binding := e.Bindings[x.Name]; e.RecordNames[x.Name] == nil && e.Constructors[x.Name] == nil && (binding == nil || binding.Kind != "match") {
 			return e.fail(x, "unknown match pattern "+x.Name)
+		}
+	}
+	if x.Kind == syntax.Symbol {
+		if binding := e.Bindings[x.Name]; binding == nil || binding.Kind != "const" {
+			return e.fail(x, "unknown constant "+x.Name)
 		}
 	}
 	for _, child := range x.Args {

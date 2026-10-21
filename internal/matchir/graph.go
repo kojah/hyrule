@@ -30,6 +30,9 @@ const (
 	Build
 	Variant
 	Dispatch
+	Record
+	Compare
+	Evaluate
 )
 
 // OperandKind distinguishes established values from frontend-owned literals.
@@ -38,13 +41,15 @@ type OperandKind uint8
 const (
 	ValueOperand OperandKind = iota
 	LiteralOperand
+	ConstantOperand
 )
 
 // Operand is one side of an equality test. Only its selected identity applies.
 type Operand struct {
-	Kind    OperandKind
-	Value   ValueID
-	Literal LiteralID
+	Kind     OperandKind
+	Value    ValueID
+	Literal  LiteralID
+	Constant ConstantID
 }
 
 // Value refers to an established input or extraction.
@@ -52,6 +57,9 @@ func Value(identity ValueID) Operand { return Operand{Kind: ValueOperand, Value:
 
 // Literal refers to an interned literal.
 func Literal(identity LiteralID) Operand { return Operand{Kind: LiteralOperand, Literal: identity} }
+
+// Constant refers to a typed immutable frontend binding.
+func Constant(identity ConstantID) Operand { return Operand{Kind: ConstantOperand, Constant: identity} }
 
 // Origin identifies the first source occurrence of a shared decision. This is
 // diagnostic provenance, never a runtime expression or a sharing identity.
@@ -81,6 +89,9 @@ type Node struct {
 	Variant        VariantID
 	Cases          []VariantCase
 	Construction   *Construction
+	Record         *RecordSchema
+	Comparison     Comparison
+	Evaluation     *Evaluation
 }
 
 type branch struct{ attempts []*attempt }

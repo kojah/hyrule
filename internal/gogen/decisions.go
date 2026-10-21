@@ -14,6 +14,7 @@ type decisionTables struct {
 	hooks       []string
 	literals    []string
 	expressions []decisionExpression
+	constants   []*boundConstant
 }
 type decisionExpression struct {
 	rule       *syntax.Rule
@@ -64,17 +65,39 @@ func (e *emitter) orderedDecisions(rules []*syntax.Rule, input types.Type) (*mat
 		if err := e.pattern(rule.Match, e.graph.Input(), input); err != nil {
 			return nil, err
 		}
-		for _, condition := range rule.Guards {
+		for _, clause := range rule.Clauses {
+			if clause.Name != "" {
+				if err := e.local(rule, clause); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			condition, err := e.prepareValue(rule, clause.Value, types.Typ[types.Bool])
+			if err != nil {
+				return nil, err
+			}
+			if condition.Kind == syntax.Comparison {
+				if err := e.compare(condition); err != nil {
+					return nil, err
+				}
+				continue
+			}
 			if _, err := e.value(condition, "guard"); err != nil {
 				return nil, err
 			}
 			e.cursor.Guard(e.expressionID(rule, condition))
 		}
-		if _, err := e.resultValue(rule.Build, sigOutput(e)); err != nil {
+		prepared := *rule
+		var err error
+		prepared.Build, err = e.prepareValue(rule, rule.Build, e.host.Signature.Results().At(0).Type())
+		if err != nil {
 			return nil, err
 		}
-		node := e.cursor.Build(e.expressionID(rule, rule.Build))
-		construction, err := e.construction(rule, rule.Build)
+		if _, err := e.resultValue(prepared.Build, sigOutput(e)); err != nil {
+			return nil, err
+		}
+		node := e.cursor.Build(e.expressionID(&prepared, prepared.Build))
+		construction, err := e.construction(&prepared, prepared.Build)
 		if err != nil {
 			return nil, err
 		}

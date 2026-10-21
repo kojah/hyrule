@@ -32,6 +32,9 @@ type emitter struct {
 	unions       []*boundUnion
 	constructors map[string]*boundVariant
 	established  *boundVariant
+	constants    map[string]*boundConstant
+	records      []*boundRecord
+	recordNames  map[string]*boundRecord
 }
 
 // Generate validates structural contracts and emits a single ordered dispatcher.
@@ -47,21 +50,28 @@ func Generate(h Host, files []*syntax.File) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	e := emitter{host: &h, bindings: program.Bindings}
+	e := emitter{host: &h, bindings: program.Bindings, constants: map[string]*boundConstant{}}
 	if err := e.bindUnions(program.Unions); err != nil {
+		return nil, err
+	}
+	if err := e.bindRecords(program.Records); err != nil {
 		return nil, err
 	}
 	for _, file := range files {
 		for _, item := range file.Items {
 			if binding := item.Binding; binding != nil {
-				if _, _, err := e.host.hook(binding.GoName); err != nil {
+				if binding.Kind == "const" {
+					if err := e.bindConstant(binding); err != nil {
+						return nil, err
+					}
+				} else if _, _, err := e.host.hook(binding.GoName); err != nil {
 					return nil, &syntax.Diagnostic{Position: binding.Position, Message: err.Error()}
 				}
 			}
 		}
 	}
 	rules, err := program.Expand(func(rule *syntax.Rule) error {
-		checker := emitter{host: e.host, bindings: e.bindings, constructors: e.constructors, captures: map[string]capture{}, rule: rule.Name}
+		checker := emitter{host: e.host, bindings: e.bindings, constructors: e.constructors, recordNames: e.recordNames, constants: e.constants, captures: map[string]capture{}, rule: rule.Name}
 		return checker.checkPattern(rule.Match, sig.Params().At(0).Type())
 	})
 	if err != nil {
@@ -82,6 +92,11 @@ func Generate(h Host, files []*syntax.File) ([]byte, error) {
 	}
 	fmt.Fprintf(&e.out, "// %s applies rules in source order; false means no rule matched.\nfunc %s(%s) (%s, bool) {\n",
 		h.Function, h.Function, strings.Join(params, ", "), output)
+	if record := e.recordFor(sig.Params().At(0).Type()); record != nil {
+		if validation := e.validation(record.typ, "harg0"); validation != "" {
+			fmt.Fprintf(&e.out, "if !%s { var zero %s; return zero,false }\n", validation, output)
+		}
+	}
 	if err := e.emitDecisions(graph, nil); err != nil {
 		return nil, err
 	}
@@ -127,10 +142,24 @@ func (e *emitter) binding(x *syntax.Expr, kind string) (string, *types.Signature
 	return name, sig, nil
 }
 func (e *emitter) value(x *syntax.Expr, kind string) (string, error) {
+	return e.valueExpected(x, kind, nil)
+}
+
+func (e *emitter) valueExpected(x *syntax.Expr, kind string, expected types.Type) (string, error) {
 	if x.Bind != "" {
 		return "", e.fail(x, "captures may only be bound in patterns")
 	}
 	switch x.Kind {
+	case syntax.List:
+		if kind != "build" {
+			return "", e.fail(x, "lists are construction expressions")
+		}
+		return e.listValue(x, expected)
+	case syntax.Update:
+		if kind != "build" {
+			return "", e.fail(x, "updates are construction expressions")
+		}
+		return e.updateValue(x)
 	case syntax.Variable:
 		c, ok := e.captures[x.Name]
 		if !ok {
@@ -139,7 +168,19 @@ func (e *emitter) value(x *syntax.Expr, kind string) (string, error) {
 		return valueName(c.id), nil
 	case syntax.Literal:
 		return x.Name, nil
+	case syntax.Symbol:
+		value, err := e.constant(x)
+		if err != nil {
+			return "", err
+		}
+		return value.object.Name(), nil
 	case syntax.Call:
+		if record := e.recordNames[x.Name]; record != nil {
+			if kind != "build" {
+				return "", e.fail(x, "record constructors are not guard expressions")
+			}
+			return e.recordValue(x, record)
+		}
 		if constructor := e.constructors[x.Name]; constructor != nil {
 			if kind != "build" {
 				return "", e.fail(x, "union constructors are not guard expressions")

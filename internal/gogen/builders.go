@@ -79,8 +79,11 @@ func (e *emitter) builderPositions(x *syntax.Expr, signature *types.Signature, k
 }
 
 // Positional parents must sequence earlier siblings before named children or
-// effect lists emit temporaries. Other positional trees retain their output.
+// structural values emit temporaries. Other positional trees retain their output.
 func requiresWrittenOrder(expression *syntax.Expr) bool {
+	if expression.Kind == syntax.List || expression.Kind == syntax.Update {
+		return true
+	}
 	for _, argument := range expression.Args {
 		if argument.Field != "" || argument.Kind == syntax.Effects || requiresWrittenOrder(argument) {
 			return true

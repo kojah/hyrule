@@ -1,0 +1,36 @@
+record Request = Request {
+  source: Source;
+  header: Header;
+  count: Count;
+  outcome: Outcome;
+  copies: Copies;
+};
+record Header = Header {
+  backing: Backing;
+  length: Length;
+  capacity: Capacity;
+};
+record Copy = Copy {
+  offset: Offset;
+  count: Count;
+};
+const Reuse = Reuse;
+const Refused = Refused;
+
+rule Fits:
+  $request:(Request header:$header:(Header length:$length capacity:$capacity) count:$count)
+  && $length >= 0
+  && $count >= 0
+  let $end = (add $length $count)
+  && $end >= $length
+  && $end <= $capacity
+  => (update
+       $request
+       header:(update $header length:$end)
+       outcome:Reuse
+       copies:[(Copy offset:$length count:$count)]
+     );
+
+rule Decline:
+  $request
+  => (update $request outcome:Refused copies:[]);

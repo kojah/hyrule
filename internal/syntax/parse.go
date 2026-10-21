@@ -41,7 +41,7 @@ func Parse(name string, input io.Reader) (*File, error) {
 		pos, kind := p.position, p.text
 		p.next()
 		switch kind {
-		case "match", "build", "guard", "query":
+		case "match", "build", "guard", "query", "const":
 			binding := &Binding{Position: pos, Kind: kind, Name: p.identifier(), Comments: comments}
 			p.expect("=")
 			binding.GoName = p.identifier()
@@ -54,6 +54,8 @@ func Parse(name string, input io.Reader) (*File, error) {
 			union := p.unionDeclaration(pos, comments)
 			union.Exhaustive = kind == "exhaustive"
 			file.Items = append(file.Items, Item{Union: union})
+		case "record":
+			file.Items = append(file.Items, Item{Record: p.recordDeclaration(pos, comments)})
 		case "pattern":
 			pattern := p.patternDeclaration(pos, comments)
 			file.Items = append(file.Items, Item{Pattern: pattern})
@@ -62,10 +64,21 @@ func Parse(name string, input io.Reader) (*File, error) {
 			p.rule = rule.Name
 			p.expect(":")
 			rule.Match = p.expression(0)
-			for p.text == "&" {
-				p.expect("&")
-				p.expect("&")
-				rule.Guards = append(rule.Guards, p.expression(0))
+			for p.text == "&" || p.text == "when" || p.text == "let" {
+				if p.text == "let" {
+					p.next()
+					p.expect("$")
+					name := p.identifier()
+					p.expect("=")
+					rule.Clauses = append(rule.Clauses, Clause{Name: name, Value: p.guardExpression()})
+					continue
+				} else if p.text == "when" {
+					p.next()
+				} else {
+					p.expect("&")
+					p.expect("&")
+				}
+				rule.Clauses = append(rule.Clauses, Clause{Value: p.guardExpression()})
 			}
 			p.expect("=")
 			p.expect(">")
@@ -77,7 +90,7 @@ func Parse(name string, input io.Reader) (*File, error) {
 			file.Items = append(file.Items, Item{Rule: rule})
 			p.rule = ""
 		default:
-			p.fail(pos, "expected match, build, guard, query, union, pattern or rule declaration")
+			p.fail(pos, "expected match, build, guard, query, const, record, union, pattern or rule declaration")
 		}
 	}
 	file.Trailing = p.comments
@@ -147,6 +160,8 @@ func (p *parser) expression(depth int) *Expr {
 		return p.effects(depth)
 	case p.text == "query":
 		return p.query(depth)
+	case p.text == "[":
+		return p.listExpression(depth)
 	case p.text == "(":
 		p.next()
 		result.Kind, result.Name = Call, p.identifier()
@@ -154,6 +169,9 @@ func (p *parser) expression(depth int) *Expr {
 			result.Args = append(result.Args, p.argument(depth+1))
 		}
 		p.expect(")")
+		if result.Name == "update" {
+			result.Kind = Update
+		}
 		if result.Name == "or" {
 			result.Kind = Alternation
 			if len(result.Args) < 2 {
@@ -191,6 +209,8 @@ func (p *parser) expression(depth int) *Expr {
 		}
 		result.Kind, result.Name = Literal, "-"+p.text
 		p.next()
+	case p.token == scanner.Ident:
+		result.Kind, result.Name = Symbol, p.identifier()
 	default:
 		p.fail(p.position, "expected operation, $capture, _, or literal")
 	}
@@ -225,8 +245,7 @@ func (p *parser) argument(depth int) *Expr {
 	if name == "true" || name == "false" || name == "nil" {
 		return &Expr{Position: position, Kind: Literal, Name: name}
 	}
-	p.fail(position, "expected field name followed by colon")
-	return &Expr{Position: position}
+	return &Expr{Position: position, Kind: Symbol, Name: name}
 }
 
 // Format canonicalizes valid rules without resolving host bindings. Comments
@@ -254,6 +273,11 @@ func Format(name string, input []byte) ([]byte, error) {
 			out.WriteString(formatUnion(item.Union))
 			continue
 		}
+		if item.Record != nil {
+			comments(item.Record.Comments)
+			out.WriteString(formatRecord(item.Record))
+			continue
+		}
 		if item.Pattern != nil {
 			pattern := item.Pattern
 			comments(pattern.Comments)
@@ -270,8 +294,12 @@ func Format(name string, input []byte) ([]byte, error) {
 		rule := item.Rule
 		comments(rule.Comments)
 		fmt.Fprintf(&out, "rule %s:\n  %s", rule.Name, renderLayout(rule.Match, 2))
-		for _, guard := range rule.Guards {
-			fmt.Fprintf(&out, "\n  && %s", renderLayout(guard, 5))
+		for _, clause := range rule.Clauses {
+			if clause.Name != "" {
+				fmt.Fprintf(&out, "\n  let $%s = %s", clause.Name, renderLayout(clause.Value, 9+len(clause.Name)))
+			} else {
+				fmt.Fprintf(&out, "\n  && %s", renderLayout(clause.Value, 5))
+			}
 		}
 		fmt.Fprintf(&out, "\n  => %s;\n", renderLayout(rule.Build, 5))
 	}
@@ -287,8 +315,16 @@ func render(expression *Expr) string {
 		return "_"
 	case Variable:
 		return "$" + expression.Name
-	case Literal:
+	case Literal, Symbol:
 		return expression.Name
+	case Comparison:
+		return render(expression.Args[0]) + " " + expression.Name + " " + render(expression.Args[1])
+	case List:
+		items := make([]string, len(expression.Args))
+		for index, item := range expression.Args {
+			items[index] = render(item)
+		}
+		return "[" + strings.Join(items, ", ") + "]"
 	default:
 		parts := []string{expression.Name}
 		for _, argument := range expression.Args {

@@ -50,6 +50,9 @@ type FieldExpression struct {
 // Construction is a complete tagged value, rather than an opaque hook call.
 type Construction struct {
 	Union   *UnionSchema
+	Record  *RecordSchema
+	List    *ListConstruction
+	Update  *RecordUpdate
 	Variant VariantID
 	Fields  []FieldExpression
 }

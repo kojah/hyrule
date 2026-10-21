@@ -12,6 +12,18 @@ func renderLayout(expression *Expr, indent int) string {
 	if indent+len(inline) <= 100 || len(expression.Args) == 0 {
 		return inline
 	}
+	if expression.Kind == Comparison {
+		return inline
+	}
+	if expression.Kind == List {
+		var out strings.Builder
+		out.WriteString("[")
+		for _, item := range expression.Args {
+			out.WriteString("\n" + strings.Repeat(" ", indent+2) + renderLayout(item, indent+2) + ",")
+		}
+		out.WriteString("\n" + strings.Repeat(" ", indent) + "]")
+		return out.String()
+	}
 	prefix := ""
 	if expression.Bind != "" {
 		prefix = "$" + expression.Bind + ":"

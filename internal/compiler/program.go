@@ -14,6 +14,8 @@ type Program struct {
 	Bindings     map[string]*syntax.Binding
 	Unions       []*syntax.Union
 	Constructors map[string]*syntax.Variant
+	Records      []*syntax.Record
+	RecordNames  map[string]*syntax.Record
 	patterns     map[string]*syntax.Pattern
 	rules        []*syntax.Rule
 	rule         string
@@ -29,12 +31,20 @@ func Collect(files []*syntax.File) (*Program, error) {
 				if b.Name == "or" {
 					return nil, &syntax.Diagnostic{Position: b.Position, Message: "or is reserved for alternatives"}
 				}
+				if b.Name == "update" {
+					return nil, &syntax.Diagnostic{Position: b.Position, Message: "update is reserved for record updates"}
+				}
+				if _, intrinsic := Arithmetic(b.Name); intrinsic {
+					return nil, &syntax.Diagnostic{Position: b.Position, Message: "arithmetic operation is reserved: " + b.Name}
+				}
 				if program.Bindings[b.Name] != nil {
 					return nil, &syntax.Diagnostic{Position: b.Position, Message: "duplicate binding " + b.Name}
 				}
 				program.Bindings[b.Name] = b
 			} else if union := item.Union; union != nil {
 				program.Unions = append(program.Unions, union)
+			} else if record := item.Record; record != nil {
+				program.Records = append(program.Records, record)
 			} else if pattern := item.Pattern; pattern != nil {
 				if program.patterns[pattern.Name] != nil {
 					return nil, &syntax.Diagnostic{Position: pattern.Position, Message: "duplicate pattern " + pattern.Name}
@@ -55,7 +65,21 @@ func Collect(files []*syntax.File) (*Program, error) {
 	if err := program.collectUnions(); err != nil {
 		return nil, err
 	}
+	if err := program.collectRecords(); err != nil {
+		return nil, err
+	}
 	return program, nil
+}
+
+func (program *Program) collectRecords() error {
+	program.RecordNames = map[string]*syntax.Record{}
+	for _, record := range program.Records {
+		if reservedOperation(record.Name) || program.RecordNames[record.Name] != nil || program.Constructors[record.Name] != nil || program.Bindings[record.Name] != nil || program.patterns[record.Name] != nil {
+			return &syntax.Diagnostic{Position: record.Position, Message: "duplicate or colliding record " + record.Name}
+		}
+		program.RecordNames[record.Name] = record
+	}
+	return nil
 }
 
 // Expand checks reusable definitions, then preserves the priority of every

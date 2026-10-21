@@ -13,7 +13,7 @@ func (program *Program) collectUnions() error {
 			return &syntax.Diagnostic{Position: union.Position, Message: "union requires at least one variant"}
 		}
 		for _, variant := range union.Variants {
-			if variant.Name == "or" || program.Constructors[variant.Name] != nil || program.Bindings[variant.Name] != nil || program.patterns[variant.Name] != nil {
+			if reservedOperation(variant.Name) || program.Constructors[variant.Name] != nil || program.Bindings[variant.Name] != nil || program.patterns[variant.Name] != nil {
 				return &syntax.Diagnostic{Position: variant.Position, Message: "duplicate or colliding constructor " + variant.Name}
 			}
 			program.Constructors[variant.Name] = variant

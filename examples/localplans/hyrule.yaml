@@ -1,0 +1,9 @@
+version: 1
+targets:
+  - name: append_plan
+    package: .
+    rules: [append.rules]
+    bindings: bindings.go
+    signature: Signature
+    function: Plan
+    out: hyrule_plan_gen.go

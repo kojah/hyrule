@@ -16,6 +16,9 @@ func (e *emitter) operand(operand matchir.Operand) string {
 	if operand.Kind == matchir.LiteralOperand {
 		return e.tables.literals[operand.Literal]
 	}
+	if operand.Kind == matchir.ConstantOperand {
+		return e.tables.constants[operand.Constant].object.Name()
+	}
 	return valueName(operand.Value)
 }
 func (e *emitter) decisionValue(node *matchir.Node, kind string) (string, error) {
@@ -54,8 +57,22 @@ func (e *emitter) emitDecisions(node, stop *matchir.Node) error {
 			if err := e.emitMatch(node); err != nil {
 				return err
 			}
+		case matchir.Record:
+			if err := e.emitRecord(node); err != nil {
+				return err
+			}
+		case matchir.Evaluate:
+			if err := e.emitEvaluation(node); err != nil {
+				return err
+			}
 		case matchir.Test:
 			fmt.Fprintf(&e.out, "if %s == %s {\n", e.operand(node.Left), e.operand(node.Right))
+			if err := e.emitDecisions(node.Next, node.Fallback); err != nil {
+				return err
+			}
+			e.out.WriteString("}\n")
+		case matchir.Compare:
+			fmt.Fprintf(&e.out, "if %s %s %s {\n", e.operand(node.Left), comparisonSpelling(node.Comparison), e.operand(node.Right))
 			if err := e.emitDecisions(node.Next, node.Fallback); err != nil {
 				return err
 			}
@@ -97,9 +114,9 @@ func (e *emitter) emitBuild(node, stop *matchir.Node) error {
 	if err != nil {
 		return err
 	}
-	if union := e.unionFor(e.host.Signature.Results().At(0).Type()); union != nil {
-		fmt.Fprintf(&e.out, "hresult := %s\nif !%s(hresult) { var zero %s; return zero,false }\nreturn hresult,true\n",
-			build, e.validator(union), e.host.typeName(union.typ))
+	if validation := e.validation(e.host.Signature.Results().At(0).Type(), "hresult"); validation != "" {
+		fmt.Fprintf(&e.out, "hresult := %s\nif !%s { var zero %s; return zero,false }\nreturn hresult,true\n",
+			build, validation, e.host.typeName(e.host.Signature.Results().At(0).Type()))
 	} else {
 		fmt.Fprintf(&e.out, "return %s, true\n", build)
 	}

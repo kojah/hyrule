@@ -55,7 +55,7 @@ func (e *emitter) checkCoverage(union *boundUnion, rules []*syntax.Rule) error {
 	}
 	covered := map[string]struct{}{}
 	for _, rule := range rules {
-		if len(rule.Guards) != 0 {
+		if len(rule.Clauses) != 0 {
 			continue
 		}
 		root := rootPattern(rule.Match)
