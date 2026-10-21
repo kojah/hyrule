@@ -205,7 +205,10 @@ func (e *emitter) valueExpected(x *syntax.Expr, kind string, expected types.Type
 	case syntax.Query:
 		return "", e.fail(x, "query is only allowed as a rule result or decision arm")
 	case syntax.Effects:
-		return "", e.fail(x, "effects requires a typed build context")
+		if kind != "build" || expected == nil {
+			return "", e.fail(x, "effects requires a typed build context")
+		}
+		return e.typedValue(x, expected)
 	case syntax.Alternation:
 		return "", e.fail(x, "or is only allowed in matcher patterns")
 	default:

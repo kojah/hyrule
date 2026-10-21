@@ -378,7 +378,8 @@ Lists construct ordered effect bundles in a known slice context:
 ```
 
 The context comes from the generated result, a record field or a builder
-parameter. Elements are evaluated once in written order and checked against the
+parameter. The `effects [...]` spelling also retains this context inside record
+construction and record updates. Elements are evaluated once in written order and checked against the
 element type; declared value schemas are validated before publication. `[]`
 constructs a non-nil empty slice. List matching and dynamic collection
 transformations are not implemented. List size is statically bounded by the
@@ -389,4 +390,5 @@ extractions, comparison operators, ordered list construction and explicit
 preserved-base updates. Go names, selectors, concrete types and syntax remain in
 the Go adapter. See [the local append-plan example](examples/localplans/append.rules)
 for nested updates that preserve backing and source provenance while producing a
-copy-effect list. Its checked sum remains a pure Go hook.
+copy-effect list. Its sum uses ordinary integer arithmetic; explicit guards admit
+only the geometry that the example can establish.

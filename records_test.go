@@ -93,3 +93,41 @@ func TestStructuralSyntaxFormatting(t *testing.T) {
 		t.Fatalf("format is not idempotent: %v\n%s", err, second)
 	}
 }
+
+// Effect lists inherit their slice type from both record fields and updates.
+// These are complete public results, with no test-only compiler access.
+func TestRecordEffectListsRetainTypedContext(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", `package fixture
+type Effects []int
+type Box struct { Count int; Effects Effects }
+type Signature func(Box)(Box,bool)
+`)
+	write(t, root, "input.rules", `
+record Box = Box { count: Count; effects: Effects; };
+rule Construct: (Box count:0) => (Box count:1 effects:effects [7,8]);
+rule Update: $box:(Box count:1) => (update $box effects:effects []);
+rule Preserve: $box => $box;
+`)
+	config, artifacts := compile(t, root)
+	if err := config.Publish(artifacts, false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "behavior_test.go", `package fixture
+import "testing"
+func TestEffectFields(t *testing.T) {
+ input:=Box{Effects:Effects{3}}
+ built,ok:=Rewrite(input)
+ if !ok || built.Count!=1 || len(built.Effects)!=2 || built.Effects[0]!=7 || built.Effects[1]!=8 {
+  t.Fatalf("constructed=%+v matched=%t",built,ok)
+ }
+ cleared,ok:=Rewrite(built)
+ if !ok || cleared.Count!=1 || cleared.Effects==nil || len(cleared.Effects)!=0 {
+  t.Fatalf("updated=%+v matched=%t",cleared,ok)
+ }
+ if len(input.Effects)!=1 || input.Effects[0]!=3 || len(built.Effects)!=2 {
+  t.Fatal("construction mutated an input")
+ }
+}`)
+	runUnionFixture(t, root, "TestEffectFields")
+}
