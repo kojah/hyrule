@@ -54,6 +54,8 @@ type Expr struct {
 	Field string
 	Args  []*Expr
 	Arms  []DecisionArm
+	// Unparenthesized marks an outer application or unresolved outer name.
+	Unparenthesized bool
 }
 
 // Binding declares a named matcher, builder, pure guard or ordered host query.

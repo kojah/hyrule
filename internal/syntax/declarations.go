@@ -42,7 +42,7 @@ func (p *parser) patternDeclaration(position Position, comments []string) *Patte
 	}
 	p.expect(")")
 	p.expect("=")
-	pattern.Body = p.expression(0)
+	pattern.Body = p.outerExpression(0)
 	pattern.Comments = append(pattern.Comments, p.comments...)
 	p.comments = nil
 	p.expect(";")

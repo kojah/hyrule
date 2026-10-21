@@ -37,7 +37,7 @@ func (p *parser) queryBody(position Position, depth int) *Expr {
 	p.expect("$")
 	result.Name = p.identifier()
 	p.expect("=")
-	result.Args = []*Expr{p.expression(depth + 1)}
+	result.Args = []*Expr{p.outerExpression(depth + 1)}
 	p.expect("decide")
 	p.expect("$")
 	if name := p.identifier(); name != result.Name {
@@ -45,10 +45,10 @@ func (p *parser) queryBody(position Position, depth int) *Expr {
 	}
 	p.expect("{")
 	for p.text != "}" && p.token != scanner.EOF && p.failure == nil {
-		pattern := p.expression(depth + 1)
+		pattern := p.outerExpression(depth + 1)
 		p.expect("=")
 		p.expect(">")
-		value := p.expression(depth + 1)
+		value := p.outerExpression(depth + 1)
 		p.expect(";")
 		result.Arms = append(result.Arms, DecisionArm{Pattern: pattern, Result: value})
 	}

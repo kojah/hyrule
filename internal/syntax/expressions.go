@@ -18,7 +18,7 @@ func (p *parser) listExpression(depth int) *Expr {
 // guardExpression preserves the existing hook-call form and adds one typed
 // comparison. Repeated guards retain the language's ordered short circuiting.
 func (p *parser) guardExpression() *Expr {
-	left := p.expression(0)
+	left := p.outerExpression(0)
 	operator := p.text
 	if operator != "<" && operator != ">" && operator != "!" && !(operator == "=" && p.scanner.Peek() == '=') {
 		return left

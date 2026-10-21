@@ -68,6 +68,7 @@ func Collect(files []*syntax.File) (*Program, error) {
 	if err := program.collectRecords(); err != nil {
 		return nil, err
 	}
+	program.resolveApplications()
 	return program, nil
 }
 

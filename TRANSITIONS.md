@@ -117,3 +117,11 @@ The existing input, token, nesting, OR-expansion, and generated-file limits appl
 Large decision trees should be split at meaningful host boundaries. Queries do
 not add traversal, fixed-point iteration, collect-all matching, or transactional
 state updates.
+
+## Optional outer parentheses
+
+Query calls and decision arms also accept the boundary-delimited application
+syntax described in [optional application parentheses](APPLICATIONS.md).
+For example, `query $proof = Exclusive $lock decide $proof { ... }` and
+`Proven => Acquire $lock;` retain the same ordering and exhaustive handling as
+their parenthesized forms. Nested applications still require parentheses.

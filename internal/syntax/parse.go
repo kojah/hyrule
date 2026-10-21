@@ -59,7 +59,7 @@ func Parse(name string, input io.Reader) (*File, error) {
 			rule := &Rule{Position: pos, Name: p.identifier(), Comments: comments}
 			p.rule = rule.Name
 			p.expect(":")
-			rule.Match = p.expression(0)
+			rule.Match = p.outerExpression(0)
 			for p.text == "&" || p.text == "when" || p.text == "let" {
 				if p.text == "let" {
 					p.next()
@@ -78,7 +78,7 @@ func Parse(name string, input io.Reader) (*File, error) {
 			}
 			p.expect("=")
 			p.expect(">")
-			rule.Build = p.expression(0)
+			rule.Build = p.outerExpression(0)
 			// Comments inside a rule are retained ahead of it when formatted.
 			rule.Comments = append(rule.Comments, p.comments...)
 			p.comments = nil
@@ -165,20 +165,7 @@ func (p *parser) expression(depth int) *Expr {
 			result.Args = append(result.Args, p.argument(depth+1))
 		}
 		p.expect(")")
-		if result.Name == "update" {
-			result.Kind = Update
-		}
-		if result.Name == "or" {
-			result.Kind = Alternation
-			if len(result.Args) < 2 {
-				p.fail(result.Position, "or requires at least two alternatives")
-			}
-			for _, arg := range result.Args {
-				if arg.Field != "" {
-					p.fail(arg.Position, "or alternatives cannot have field names")
-				}
-			}
-		}
+		p.applicationKind(result)
 	case p.text == "$":
 		p.next()
 		result.Kind, result.Name = Variable, p.identifier()
@@ -333,6 +320,9 @@ func render(expression *Expr) string {
 		prefix := ""
 		if expression.Bind != "" {
 			prefix = "$" + expression.Bind + ":"
+		}
+		if expression.Unparenthesized {
+			return prefix + strings.Join(parts, " ")
 		}
 		return prefix + "(" + strings.Join(parts, " ") + ")"
 	}

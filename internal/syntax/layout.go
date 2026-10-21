@@ -29,7 +29,11 @@ func renderLayout(expression *Expr, indent int) string {
 		prefix = "$" + expression.Bind + ":"
 	}
 	var out strings.Builder
-	out.WriteString(prefix + "(" + expression.Name)
+	opening := "("
+	if expression.Unparenthesized {
+		opening = ""
+	}
+	out.WriteString(prefix + opening + expression.Name)
 	for _, child := range expression.Args {
 		field := ""
 		if child.Field != "" {
@@ -38,6 +42,8 @@ func renderLayout(expression *Expr, indent int) string {
 		out.WriteString("\n" + strings.Repeat(" ", indent+2) + field)
 		out.WriteString(renderLayout(child, indent+2+len(field)))
 	}
-	out.WriteString("\n" + strings.Repeat(" ", indent) + ")")
+	if !expression.Unparenthesized {
+		out.WriteString("\n" + strings.Repeat(" ", indent) + ")")
+	}
 	return out.String()
 }
