@@ -34,6 +34,7 @@ const (
 	Variable
 	Wildcard
 	Literal
+	Alternation
 )
 
 // Expr is a pattern or construction expression. Bind names an entire matched
@@ -43,7 +44,9 @@ type Expr struct {
 	Kind Kind
 	Name string
 	Bind string
-	Args []*Expr
+	// Field selects a named matcher result when this expression is a child.
+	Field string
+	Args  []*Expr
 }
 
 // Binding declares a named matcher, builder or guard implemented by Go.

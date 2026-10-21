@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/format"
 	"go/types"
+	"slices"
 	"sort"
 	"strings"
 
@@ -37,6 +38,10 @@ func Generate(h Host, files []*syntax.File) ([]byte, error) {
 	}
 	e := emitter{host: &h, bindings: map[string]*syntax.Binding{}}
 	rules, err := e.collect(files)
+	if err != nil {
+		return nil, err
+	}
+	rules, err = e.expandRules(slices.Values(rules), sig.Params().At(0).Type())
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +107,9 @@ func (e *emitter) collect(files []*syntax.File) ([]*syntax.Rule, error) {
 	for _, file := range files {
 		for _, item := range file.Items {
 			if b := item.Binding; b != nil {
+				if b.Name == "or" {
+					return nil, &syntax.Diagnostic{Position: b.Position, Message: "or is reserved for alternatives"}
+				}
 				if e.bindings[b.Name] != nil {
 					return nil, &syntax.Diagnostic{Position: b.Position, Message: "duplicate binding " + b.Name}
 				}
@@ -139,80 +147,6 @@ func (e *emitter) binding(x *syntax.Expr, kind string) (string, *types.Signature
 	}
 	return name, sig, nil
 }
-func (e *emitter) bind(x *syntax.Expr, name, value string, t types.Type) error {
-	if old, ok := e.captures[name]; ok {
-		if !types.Comparable(t) || !types.Identical(old.typ, t) {
-			return e.fail(x, "repeated capture requires identical comparable types")
-		}
-		if !safeEquality(t) {
-			return e.fail(x, "repeated capture may contain an interface; use an explicit equality guard")
-		}
-		fmt.Fprintf(&e.out, "if %s != %s { return zero, false }\n", old.name, value)
-	} else {
-		e.captures[name] = capture{value, t}
-	}
-	return nil
-}
-
-// Interfaces, including those embedded in comparable aggregates, can panic on ==.
-func safeEquality(t types.Type) bool {
-	switch t := t.Underlying().(type) {
-	case *types.Interface:
-		return false
-	case *types.Array:
-		return safeEquality(t.Elem())
-	case *types.Struct:
-		for i := 0; i < t.NumFields(); i++ {
-			if !safeEquality(t.Field(i).Type()) {
-				return false
-			}
-		}
-	}
-	return true
-}
-func (e *emitter) pattern(x *syntax.Expr, value string, t types.Type) error {
-	if x.Bind != "" {
-		if err := e.bind(x, x.Bind, value, t); err != nil {
-			return err
-		}
-	}
-	switch x.Kind {
-	case syntax.Wildcard:
-		return nil
-	case syntax.Variable:
-		return e.bind(x, x.Name, value, t)
-	case syntax.Literal:
-		fmt.Fprintf(&e.out, "if %s != %s { return zero, false }\n", value, x.Name)
-		return nil
-	case syntax.Call:
-		name, sig, err := e.binding(x, "match")
-		if err != nil {
-			return err
-		}
-		n := sig.Results().Len()
-		if sig.Params().Len() != 1 || n != len(x.Args)+1 || !types.Identical(sig.Results().At(n-1).Type(), types.Typ[types.Bool]) {
-			return e.fail(x, "matcher requires one input and one result per pattern argument followed by bool")
-		}
-		if !types.AssignableTo(t, sig.Params().At(0).Type()) {
-			return e.fail(x, "matcher input type mismatch")
-		}
-		vars := []string{}
-		for range n {
-			e.serial++
-			vars = append(vars, fmt.Sprintf("hv%d", e.serial))
-		}
-		fmt.Fprintf(&e.out, "%s := %s(%s)\nif !%s { return zero, false }\n", strings.Join(vars, ", "), name, value, vars[n-1])
-		for i, arg := range x.Args {
-			fmt.Fprintf(&e.out, "_ = %s\n", vars[i])
-			if err = e.pattern(arg, vars[i], sig.Results().At(i).Type()); err != nil {
-				return err
-			}
-		}
-		return nil
-	default:
-		return e.fail(x, "invalid pattern")
-	}
-}
 func (e *emitter) value(x *syntax.Expr, kind string) (string, error) {
 	if x.Bind != "" {
 		return "", e.fail(x, "captures may only be bound in patterns")
@@ -239,6 +173,9 @@ func (e *emitter) value(x *syntax.Expr, kind string) (string, error) {
 		}
 		args := []string{}
 		for _, arg := range x.Args {
+			if arg.Field != "" {
+				return "", e.fail(arg, "named fields are only allowed in matcher patterns")
+			}
 			value, err := e.value(arg, "build")
 			if err != nil {
 				return "", err
@@ -246,6 +183,8 @@ func (e *emitter) value(x *syntax.Expr, kind string) (string, error) {
 			args = append(args, value)
 		}
 		return name + "(" + strings.Join(args, ", ") + ")", nil
+	case syntax.Alternation:
+		return "", e.fail(x, "or is only allowed in matcher patterns")
 	default:
 		return "", e.fail(x, "wildcards are only allowed in patterns")
 	}

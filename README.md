@@ -53,6 +53,34 @@ strings, `true`, `false`, and `nil`; negative numeric literals are supported.
 A rule may have multiple guard calls, each introduced by `&&`. Guards run in source order and short-circuit: a false guard skips later guards and the builder, then tries the next rule.
 Declarations and rules end with `;`. Line and block comments are accepted.
 
+Matcher children can be selected by the names of the Go matcher's result
+parameters (excluding its final success Boolean):
+
+```text
+(Write request:$request allocated:true unknownMembership:false resident:true)
+```
+
+Names are case-sensitive. Omitted named children act as wildcards. Named and
+positional children cannot be mixed in one call; unknown and duplicate names
+are errors. Positional patterns keep their existing arity contract. Named
+children are matched in written order, independent of the Go return order.
+
+Use `(or PATTERN PATTERN ...)` for ordered alternatives in match patterns:
+
+```text
+(Delete request:$request allocated:false
+  evidence:(or (ExactEvidence) (SafeUnknownEvidence)))
+```
+
+OR-patterns may nest. Every alternative must bind the same new capture names
+with identical Go types; captures from the surrounding pattern remain available.
+Each expanded alternative tries its match and the rule's ordered guards before
+the next alternative. A false guard can therefore fall through to another
+alternative of that rule. Builders run only for a successful alternative.
+Expansion is bounded to 64 variants per rule; oversized patterns are rejected
+before constructing their expansion. OR-patterns are not build expressions.
+Named reusable subpattern declarations are not implemented.
+
 Files are sorted lexically; rules retain source order within each file. The first
 successful rule wins. Unknown operations, failed matchers and false guards fall
 through; exhausting the rules returns the zero output and `false`. There is no

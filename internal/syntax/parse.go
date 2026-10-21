@@ -137,16 +137,27 @@ func (p *parser) expression(depth int) *Expr {
 		p.next()
 		result.Kind, result.Name = Call, p.identifier()
 		for p.text != ")" && p.token != scanner.EOF && p.failure == nil {
-			result.Args = append(result.Args, p.expression(depth+1))
+			result.Args = append(result.Args, p.argument(depth+1))
 		}
 		p.expect(")")
+		if result.Name == "or" {
+			result.Kind = Alternation
+			if len(result.Args) < 2 {
+				p.fail(result.Position, "or requires at least two alternatives")
+			}
+			for _, arg := range result.Args {
+				if arg.Field != "" {
+					p.fail(arg.Position, "or alternatives cannot have field names")
+				}
+			}
+		}
 	case p.text == "$":
 		p.next()
 		result.Kind, result.Name = Variable, p.identifier()
 		if p.text == ":" {
 			p.next()
 			bound := p.expression(depth + 1)
-			if bound.Kind != Call {
+			if bound.Kind != Call && bound.Kind != Alternation {
 				p.fail(bound.Position, "a named operation must bind a call pattern")
 			}
 			bound.Bind = result.Name
@@ -170,6 +181,32 @@ func (p *parser) expression(depth int) *Expr {
 		p.fail(p.position, "expected operation, $capture, _, or literal")
 	}
 	return result
+}
+
+// argument recognizes labels without changing the expression language's literals.
+func (p *parser) argument(depth int) *Expr {
+	if depth >= maxDepth {
+		return p.expression(depth)
+	}
+	if p.token != scanner.Ident {
+		return p.expression(depth)
+	}
+	position, name := p.position, p.text
+	p.next()
+	if p.text == ":" && name != "_" {
+		p.next()
+		value := p.expression(depth)
+		value.Field = name
+		return value
+	}
+	if name == "_" {
+		return &Expr{Position: position, Kind: Wildcard}
+	}
+	if name == "true" || name == "false" || name == "nil" {
+		return &Expr{Position: position, Kind: Literal, Name: name}
+	}
+	p.fail(position, "expected field name followed by colon")
+	return &Expr{Position: position}
 }
 
 // Format canonicalizes valid rules without resolving host bindings. Comments
@@ -197,11 +234,11 @@ func Format(name string, input []byte) ([]byte, error) {
 		}
 		rule := item.Rule
 		comments(rule.Comments)
-		fmt.Fprintf(&out, "rule %s:\n  %s", rule.Name, render(rule.Match))
+		fmt.Fprintf(&out, "rule %s:\n  %s", rule.Name, renderLayout(rule.Match, 2))
 		for _, guard := range rule.Guards {
-			fmt.Fprintf(&out, "\n  && %s", render(guard))
+			fmt.Fprintf(&out, "\n  && %s", renderLayout(guard, 5))
 		}
-		fmt.Fprintf(&out, "\n  => %s;\n", render(rule.Build))
+		fmt.Fprintf(&out, "\n  => %s;\n", renderLayout(rule.Build, 5))
 	}
 	comments(file.Trailing)
 	return []byte(out.String()), nil
@@ -218,7 +255,11 @@ func render(expression *Expr) string {
 	default:
 		parts := []string{expression.Name}
 		for _, argument := range expression.Args {
-			parts = append(parts, render(argument))
+			child := render(argument)
+			if argument.Field != "" {
+				child = argument.Field + ":" + child
+			}
+			parts = append(parts, child)
 		}
 		prefix := ""
 		if expression.Bind != "" {
