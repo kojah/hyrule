@@ -23,6 +23,9 @@ rule Transfer:
 Both arms are required exactly once. Wildcards and refinements are errors.
 Named query captures remain available, with the hook's exact Boolean type.
 Queries still execute once when reached, after matching and guards succeed.
+For first-answer classification, `query ... select true => result <|> ...
+<|> pure fallback` handles the other valid outcome by continuing lazily. See
+[ordered alternatives](TRANSITIONS.md#lazy-ordered-alternatives) for the contract.
 
 A Go function returning multiple values can bind its result domain directly:
 

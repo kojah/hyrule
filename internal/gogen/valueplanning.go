@@ -111,7 +111,7 @@ func (e *emitter) arithmeticType(expression *syntax.Expr, expected types.Type) (
 func (e *emitter) prepareValue(rule *syntax.Rule, expression *syntax.Expr, expected types.Type) (*syntax.Expr, error) {
 	// Ordered query continuations bind their outcome captures only at the winning
 	// result. Do not lift work from those arms into the matching graph.
-	if expression.Kind == syntax.Query {
+	if expression.Kind == syntax.Query || expression.Kind == syntax.OrderedAlternatives || expression.Kind == syntax.Selection || expression.Kind == syntax.Pure {
 		return expression, nil
 	}
 	if expression.Kind == syntax.Variable && strings.Contains(expression.Name, ".") {

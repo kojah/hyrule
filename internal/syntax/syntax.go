@@ -41,6 +41,9 @@ const (
 	Comparison
 	List
 	Update
+	OrderedAlternatives
+	Selection
+	Pure
 )
 
 // Expr is a pattern or construction expression. Bind names an entire matched

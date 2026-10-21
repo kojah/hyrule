@@ -82,7 +82,7 @@ func Parse(name string, input io.Reader) (*File, error) {
 			}
 			p.expect("=")
 			p.expect(">")
-			rule.Build = p.outerExpression(0)
+			rule.Build = p.resultExpression(0)
 			// Comments inside a rule are retained ahead of it when formatted.
 			rule.Comments = append(rule.Comments, p.comments...)
 			p.comments = nil
@@ -301,7 +301,7 @@ func Format(name string, input []byte) ([]byte, error) {
 
 func render(expression *Expr) string {
 	switch expression.Kind {
-	case Effects, Query:
+	case Effects, Query, Selection, OrderedAlternatives, Pure:
 		return renderResult(expression, 0)
 	case Wildcard:
 		return "_"

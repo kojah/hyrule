@@ -159,3 +159,44 @@ accept optional outer call parentheses, and formatting preserves the spelling.
 Queries also accept native Boolean and tuple outputs. See
 [native host interfaces](HOST_INTERFACES.md) for their exhaustive decisions,
 forwarded field arguments, and explicit failure contracts for total APIs.
+
+## Lazy ordered alternatives
+
+Use `<|>` when each question may supply an answer and other valid outcomes
+should continue with the next question:
+
+```text
+rule Classify:
+  inputs $instruction $classifier
+  => query recognized $classifier $instruction
+       select Decided label:$label => outputs $label
+     <|> query ownerHolds $classifier $instruction
+       select true => outputs (NoAction reasonNone)
+     <|> pure outputs (Opaque reasonUnknown);
+```
+
+Each alternative is an explicit `query` followed by `select Pattern => result`.
+The pattern selects one complete union variant or Boolean literal. Payloads
+allow fresh captures or wildcards, under the same restrictions as exhaustive
+decision arms. Other valid outcomes mean no answer from this alternative.
+Adding a variant to the declared domain does not require extending a selection;
+use an exhaustive query decision when every outcome needs explicit handling.
+
+Alternatives execute lazily in written order, once per reached occurrence. The
+first selected outcome supplies the result and skips all later queries and
+construction. Query state and spent budgets persist when an outcome is not
+selected. This is local continuation within the committed rule, never retry of
+another rule or speculative pattern alternative. An invalid tag or invalid
+active nested payload stops immediately, even for an unselected outcome.
+
+The final alternative must be `pure result`, which supplies the default answer
+without running queries. It may call ordinary builders, with the same purity
+contract as any construction. Every selected result and the fallback must have
+the expected result type. Captures belong only to their selected result: they
+cannot escape into later alternatives or the fallback. Native `outputs` and
+typed effect lists work in each answer.
+
+Chains are available as rule results and inside ordinary exhaustive decision
+arms. A selection requires a chain with a final `pure` fallback. Ordinary query
+decisions retain mandatory exhaustive coverage. The compiler emits direct Go
+branches and locals; it adds no optional-result adapters or runtime dependency.

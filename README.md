@@ -149,6 +149,12 @@ matching succeeds; they never fall through to another rule. Outcome branches
 can issue further queries without evaluating unselected branches. Pure matchers
 and guards retain their existing optimization contract.
 
+For first-answer selection, use lazy ordered alternatives:
+`query ... select Pattern => answer <|> ... <|> pure fallback`. Other valid
+outcomes continue within the selected rule; the first answer skips the remaining
+queries. Invalid outcomes terminate conservatively. Ordinary query decisions
+remain exhaustive. See [ordered alternatives](TRANSITIONS.md#lazy-ordered-alternatives).
+
 `effects [...]` constructs a typed slice in written order, either as the target
 result or a builder argument. The host applies the resulting plan afterward.
 See [queries and transition plans](TRANSITIONS.md) for syntax, execution and

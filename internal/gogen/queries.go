@@ -12,8 +12,13 @@ import (
 
 // Queries are committed construction continuations, never matching predicates.
 // They cannot be shared with another rule or retried by its failure edges. Each
-// reached occurrence executes once, followed by one exhaustive outcome branch.
+// reached occurrence executes once. Ordinary decisions are exhaustive; a select
+// leaves other valid outcomes unanswered within its ordered alternatives.
 func (e *emitter) queryValue(x *syntax.Expr, expected types.Type) (string, error) {
+	return e.queryResult(x, expected, "")
+}
+
+func (e *emitter) queryResult(x *syntax.Expr, expected types.Type, answered string) (string, error) {
 	outer := e.captures
 	e.captures = cloneCaptures(outer)
 	defer func() { e.captures = outer }()
@@ -43,7 +48,7 @@ func (e *emitter) queryValue(x *syntax.Expr, expected types.Type) (string, error
 		return "", e.fail(call, "query requires results and one parameter per argument")
 	}
 	if sig.Results().Len() == 1 && types.Identical(sig.Results().At(0).Type().Underlying(), types.Typ[types.Bool]) {
-		return e.booleanQuery(x, call, name, sig, expected)
+		return e.booleanQuery(x, call, name, sig, expected, answered)
 	}
 	resultType := sig.Results().At(0).Type()
 	if sig.Results().Len() > 1 {
@@ -60,25 +65,12 @@ func (e *emitter) queryValue(x *syntax.Expr, expected types.Type) (string, error
 	if err != nil {
 		return "", err
 	}
-	e.serial++
-	id := matchir.ValueID(e.serial)
+	id := e.emitQueryCall(name, sig, arguments, resultType)
 	result := valueName(id)
 	// An anonymous query introduces no source-level capture. In particular,
 	// nested shorthand queries cannot collide through a synthetic name.
 	if x.Name != "" {
 		e.captures[x.Name] = capture{id, union.typ}
-	}
-	if sig.Results().Len() == 1 {
-		fmt.Fprintf(&e.out, "%s := %s(%s)\n", result, name, strings.Join(arguments, ","))
-	} else {
-		vars, fields := []string{}, []string{}
-		for i := 0; i < sig.Results().Len(); i++ {
-			v := fmt.Sprintf("%spart%d", result, i)
-			vars = append(vars, v)
-			fields = append(fields, fmt.Sprintf("V%d:%s", i, v))
-		}
-		fmt.Fprintf(&e.out, "%s := %s(%s)\n%s := %s{%s}\n",
-			strings.Join(vars, ","), name, strings.Join(arguments, ","), result, e.host.TypeName(resultType), strings.Join(fields, ","))
 	}
 	fmt.Fprintf(&e.out, "if !%s(%s) { var zero %s; return zero,false }\n", e.validator(union), result, e.host.TypeName(sigOutput(e)))
 	e.serial++
@@ -97,9 +89,31 @@ func (e *emitter) queryValue(x *syntax.Expr, expected types.Type) (string, error
 			return "", err
 		}
 		fmt.Fprintf(&e.out, "%s = %s\n", output, value)
+		if answered != "" {
+			fmt.Fprintf(&e.out, "%s = true\n", answered)
+		}
 	}
 	e.out.WriteString("}\n")
 	return output, nil
+}
+
+func (e *emitter) emitQueryCall(name string, sig *types.Signature, arguments []string, resultType types.Type) matchir.ValueID {
+	e.serial++
+	id := matchir.ValueID(e.serial)
+	result := valueName(id)
+	if sig.Results().Len() == 1 {
+		fmt.Fprintf(&e.out, "%s := %s(%s)\n", result, name, strings.Join(arguments, ","))
+		return id
+	}
+	vars, fields := []string{}, []string{}
+	for i := 0; i < sig.Results().Len(); i++ {
+		v := fmt.Sprintf("%spart%d", result, i)
+		vars = append(vars, v)
+		fields = append(fields, fmt.Sprintf("V%d:%s", i, v))
+	}
+	fmt.Fprintf(&e.out, "%s := %s(%s)\n%s := %s{%s}\n",
+		strings.Join(vars, ","), name, strings.Join(arguments, ","), result, e.host.TypeName(resultType), strings.Join(fields, ","))
+	return id
 }
 
 func (e *emitter) queryArguments(call *syntax.Expr, sig *types.Signature) ([]string, error) {
@@ -119,9 +133,9 @@ func (e *emitter) queryArguments(call *syntax.Expr, sig *types.Signature) ([]str
 	return arguments, nil
 }
 
-// Each variant has exactly one unrefined arm. No wildcard can conceal a future
-// outcome, and repeated/outer captures cannot turn a total arm into an equality
-// test. Payloads are available only inside the selected arm.
+// Each arm handles a complete variant, and payloads stay inside that arm.
+// Ordinary decisions require all variants. A selection deliberately handles one
+// variant, but cannot refine it or turn captures into equality tests.
 func (e *emitter) checkDecision(x *syntax.Expr, union *boundUnion) error {
 	seen := map[string]struct{}{}
 	for _, arm := range x.Arms {
@@ -161,7 +175,7 @@ func (e *emitter) checkDecision(x *syntax.Expr, union *boundUnion) error {
 			missing = append(missing, variant.declaration.Name)
 		}
 	}
-	if len(missing) != 0 {
+	if len(missing) != 0 && x.Kind != syntax.Selection {
 		return e.fail(x, "non-exhaustive query decision: missing "+strings.Join(missing, ", "))
 	}
 	return nil
@@ -187,7 +201,7 @@ func (e *emitter) bindOutcome(pattern *syntax.Expr, variant *boundVariant, input
 
 // Boolean outcomes are closed by the Go type itself; no schema or tag aliases
 // are needed. A named capture retains its exact (possibly named) Boolean type.
-func (e *emitter) booleanQuery(x, call *syntax.Expr, name string, sig *types.Signature, expected types.Type) (string, error) {
+func (e *emitter) booleanQuery(x, call *syntax.Expr, name string, sig *types.Signature, expected types.Type, answered string) (string, error) {
 	seen := map[string]bool{}
 	for _, arm := range x.Arms {
 		p := arm.Pattern
@@ -199,7 +213,7 @@ func (e *emitter) booleanQuery(x, call *syntax.Expr, name string, sig *types.Sig
 		}
 		seen[p.Name] = true
 	}
-	if !seen["true"] || !seen["false"] {
+	if x.Kind != syntax.Selection && (!seen["true"] || !seen["false"]) {
 		return "", e.fail(x, "non-exhaustive Boolean query decision: require true and false")
 	}
 	args, err := e.queryArguments(call, sig)
@@ -225,7 +239,52 @@ func (e *emitter) booleanQuery(x, call *syntax.Expr, name string, sig *types.Sig
 			return "", err
 		}
 		fmt.Fprintf(&e.out, "%s = %s\n", output, value)
+		if answered != "" {
+			fmt.Fprintf(&e.out, "%s = true\n", answered)
+		}
 	}
 	e.out.WriteString("}\n")
+	return output, nil
+}
+
+// Ordered alternatives keep their own answer flag, never a matching failure
+// edge. Each query and its result construction stay inside a lazy branch. The
+// final pure answer makes the continuation total without manufacturing Option
+// wrappers or letting an unanswered query retry a different rule.
+func (e *emitter) alternativesValue(x *syntax.Expr, expected types.Type) (string, error) {
+	outer := e.captures
+	defer func() { e.captures = outer }()
+	e.serial++
+	output := fmt.Sprintf("hv%d", e.serial)
+	answered := output + "answered"
+	fmt.Fprintf(&e.out, "var %s %s\n%s := false\n", output, e.host.TypeName(expected), answered)
+	for i, alternative := range x.Args {
+		e.captures = cloneCaptures(outer)
+		last := i == len(x.Args)-1
+		if last && alternative.Kind != syntax.Pure {
+			return "", e.fail(alternative, "ordered alternatives require a final pure fallback")
+		}
+		fmt.Fprintf(&e.out, "if !%s {\n", answered)
+		if alternative.Kind == syntax.Pure {
+			if !last {
+				return "", e.fail(alternative, "pure must be the final ordered alternative")
+			}
+			value, err := e.resultValue(alternative, expected)
+			if err != nil {
+				return "", err
+			}
+			fmt.Fprintf(&e.out, "%s = %s\n", output, value)
+		} else {
+			if alternative.Kind != syntax.Selection {
+				return "", e.fail(alternative, "ordered alternative requires query ... select or a final pure fallback")
+			}
+			value, err := e.queryResult(alternative, expected, answered)
+			if err != nil {
+				return "", err
+			}
+			fmt.Fprintf(&e.out, "if %s { %s = %s }\n", answered, output, value)
+		}
+		e.out.WriteString("}\n")
+	}
 	return output, nil
 }

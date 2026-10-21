@@ -173,6 +173,18 @@ func (e *emitter) typedValue(x *syntax.Expr, expected types.Type) (string, error
 }
 
 func (e *emitter) resultValue(x *syntax.Expr, expected types.Type) (string, error) {
+	if x.Kind == syntax.OrderedAlternatives {
+		return e.alternativesValue(x, expected)
+	}
+	if x.Kind == syntax.Selection {
+		return "", e.fail(x, "select requires ordered alternatives with a final pure fallback")
+	}
+	if x.Kind == syntax.Pure {
+		if containsQuery(x.Args[0]) {
+			return "", e.fail(x, "pure cannot execute a query")
+		}
+		return e.typedValue(x.Args[0], expected)
+	}
 	if x.Kind == syntax.Query {
 		return e.queryValue(x, expected)
 	}

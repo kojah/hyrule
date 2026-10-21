@@ -47,12 +47,24 @@ func (p *parser) queryBody(position Position, depth int) *Expr {
 			p.fail(result.Position, "decide must handle the immediately preceding query capture")
 		}
 	}
+	if p.text == "select" {
+		if result.Name != "" {
+			p.fail(position, "select requires an anonymous query; capture fields in its pattern")
+		}
+		p.next()
+		result.Kind = Selection
+		pattern := p.outerExpression(depth + 1)
+		p.expect("=")
+		p.expect(">")
+		result.Arms = []DecisionArm{{Pattern: pattern, Result: p.outerExpression(depth + 1)}}
+		return result
+	}
 	p.expect("{")
 	for p.text != "}" && p.token != scanner.EOF && p.failure == nil {
 		pattern := p.outerExpression(depth + 1)
 		p.expect("=")
 		p.expect(">")
-		value := p.outerExpression(depth + 1)
+		value := p.resultExpression(depth + 1)
 		p.expect(";")
 		result.Arms = append(result.Arms, DecisionArm{Pattern: pattern, Result: value})
 	}
@@ -61,6 +73,9 @@ func (p *parser) queryBody(position Position, depth int) *Expr {
 }
 
 func renderResult(expression *Expr, indent int) string {
+	if expression.Kind == OrderedAlternatives || expression.Kind == Selection || expression.Kind == Pure {
+		return renderAlternatives(expression, indent)
+	}
 	if expression.Kind == Effects {
 		parts := make([]string, len(expression.Args))
 		for i, arg := range expression.Args {
