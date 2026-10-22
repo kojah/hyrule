@@ -115,7 +115,9 @@ func (e *resolver) clause(clause semantic.Clause) error {
 	if err != nil {
 		return err
 	}
-	if condition.Kind == semantic.Comparison {
+	// Operand comparisons stay graph tests that can share prefixes; others,
+	// such as a call result compared with nil, become ordinary value guards.
+	if condition.Kind == semantic.Comparison && simpleOperand(condition.Args[0]) && simpleOperand(condition.Args[1]) {
 		return e.compare(condition)
 	}
 	if typ, err := e.expressionType(condition); err == nil && !isBoolean(typ) {
@@ -127,4 +129,8 @@ func (e *resolver) clause(clause semantic.Clause) error {
 	}
 	e.cursor.Guard(e.storeValue(value))
 	return nil
+}
+
+func simpleOperand(x *semantic.Expr) bool {
+	return x.Kind == semantic.Variable || x.Kind == semantic.Symbol || x.Kind == semantic.Literal
 }

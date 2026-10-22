@@ -39,6 +39,7 @@ rewrite (inputs shape host)
 @Guarded
 rewrite (inputs shape host)
   | First (n: n) <- Pick host shape
+  , Pick host shape != nil
   , n > 0 && Small host n
   =
   outputs n
@@ -90,8 +91,8 @@ func TestBehavior(t *testing.T) {
   {"or short-circuits, where in then", &B{}, map[int]bool{1: true, 4: true}, 0, 15, []string{"probe1", "probe3", "probe4"}},
   {"or tries right, else branch", &B{}, map[int]bool{2: true}, 0, 7, []string{"probe1", "probe2", "probe3", "probe4"}},
   {"not rejects", &B{}, map[int]bool{1: true, 3: true}, 2, 99, []string{"probe1", "probe3", "pick", "ask"}},
-  {"pattern guard and conjunction", &A{N: 3}, nil, 0, 3, []string{"probe1", "probe2", "pick", "small"}},
-  {"and short-circuits", &A{N: 0}, nil, 5, 5, []string{"probe1", "probe2", "pick", "ask"}},
+  {"pattern guard and conjunction", &A{N: 3}, nil, 0, 3, []string{"probe1", "probe2", "pick", "pick", "small"}},
+  {"and short-circuits", &A{N: 0}, nil, 5, 5, []string{"probe1", "probe2", "pick", "pick", "ask"}},
   {"pattern guard mismatch, if declines", &B{}, nil, 2, 99, []string{"probe1", "probe2", "pick", "ask"}},
   {"pure do step exits early", &B{}, nil, 0, 1, []string{"probe1", "probe2", "pick", "ask"}},
  } {

@@ -78,8 +78,12 @@ func (e *resolver) comparisonOperator(expression *semantic.Expr, leftType, right
 				return 0, e.fail(expression, "ordered comparison requires ordered scalar types")
 			}
 		}
+	} else if nilLiteral(leftType) || nilLiteral(rightType) {
+		// Comparing any nillable value, including an interface, with nil cannot panic.
 	} else if !safeEquality(leftType) || !safeEquality(rightType) || !types.Comparable(leftType) && !types.Comparable(rightType) {
 		return 0, e.fail(expression, "equality requires safe comparable operands")
 	}
 	return operator, nil
 }
+
+func nilLiteral(typ types.Type) bool { return types.Identical(typ, types.Typ[types.UntypedNil]) }
