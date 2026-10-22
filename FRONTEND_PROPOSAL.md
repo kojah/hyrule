@@ -1,10 +1,9 @@
 # A Haskell-inspired Hyrule frontend
 
-Status: implementation and migration are in progress. The production parser now
+Status: implemented, with Lockdoc and GoHawk rules migrated. The production parser
 uses equations. This document records the design rationale; the maintained
 [grammar](grammar.ebnf), [layout specification](LAYOUT.md) and [README](README.md)
-define current syntax. Completion requires the compiler regressions and both
-repository integrations to pass.
+define current syntax. The legacy parser is retained only for the migration command.
 
 The direction is **compact pattern equations first, indentation for actual
 sequences and branches**. Keep `do` and `<|>`. Use whitespace application, guards
