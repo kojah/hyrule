@@ -52,7 +52,8 @@ func TestRecords(t *testing.T) {
 func TestStructuralRuleDiagnostics(t *testing.T) {
 	for _, test := range []struct{ name, schema, rule, want string }{
 		{"constant must be immutable", recordSchema + `const Bad = Mutable;`, `$box => $box`, "requires a Go constant"},
-		{"typed constant mismatch", recordSchema + `const Bad = Foreign;`, `(Box kind:Bad) => (Box kind:Known count:0 source:"" any:nil)`, "constant pattern type mismatch"},
+		{"typed constant mismatch", recordSchema + `const Bad = Foreign;`,
+			`(Box kind:Bad) => (Box kind:Known count:0 source:"" any:nil)`, "constant pattern type mismatch"},
 		{"unknown constant", recordSchema, `_ => Missing`, "unknown constant Missing"},
 		{"incomplete schema", `record Box = Box {kind: Kind;};`, `$box => $box`, "omits Go field"},
 		{"duplicate field", `record Box = Box {kind: Kind; count: Kind;};`, `$box => $box`, "duplicate record field"},

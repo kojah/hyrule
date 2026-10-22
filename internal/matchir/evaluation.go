@@ -1,7 +1,7 @@
 package matchir
 
 // EvaluationKind distinguishes typed pure value expressions. Foreign values
-// retain a frontend expression ID; no target syntax enters this representation.
+// retain a resolved value-plan ID; no target syntax enters this representation.
 type EvaluationKind uint8
 
 const (

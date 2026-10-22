@@ -70,7 +70,9 @@ func TestBindingShorthandFormatting(t *testing.T) {
 func TestSameNameUnionVariants(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", unionHost+"\nconst (Number = NumberTag; Empty = EmptyTag; Wrapped = WrapTag)\n")
-	explicit := strings.NewReplacer("\n Number = NumberTag", "\n Number = Number", "\n Empty = EmptyTag", "\n Empty = Empty", "\n Wrapped = WrapTag", "\n Wrapped = Wrapped").Replace(unionSchema)
+	explicit := strings.NewReplacer("\n Number = NumberTag", "\n Number = Number",
+		"\n Empty = EmptyTag", "\n Empty = Empty",
+		"\n Wrapped = WrapTag", "\n Wrapped = Wrapped").Replace(unionSchema)
 	explicit += `rule Number: (Number $n) => (Number $n);
  rule Empty: (Empty) => (Empty);
  rule Wrapped: (Wrapped $atom) => (Wrapped $atom);`

@@ -62,35 +62,7 @@ func Parse(name string, input io.Reader) (*File, error) {
 			pattern := p.patternDeclaration(pos, comments)
 			file.Items = append(file.Items, Item{Pattern: pattern})
 		case "rule":
-			rule := &Rule{Position: pos, Name: p.identifier(), Comments: comments}
-			p.rule = rule.Name
-			p.expect(":")
-			rule.Match = p.outerExpression(0)
-			for p.text == "&" || p.text == "when" || p.text == "let" {
-				if p.text == "let" {
-					p.next()
-					p.expect("$")
-					name := p.identifier()
-					p.expect("=")
-					rule.Clauses = append(rule.Clauses, Clause{Name: name, Value: p.guardExpression()})
-					continue
-				} else if p.text == "when" {
-					p.next()
-				} else {
-					p.expect("&")
-					p.expect("&")
-				}
-				rule.Clauses = append(rule.Clauses, Clause{Value: p.guardExpression()})
-			}
-			p.expect("=")
-			p.expect(">")
-			rule.Build = p.resultExpression(0)
-			// Comments inside a rule are retained ahead of it when formatted.
-			rule.Comments = append(rule.Comments, p.comments...)
-			p.comments = nil
-			p.expect(";")
-			file.Items = append(file.Items, Item{Rule: rule})
-			p.rule = ""
+			file.Items = append(file.Items, Item{Rule: p.ruleDeclaration(pos, comments)})
 		default:
 			p.fail(pos, "expected match, build, guard, query, const, record, union, pattern or rule declaration")
 		}
@@ -347,4 +319,36 @@ func render(expression *Expr) string {
 		}
 		return prefix + "(" + strings.Join(parts, " ") + ")"
 	}
+}
+
+func (p *parser) ruleDeclaration(pos Position, comments []string) *Rule {
+	rule := &Rule{Position: pos, Name: p.identifier(), Comments: comments}
+	p.rule = rule.Name
+	p.expect(":")
+	rule.Match = p.outerExpression(0)
+	for p.text == "&" || p.text == "when" || p.text == "let" {
+		if p.text == "let" {
+			p.next()
+			p.expect("$")
+			name := p.identifier()
+			p.expect("=")
+			rule.Clauses = append(rule.Clauses, Clause{Name: name, Value: p.guardExpression()})
+			continue
+		} else if p.text == "when" {
+			p.next()
+		} else {
+			p.expect("&")
+			p.expect("&")
+		}
+		rule.Clauses = append(rule.Clauses, Clause{Value: p.guardExpression()})
+	}
+	p.expect("=")
+	p.expect(">")
+	rule.Build = p.resultExpression(0)
+	// Comments inside a rule are retained ahead of it when formatted.
+	rule.Comments = append(rule.Comments, p.comments...)
+	p.comments = nil
+	p.expect(";")
+	p.rule = ""
+	return rule
 }

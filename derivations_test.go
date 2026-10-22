@@ -57,10 +57,12 @@ func TestDerivedRecords(t *testing.T) {
  VisitSnapshot(frozen,func(v int){children=append(children,v)})
  if len(children)!=3 || children[0]!=7 || children[1]!=2 || children[2]!=3 {t.Fatal(children)}
  mapped:=TransformSnapshot(frozen,func(v int)int{return v+10})
- if mapped.Backing!=17 || mapped.Cells[0]!=12 || frozen.Cells[0]!=2 || mapped.Guard!=9 || mapped.Label!="source" {t.Fatal("transform mutated input or lost evidence")}
+ if mapped.Backing!=17 || mapped.Cells[0]!=12 || frozen.Cells[0]!=2 || mapped.Guard!=9 || mapped.Label!="source" {
+t.Fatal("transform mutated input or lost evidence")}
  for _, cells:=range [][]int{nil,{}} {
   input:=Snapshot{Cells:cells}
-  if (FreezeSnapshot(input).Cells==nil)!=(cells==nil) || (TransformSnapshot(input,func(v int)int{return v}).Cells==nil)!=(cells==nil) {t.Fatal("nil/empty distinction lost")}
+  if (FreezeSnapshot(input).Cells==nil)!=(cells==nil) || (TransformSnapshot(input,func(v int)int{return v}).Cells==nil)!=(cells==nil) {
+t.Fatal("nil/empty distinction lost")}
  }
  for _, budget:=range []int{-1,0,1,8,100} {
   text:=DisplaySnapshot(frozen,budget)

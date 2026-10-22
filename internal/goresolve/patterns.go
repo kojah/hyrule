@@ -74,38 +74,42 @@ func (e *resolver) pattern(x *semantic.Expr, value matchir.ValueID, t types.Type
 		e.cursor.Test(matchir.Value(value), matchir.Constant(e.constants[x.Name].schema.ID))
 		return nil
 	case semantic.Call:
-		name, sig, indices, err := e.matcher(x, t)
-		if err != nil {
-			return err
-		}
-		outputTypes := make([]matchir.TypeID, sig.Results().Len()-1)
-		for index := range outputTypes {
-			outputTypes[index] = e.tables.typeID(sig.Results().At(index).Type())
-		}
-		var outputs []matchir.ValueID
-		if record := e.recordNames[x.Name]; record != nil && !record.declaration.View {
-			outputs = e.cursor.Record(record.schema, value)
-		} else if constructor := e.constructors[x.Name]; constructor != nil {
-			outputs = e.cursor.Variant(constructor.union.schema, constructor.id, value)
-		} else {
-			outputs = e.cursor.Match(e.tables.hookID(name), value, outputTypes)
-		}
-		for _, id := range outputs {
-			e.serial = max(e.serial, int(id))
-		}
-		if view != nil {
-			if err := e.bind(x, x.Bind, outputs[len(outputs)-1], view.typ); err != nil {
-				return err
-			}
-		}
-		for child, arg := range x.Args {
-			index := indices[child]
-			if err := e.pattern(arg, outputs[index], sig.Results().At(index).Type()); err != nil {
-				return err
-			}
-		}
-		return nil
+		return e.callPattern(x, value, t, view)
 	default:
 		return e.fail(x, "invalid pattern")
 	}
+}
+
+func (e *resolver) callPattern(x *semantic.Expr, value matchir.ValueID, t types.Type, view *boundRecord) error {
+	name, sig, indices, err := e.matcher(x, t)
+	if err != nil {
+		return err
+	}
+	outputTypes := make([]matchir.TypeID, sig.Results().Len()-1)
+	for index := range outputTypes {
+		outputTypes[index] = e.tables.typeID(sig.Results().At(index).Type())
+	}
+	var outputs []matchir.ValueID
+	if record := e.recordNames[x.Name]; record != nil && !record.declaration.View {
+		outputs = e.cursor.Record(record.schema, value)
+	} else if constructor := e.constructors[x.Name]; constructor != nil {
+		outputs = e.cursor.Variant(constructor.union.schema, constructor.id, value)
+	} else {
+		outputs = e.cursor.Match(e.tables.hookID(name), value, outputTypes)
+	}
+	for _, id := range outputs {
+		e.serial = max(e.serial, int(id))
+	}
+	if view != nil {
+		if err := e.bind(x, x.Bind, outputs[len(outputs)-1], view.typ); err != nil {
+			return err
+		}
+	}
+	for child, arg := range x.Args {
+		index := indices[child]
+		if err := e.pattern(arg, outputs[index], sig.Results().At(index).Type()); err != nil {
+			return err
+		}
+	}
+	return nil
 }

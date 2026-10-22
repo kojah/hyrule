@@ -266,6 +266,14 @@ rule's execution path. The caller applies returned effects after matching.
 Host code owns memory identity, soundness, unknown-value policy, lifecycle,
 control flow, budgets and scheduling.
 
+The pipeline has explicit boundaries:
+
+```text
+source → syntax AST → owned semantic model → declaration collection
+       → Go hook/storage resolution → matching DAG + typed value/helper plans
+       → Go emission → complete-package validation → publication
+```
+
 The parser retains formatting and source spelling for round-trip formatting.
 `frontend.Lower` copies it into an owned `semantic` model, resolves outer-call
 shorthand across all input files, and removes comments and formatting flags.
@@ -286,7 +294,11 @@ The value IR retains field positions, assignment types, written evaluation order
 query outcomes, lexical choice and decline. Neither IR retains semantic expression
 nodes or capture-name maps. `gogen` and `valuegen` emit from those plans without
 resolving source names or interpreting rule syntax. Schema-derived maintenance
-helpers currently use the separate `recordgen` path.
+helpers follow the same boundary: `recordresolve` validates signatures and field
+policies into typed helper plans; `recordgen` emits those plans. After emission,
+the complete Go package is type-checked before artifacts can be published. This
+last check validates target-language literals, assignments and package integration;
+it does not resolve Hyrule names or decide rule control flow.
 
 The compiler folds adjacent identical pure matcher/test prefixes into an ordered
 decision DAG. Match failure and exhausted guard alternatives rejoin explicit
@@ -447,9 +459,9 @@ constructs a non-nil empty slice. List matching and dynamic collection
 transformations are not implemented. List size is statically bounded by the
 rule source; host helpers must retain explicit bounds for dynamic collections.
 
-The neutral matching IR retains typed constant identities, record schemas and
-extractions, comparison operators, ordered list construction and explicit
-preserved-base updates. Go names, selectors, concrete types and syntax remain in
+The neutral matching and value IRs retain typed constant identities, record
+schemas and extractions, comparison operators, ordered list construction and
+explicit preserved-base updates. Go names, selectors, concrete types and syntax remain in
 the Go adapter. See [the local append-plan example](examples/localplans/append.rules)
 for nested updates that preserve backing and source provenance while producing a
 copy-effect list. Its sum uses ordinary integer arithmetic; explicit guards admit

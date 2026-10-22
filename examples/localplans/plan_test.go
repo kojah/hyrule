@@ -26,7 +26,8 @@ func TestAppendDecisionPreservesSnapshotAndOrdersEffects(t *testing.T) {
 			before := input
 			before.Copies = append([]localplans.Copy(nil), input.Copies...)
 			got, matched := localplans.Plan(input)
-			if !matched || got.Outcome != test.outcome || got.Source != input.Source || got.Header.Backing != input.Header.Backing || got.Header.Capacity != input.Header.Capacity {
+			if !matched || got.Outcome != test.outcome || got.Source != input.Source ||
+				got.Header.Backing != input.Header.Backing || got.Header.Capacity != input.Header.Capacity {
 				t.Fatalf("plan=%+v matched=%t", got, matched)
 			}
 			if !reflect.DeepEqual(input, before) {

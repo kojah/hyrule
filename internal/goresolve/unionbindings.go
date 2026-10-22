@@ -29,58 +29,9 @@ type boundVariant struct {
 func (e *resolver) bindUnions(declarations []*semantic.Union) error {
 	e.constructors = map[string]*boundVariant{}
 	for _, declaration := range declarations {
-		var storageType types.Type
-		var structure *types.Struct
-		if len(declaration.Types) > 0 {
-			vars := make([]*types.Var, len(declaration.Types))
-			for i, name := range declaration.Types {
-				typ, err := e.host.Type(name)
-				if err != nil {
-					return err
-				}
-				vars[i] = types.NewVar(token.NoPos, e.host.Package, "", typ)
-			}
-			structure = hostapi.Tuple(e.host.Package, types.NewTuple(vars...))
-			storageType = structure
-		} else {
-			object := e.host.Package.Scope().Lookup(declaration.HostType)
-			typename, known := object.(*types.TypeName)
-			if !known {
-				return &semantic.Diagnostic{Position: declaration.Position, Message: "union requires a local Go type " + declaration.HostType}
-			}
-			if genericStorage(typename.Type()) {
-				return &semantic.Diagnostic{Position: declaration.Position, Message: "union storage requires a non-generic Go type"}
-			}
-			storageType = typename.Type()
-			structure, known = storageType.Underlying().(*types.Struct)
-			if !known {
-				return &semantic.Diagnostic{Position: declaration.Position, Message: "union storage must be a Go struct"}
-			}
+		if err := e.bindUnion(declaration); err != nil {
+			return err
 		}
-		for _, existing := range e.unions {
-			if types.Identical(existing.typ, storageType) {
-				return &semantic.Diagnostic{Position: declaration.Position, Message: "Go type already bound to union " + existing.declaration.Name}
-			}
-		}
-		tagName := declaration.Tag
-		if len(declaration.Types) > 0 {
-			tagName = hostapi.IndexField(tagName, structure)
-		}
-		tag := directField(structure, tagName)
-		if tag == nil {
-			return &semantic.Diagnostic{Position: declaration.Position, Message: "missing direct union tag field " + declaration.Tag}
-		}
-		if basic, known := tag.Type().Underlying().(*types.Basic); !known || basic.Info()&(types.IsInteger|types.IsString|types.IsBoolean) == 0 {
-			return &semantic.Diagnostic{Position: declaration.Position, Message: "union tag must have integer, string or Boolean type"}
-		}
-		union := &boundUnion{declaration: declaration, typ: storageType, tag: tag,
-			schema: &matchir.UnionSchema{ID: matchir.UnionID(len(e.unions)), Name: declaration.Name, Type: e.tables.typeID(storageType)}}
-		for _, variant := range declaration.Variants {
-			if err := e.bindVariant(union, structure, variant); err != nil {
-				return err
-			}
-		}
-		e.unions = append(e.unions, union)
 	}
 	return nil
 }
@@ -167,4 +118,60 @@ func (e *resolver) constructorSignature(variant *boundVariant) *types.Signature 
 	}
 	result := types.NewTuple(types.NewVar(0, e.host.Package, "", variant.union.typ))
 	return types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), result, false)
+}
+
+func (e *resolver) bindUnion(declaration *semantic.Union) error {
+	var storageType types.Type
+	var structure *types.Struct
+	if len(declaration.Types) > 0 {
+		vars := make([]*types.Var, len(declaration.Types))
+		for i, name := range declaration.Types {
+			typ, err := e.host.Type(name)
+			if err != nil {
+				return err
+			}
+			vars[i] = types.NewVar(token.NoPos, e.host.Package, "", typ)
+		}
+		structure = hostapi.Tuple(e.host.Package, types.NewTuple(vars...))
+		storageType = structure
+	} else {
+		object := e.host.Package.Scope().Lookup(declaration.HostType)
+		typename, known := object.(*types.TypeName)
+		if !known {
+			return &semantic.Diagnostic{Position: declaration.Position, Message: "union requires a local Go type " + declaration.HostType}
+		}
+		if genericStorage(typename.Type()) {
+			return &semantic.Diagnostic{Position: declaration.Position, Message: "union storage requires a non-generic Go type"}
+		}
+		storageType = typename.Type()
+		structure, known = storageType.Underlying().(*types.Struct)
+		if !known {
+			return &semantic.Diagnostic{Position: declaration.Position, Message: "union storage must be a Go struct"}
+		}
+	}
+	for _, existing := range e.unions {
+		if types.Identical(existing.typ, storageType) {
+			return &semantic.Diagnostic{Position: declaration.Position, Message: "Go type already bound to union " + existing.declaration.Name}
+		}
+	}
+	tagName := declaration.Tag
+	if len(declaration.Types) > 0 {
+		tagName = hostapi.IndexField(tagName, structure)
+	}
+	tag := directField(structure, tagName)
+	if tag == nil {
+		return &semantic.Diagnostic{Position: declaration.Position, Message: "missing direct union tag field " + declaration.Tag}
+	}
+	if basic, known := tag.Type().Underlying().(*types.Basic); !known || basic.Info()&(types.IsInteger|types.IsString|types.IsBoolean) == 0 {
+		return &semantic.Diagnostic{Position: declaration.Position, Message: "union tag must have integer, string or Boolean type"}
+	}
+	union := &boundUnion{declaration: declaration, typ: storageType, tag: tag,
+		schema: &matchir.UnionSchema{ID: matchir.UnionID(len(e.unions)), Name: declaration.Name, Type: e.tables.typeID(storageType)}}
+	for _, variant := range declaration.Variants {
+		if err := e.bindVariant(union, structure, variant); err != nil {
+			return err
+		}
+	}
+	e.unions = append(e.unions, union)
+	return nil
 }

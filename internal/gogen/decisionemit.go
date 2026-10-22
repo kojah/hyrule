@@ -33,72 +33,21 @@ func (e *emitter) decisionValue(node *matchir.Node, kind string) string {
 // source spelling, calls and locals; the shared graph is never interpreted.
 func (e *emitter) emitDecisions(node, stop *matchir.Node) error {
 	for node != nil && node != stop && node.Kind != matchir.Fail {
-		switch node.Kind {
-		case matchir.Dispatch:
-			if err := e.emitDispatch(node); err != nil {
+		terminal := node.Kind == matchir.Variant && e.variantReturns(node) ||
+			(node.Kind == matchir.Record || node.Kind == matchir.Evaluate) && continuationReturns(node.Next, node.Fallback)
+		if terminal {
+			if err := e.emitDeadSuffix(node.Fallback, stop); err != nil {
 				return err
 			}
-		case matchir.Variant:
-			terminal := e.variantReturns(node)
-			if terminal {
-				if err := e.emitDeadSuffix(node.Fallback, stop); err != nil {
-					return err
-				}
-			}
-			if err := e.emitVariant(node); err != nil {
-				return err
-			}
-			if terminal {
-				return nil
-			}
-		case matchir.Match:
-			if err := e.emitMatch(node); err != nil {
-				return err
-			}
-		case matchir.Record:
-			terminal := continuationReturns(node.Next, node.Fallback)
-			if terminal {
-				if err := e.emitDeadSuffix(node.Fallback, stop); err != nil {
-					return err
-				}
-			}
-			if err := e.emitRecord(node); err != nil {
-				return err
-			}
-			if terminal {
-				return nil
-			}
-		case matchir.Evaluate:
-			terminal := continuationReturns(node.Next, node.Fallback)
-			if terminal {
-				if err := e.emitDeadSuffix(node.Fallback, stop); err != nil {
-					return err
-				}
-			}
-			if err := e.emitEvaluation(node); err != nil {
-				return err
-			}
-			if terminal {
-				return nil
-			}
-		case matchir.Test:
-			fmt.Fprintf(&e.out, "if %s == %s {\n", e.operand(node.Left), e.operand(node.Right))
-			if err := e.emitDecisions(node.Next, node.Fallback); err != nil {
-				return err
-			}
-			e.out.WriteString("}\n")
-		case matchir.Compare:
-			fmt.Fprintf(&e.out, "if %s %s %s {\n", e.operand(node.Left), comparisonSpelling(node.Comparison), e.operand(node.Right))
-			if err := e.emitDecisions(node.Next, node.Fallback); err != nil {
-				return err
-			}
-			e.out.WriteString("}\n")
-		case matchir.Guard:
-			if err := e.emitGuard(node); err != nil {
-				return err
-			}
-		case matchir.Build:
-			return e.emitBuild(node, stop)
+		}
+		if err := e.emitDecision(node, stop); err != nil {
+			return err
+		}
+		if node.Kind == matchir.Build {
+			return nil
+		}
+		if terminal {
+			return nil
 		}
 		node = node.Fallback
 	}
@@ -160,5 +109,51 @@ func (e *emitter) emitRecord(node *matchir.Node) error {
 		return err
 	}
 	e.out.WriteString("}\n")
+	return nil
+}
+
+// emitDecision handles one resolved operation; traversal and shared fallback
+// placement stay in emitDecisions.
+func (e *emitter) emitDecision(node, stop *matchir.Node) error {
+	switch node.Kind {
+	case matchir.Dispatch:
+		if err := e.emitDispatch(node); err != nil {
+			return err
+		}
+	case matchir.Variant:
+		if err := e.emitVariant(node); err != nil {
+			return err
+		}
+	case matchir.Match:
+		if err := e.emitMatch(node); err != nil {
+			return err
+		}
+	case matchir.Record:
+		if err := e.emitRecord(node); err != nil {
+			return err
+		}
+	case matchir.Evaluate:
+		if err := e.emitEvaluation(node); err != nil {
+			return err
+		}
+	case matchir.Test:
+		fmt.Fprintf(&e.out, "if %s == %s {\n", e.operand(node.Left), e.operand(node.Right))
+		if err := e.emitDecisions(node.Next, node.Fallback); err != nil {
+			return err
+		}
+		e.out.WriteString("}\n")
+	case matchir.Compare:
+		fmt.Fprintf(&e.out, "if %s %s %s {\n", e.operand(node.Left), comparisonSpelling(node.Comparison), e.operand(node.Right))
+		if err := e.emitDecisions(node.Next, node.Fallback); err != nil {
+			return err
+		}
+		e.out.WriteString("}\n")
+	case matchir.Guard:
+		if err := e.emitGuard(node); err != nil {
+			return err
+		}
+	case matchir.Build:
+		return e.emitBuild(node, stop)
+	}
 	return nil
 }

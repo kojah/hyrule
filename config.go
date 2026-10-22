@@ -59,7 +59,9 @@ func Load(path string) (*Config, error) {
 	}
 	names, outputs := map[string]bool{}, map[string]bool{}
 	for _, t := range c.Targets {
-		if !token.IsIdentifier(t.Name) || !t.Schema && (!token.IsIdentifier(t.Signature) || !token.IsIdentifier(t.Function) || t.Function == "_") || t.Schema && (t.Signature != "" || t.Function != "") {
+		if !token.IsIdentifier(t.Name) ||
+			!t.Schema && (!token.IsIdentifier(t.Signature) || !token.IsIdentifier(t.Function) || t.Function == "_") ||
+			t.Schema && (t.Signature != "" || t.Function != "") {
 			return nil, fmt.Errorf("target %q: invalid name, signature or function", t.Name)
 		}
 		if names[t.Name] {

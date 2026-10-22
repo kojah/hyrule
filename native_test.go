@@ -188,7 +188,8 @@ func TestNativeBooleanResultIsData(t *testing.T) {
 	}
 	write(t, root, "behavior_test.go", `package fixture
  import "testing"
- func TestBehavior(t *testing.T){h:=&Host{};if !Rewrite(false,h)||Rewrite(true,h)||h.Calls!=2{t.Fatalf("Boolean output confused with success flag: calls=%d",h.Calls)}}`)
+ func TestBehavior(t *testing.T){h:=&Host{};
+if !Rewrite(false,h)||Rewrite(true,h)||h.Calls!=2{t.Fatalf("Boolean output confused with success flag: calls=%d",h.Calls)}}`)
 	runGeneratedTransitionTest(t, root)
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/kojah/lockdoc/tools/hyrule/internal/gogen"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/goresolve"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/recordgen"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/recordresolve"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
 	"golang.org/x/tools/go/packages"
 )
@@ -97,10 +98,11 @@ func (c *Config) compileTarget(pkg *packages.Package, selected preparedTarget) (
 	if err != nil {
 		return nil, err
 	}
-	derived, err := recordgen.Generate(&resolved.Host, program)
+	helpers, err := recordresolve.Resolve(&resolved.Host, program)
 	if err != nil {
 		return nil, err
 	}
+	derived := recordgen.Generate(&resolved.Host, helpers)
 	data, err := gogen.Generate(resolved, derived)
 	if err != nil {
 		return nil, err

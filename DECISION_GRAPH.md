@@ -13,8 +13,12 @@ inputs and host snapshot must remain stable during matching. Hyrule cannot
 verify arbitrary callback purity. Builders may allocate and are never shared.
 The current optimizer folds adjacent identical matcher/test prefixes. It does
 not search past intervening predicates, reorder partial guards, infer operation
-kind exclusivity, or perform structural switch dispatch. Guard expression IDs
-are currently distinct, so the Go frontend does not deduplicate guard calls.
+kind exclusivity for opaque callbacks. Declared union schemas do permit
+structural switch dispatch. Guard expression IDs
+are currently distinct, so the resolver does not deduplicate guard calls.
+Expression IDs now name resolved `valueir` plans, never semantic expression nodes
+or capture-name maps. Committed query/choice continuations are also resolved
+before emission and remain outside the pure matching graph.
 
 Failure of a shared extraction skips its entire group. On success, child
 attempts run in source priority; an exhausted child rejoins the shared fallback.

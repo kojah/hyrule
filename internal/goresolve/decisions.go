@@ -9,7 +9,8 @@ import (
 )
 
 // decisionTables belongs to the Go adapter. The shared IR knows only its opaque
-// IDs, never these Go types, hook spellings, semantic expressions or capture maps.
+// IDs, never these Go types or hook spellings. Expression entries contain resolved
+// value/continuation plans; semantic expressions and capture maps do not escape.
 type decisionTables struct {
 	types       []types.Type
 	members     []string

@@ -20,7 +20,7 @@ func (p *parser) listExpression(depth int) *Expr {
 func (p *parser) guardExpression() *Expr {
 	left := p.outerExpression(0)
 	operator := p.text
-	if operator != "<" && operator != ">" && operator != "!" && !(operator == "=" && p.scanner.Peek() == '=') {
+	if operator != "<" && operator != ">" && operator != "!" && (operator != "=" || p.scanner.Peek() != '=') {
 		return left
 	}
 	p.next()
