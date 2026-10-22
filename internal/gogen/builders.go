@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"go/types"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
 // valueArguments preserves evaluation in source order even when named arguments
 // are passed in Go parameter order. Typed temporaries preserve constant/nil
 // assignment contexts and each nested builder is evaluated exactly once.
-func (e *emitter) valueArguments(x *syntax.Expr, signature *types.Signature, kind string) ([]string, error) {
+func (e *emitter) valueArguments(x *semantic.Expr, signature *types.Signature, kind string) ([]string, error) {
 	indices, err := e.builderPositions(x, signature, kind)
 	if err != nil {
 		return nil, err
@@ -23,7 +23,7 @@ func (e *emitter) valueArguments(x *syntax.Expr, signature *types.Signature, kin
 		if err != nil {
 			return nil, err
 		}
-		if ordered && (argument.Kind == syntax.Call || argument.Kind == syntax.Effects) {
+		if ordered && (argument.Kind == semantic.Call || argument.Kind == semantic.Effects) {
 			e.serial++
 			name := fmt.Sprintf("hv%d", e.serial)
 			fmt.Fprintf(&e.out, "var %s %s = %s\n", name, e.host.TypeName(signature.Params().At(parameter).Type()), value)
@@ -34,7 +34,7 @@ func (e *emitter) valueArguments(x *syntax.Expr, signature *types.Signature, kin
 	return arguments, nil
 }
 
-func (e *emitter) builderPositions(x *syntax.Expr, signature *types.Signature, kind string) ([]int, error) {
+func (e *emitter) builderPositions(x *semantic.Expr, signature *types.Signature, kind string) ([]int, error) {
 	named := hasNamedArguments(x)
 	indices := make([]int, len(x.Args))
 	if !named {
@@ -80,19 +80,19 @@ func (e *emitter) builderPositions(x *syntax.Expr, signature *types.Signature, k
 
 // Positional parents must sequence earlier siblings before named children or
 // structural values emit temporaries. Other positional trees retain their output.
-func requiresWrittenOrder(expression *syntax.Expr) bool {
-	if expression.Kind == syntax.List || expression.Kind == syntax.Update {
+func requiresWrittenOrder(expression *semantic.Expr) bool {
+	if expression.Kind == semantic.List || expression.Kind == semantic.Update {
 		return true
 	}
 	for _, argument := range expression.Args {
-		if argument.Field != "" || argument.Kind == syntax.Effects || requiresWrittenOrder(argument) {
+		if argument.Field != "" || argument.Kind == semantic.Effects || requiresWrittenOrder(argument) {
 			return true
 		}
 	}
 	return false
 }
 
-func hasNamedArguments(expression *syntax.Expr) bool {
+func hasNamedArguments(expression *semantic.Expr) bool {
 	for _, argument := range expression.Args {
 		if argument.Field != "" {
 			return true

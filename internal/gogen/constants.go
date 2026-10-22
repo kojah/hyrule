@@ -4,7 +4,7 @@ import (
 	"go/types"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
 type boundConstant struct {
@@ -12,10 +12,10 @@ type boundConstant struct {
 	schema matchir.ConstantSchema
 }
 
-func (e *emitter) bindConstant(binding *syntax.Binding) error {
-	object, known := e.host.Package.Scope().Lookup(binding.GoName).(*types.Const)
+func (e *emitter) bindConstant(binding *semantic.Binding) error {
+	object, known := e.host.Package.Scope().Lookup(binding.HostName).(*types.Const)
 	if !known {
-		return &syntax.Diagnostic{Position: binding.Position, Message: "constant binding requires a Go constant " + binding.GoName}
+		return &semantic.Diagnostic{Position: binding.Position, Message: "constant binding requires a Go constant " + binding.HostName}
 	}
 	for _, existing := range e.tables.constants {
 		if existing.object == object {
@@ -29,7 +29,7 @@ func (e *emitter) bindConstant(binding *syntax.Binding) error {
 	return nil
 }
 
-func (e *emitter) constant(expression *syntax.Expr) (*boundConstant, error) {
+func (e *emitter) constant(expression *semantic.Expr) (*boundConstant, error) {
 	value := e.constants[expression.Name]
 	if value == nil {
 		return nil, e.fail(expression, "unknown constant "+expression.Name)
@@ -37,7 +37,7 @@ func (e *emitter) constant(expression *syntax.Expr) (*boundConstant, error) {
 	return value, nil
 }
 
-func (e *emitter) checkConstant(expression *syntax.Expr, input types.Type) error {
+func (e *emitter) checkConstant(expression *semantic.Expr, input types.Type) error {
 	value, err := e.constant(expression)
 	if err != nil {
 		return err

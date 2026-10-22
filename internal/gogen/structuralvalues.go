@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
-func (e *emitter) listValue(expression *syntax.Expr, expected types.Type) (string, error) {
+func (e *emitter) listValue(expression *semantic.Expr, expected types.Type) (string, error) {
 	if expected == nil {
 		return "", e.fail(expression, "list construction requires a typed slice context")
 	}
@@ -54,8 +54,8 @@ func (e *emitter) structuralTemporary(typ types.Type, value string) string {
 	return name
 }
 
-func (e *emitter) updateRecord(expression *syntax.Expr) (*boundRecord, capture, error) {
-	if len(expression.Args) == 0 || expression.Args[0].Kind != syntax.Variable || expression.Args[0].Field != "" {
+func (e *emitter) updateRecord(expression *semantic.Expr) (*boundRecord, capture, error) {
+	if len(expression.Args) == 0 || expression.Args[0].Kind != semantic.Variable || expression.Args[0].Field != "" {
 		return nil, capture{}, e.fail(expression, "update requires an explicit captured record base")
 	}
 	base, known := e.captures[expression.Args[0].Name]
@@ -69,7 +69,7 @@ func (e *emitter) updateRecord(expression *syntax.Expr) (*boundRecord, capture, 
 	return record, base, nil
 }
 
-func (e *emitter) updateFields(expression *syntax.Expr, record *boundRecord) ([]int, error) {
+func (e *emitter) updateFields(expression *semantic.Expr, record *boundRecord) ([]int, error) {
 	indices := make([]int, len(expression.Args)-1)
 	seen := map[string]bool{}
 	for index, argument := range expression.Args[1:] {
@@ -91,7 +91,7 @@ func (e *emitter) updateFields(expression *syntax.Expr, record *boundRecord) ([]
 	return indices, nil
 }
 
-func (e *emitter) updateValue(expression *syntax.Expr) (string, error) {
+func (e *emitter) updateValue(expression *semantic.Expr) (string, error) {
 	record, base, err := e.updateRecord(expression)
 	if err != nil {
 		return "", err
@@ -112,7 +112,7 @@ func (e *emitter) updateValue(expression *syntax.Expr) (string, error) {
 	return name, nil
 }
 
-func (e *emitter) updateConstruction(rule *syntax.Rule, expression *syntax.Expr) (*matchir.Construction, error) {
+func (e *emitter) updateConstruction(rule *semantic.Rule, expression *semantic.Expr) (*matchir.Construction, error) {
 	record, base, err := e.updateRecord(expression)
 	if err != nil {
 		return nil, err
@@ -147,8 +147,8 @@ func (e *emitter) updateConstructionValue(update *matchir.RecordUpdate) (string,
 // once in written order; the generated function never applies the returned plan.
 func sigOutput(e *emitter) types.Type { return e.host.Signature.Results().At(0).Type() }
 
-func (e *emitter) typedValue(x *syntax.Expr, expected types.Type) (string, error) {
-	if x.Kind != syntax.Effects {
+func (e *emitter) typedValue(x *semantic.Expr, expected types.Type) (string, error) {
+	if x.Kind != semantic.Effects {
 		return e.valueExpected(x, "build", expected)
 	}
 	slice, ok := expected.Underlying().(*types.Slice)
@@ -172,26 +172,26 @@ func (e *emitter) typedValue(x *syntax.Expr, expected types.Type) (string, error
 	return e.host.TypeName(expected) + "{" + strings.Join(elements, ",") + "}", nil
 }
 
-func (e *emitter) resultValue(x *syntax.Expr, expected types.Type) (string, error) {
-	if x.Kind == syntax.Do {
+func (e *emitter) resultValue(x *semantic.Expr, expected types.Type) (string, error) {
+	if x.Kind == semantic.Do {
 		return e.resultValue(x.Args[0], expected)
 	}
-	if x.Kind == syntax.Decline {
+	if x.Kind == semantic.Decline {
 		return "", e.fail(x, "decline requires an enclosing ordered alternative")
 	}
-	if x.Kind == syntax.OrderedAlternatives {
+	if x.Kind == semantic.OrderedAlternatives {
 		return e.alternativesValue(x, expected)
 	}
-	if x.Kind == syntax.Selection {
+	if x.Kind == semantic.Selection {
 		return "", e.fail(x, "select requires ordered alternatives with a final pure fallback")
 	}
-	if x.Kind == syntax.Pure {
+	if x.Kind == semantic.Pure {
 		if containsQuery(x.Args[0]) {
 			return "", e.fail(x, "pure cannot execute a query")
 		}
 		return e.typedValue(x.Args[0], expected)
 	}
-	if x.Kind == syntax.Query {
+	if x.Kind == semantic.Query {
 		return e.queryValue(x, expected)
 	}
 	return e.typedValue(x, expected)

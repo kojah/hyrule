@@ -8,7 +8,7 @@ import (
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/compiler"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
 func untyped(typ types.Type) bool {
@@ -16,9 +16,9 @@ func untyped(typ types.Type) bool {
 	return known && basic.Info()&types.IsUntyped != 0
 }
 
-func (e *emitter) expressionType(expression *syntax.Expr) (types.Type, error) {
+func (e *emitter) expressionType(expression *semantic.Expr) (types.Type, error) {
 	switch expression.Kind {
-	case syntax.Variable:
+	case semantic.Variable:
 		name, path, _ := strings.Cut(expression.Name, ".")
 		value, known := e.captures[name]
 		if !known {
@@ -28,25 +28,25 @@ func (e *emitter) expressionType(expression *syntax.Expr) (types.Type, error) {
 			return e.host.Project(value.typ, strings.Split(path, "."))
 		}
 		return value.typ, nil
-	case syntax.Symbol:
+	case semantic.Symbol:
 		value, err := e.constant(expression)
 		if err != nil {
 			return nil, err
 		}
 		return value.object.Type(), nil
-	case syntax.Literal:
+	case semantic.Literal:
 		value, err := types.Eval(token.NewFileSet(), e.host.Package, token.NoPos, expression.Name)
 		if err != nil {
 			return nil, e.fail(expression, "invalid local literal")
 		}
 		return value.Type, nil
-	case syntax.Update:
+	case semantic.Update:
 		record, _, err := e.updateRecord(expression)
 		if err != nil {
 			return nil, err
 		}
 		return record.typ, nil
-	case syntax.List:
+	case semantic.List:
 		if len(expression.Args) == 0 {
 			return nil, e.fail(expression, "empty local list requires a typed context")
 		}
@@ -55,7 +55,7 @@ func (e *emitter) expressionType(expression *syntax.Expr) (types.Type, error) {
 			return nil, err
 		}
 		return types.NewSlice(types.Default(element)), nil
-	case syntax.Call:
+	case semantic.Call:
 		if _, arithmetic := compiler.Arithmetic(expression.Name); arithmetic {
 			return e.arithmeticType(expression, nil)
 		}
@@ -78,7 +78,7 @@ func (e *emitter) expressionType(expression *syntax.Expr) (types.Type, error) {
 	}
 }
 
-func (e *emitter) arithmeticType(expression *syntax.Expr, expected types.Type) (types.Type, error) {
+func (e *emitter) arithmeticType(expression *semantic.Expr, expected types.Type) (types.Type, error) {
 	if len(expression.Args) != 2 || hasNamedArguments(expression) {
 		return nil, e.fail(expression, "arithmetic requires two positional operands")
 	}
@@ -108,14 +108,14 @@ func (e *emitter) arithmeticType(expression *syntax.Expr, expected types.Type) (
 // prepareValue binds arithmetic values before their construction context.
 // Operations use ordinary Go integer semantics. Private names cannot collide
 // with parsed capture identifiers.
-func (e *emitter) prepareValue(rule *syntax.Rule, expression *syntax.Expr, expected types.Type) (*syntax.Expr, error) {
+func (e *emitter) prepareValue(rule *semantic.Rule, expression *semantic.Expr, expected types.Type) (*semantic.Expr, error) {
 	// Ordered query continuations bind their outcome captures only at the winning
 	// result. Do not lift work from those arms into the matching graph.
 	switch expression.Kind {
-	case syntax.Query, syntax.OrderedAlternatives, syntax.Selection, syntax.Pure, syntax.Do, syntax.Decline:
+	case semantic.Query, semantic.OrderedAlternatives, semantic.Selection, semantic.Pure, semantic.Do, semantic.Decline:
 		return expression, nil
 	}
-	if expression.Kind == syntax.Variable && strings.Contains(expression.Name, ".") {
+	if expression.Kind == semantic.Variable && strings.Contains(expression.Name, ".") {
 		typ, err := e.expressionType(expression)
 		if err != nil {
 			return nil, err
@@ -125,9 +125,9 @@ func (e *emitter) prepareValue(rule *syntax.Rule, expression *syntax.Expr, expec
 		e.serial = max(e.serial, int(output))
 		name := fmt.Sprintf("#%d", output)
 		e.captures[name] = capture{id: output, typ: typ}
-		return &syntax.Expr{Position: expression.Position, Kind: syntax.Variable, Name: name, Field: expression.Field}, nil
+		return &semantic.Expr{Position: expression.Position, Kind: semantic.Variable, Name: name, Field: expression.Field}, nil
 	}
-	if expression.Kind == syntax.Call {
+	if expression.Kind == semantic.Call {
 		if _, arithmetic := compiler.Arithmetic(expression.Name); arithmetic {
 			evaluation, typ, err := e.arithmeticEvaluation(rule, expression, expected)
 			if err != nil {
@@ -137,11 +137,11 @@ func (e *emitter) prepareValue(rule *syntax.Rule, expression *syntax.Expr, expec
 			e.serial = max(e.serial, int(output))
 			name := fmt.Sprintf("#%d", output)
 			e.captures[name] = capture{id: output, typ: typ}
-			return &syntax.Expr{Position: expression.Position, Kind: syntax.Variable, Name: name, Field: expression.Field}, nil
+			return &semantic.Expr{Position: expression.Position, Kind: semantic.Variable, Name: name, Field: expression.Field}, nil
 		}
 	}
 	copy := *expression
-	copy.Args = make([]*syntax.Expr, len(expression.Args))
+	copy.Args = make([]*semantic.Expr, len(expression.Args))
 	parameters, err := e.valueParameters(expression, expected)
 	if err != nil {
 		return nil, err
@@ -156,9 +156,9 @@ func (e *emitter) prepareValue(rule *syntax.Rule, expression *syntax.Expr, expec
 	return &copy, nil
 }
 
-func (e *emitter) valueParameters(expression *syntax.Expr, expected types.Type) ([]types.Type, error) {
+func (e *emitter) valueParameters(expression *semantic.Expr, expected types.Type) ([]types.Type, error) {
 	parameters := make([]types.Type, len(expression.Args))
-	if (expression.Kind == syntax.List || expression.Kind == syntax.Effects) && expected != nil {
+	if (expression.Kind == semantic.List || expression.Kind == semantic.Effects) && expected != nil {
 		if collection, known := expected.Underlying().(*types.Slice); known {
 			for index := range parameters {
 				parameters[index] = collection.Elem()
@@ -166,7 +166,7 @@ func (e *emitter) valueParameters(expression *syntax.Expr, expected types.Type) 
 		}
 		return parameters, nil
 	}
-	if expression.Kind == syntax.Update {
+	if expression.Kind == semantic.Update {
 		record, base, err := e.updateRecord(expression)
 		if err != nil {
 			return nil, err
@@ -181,7 +181,7 @@ func (e *emitter) valueParameters(expression *syntax.Expr, expected types.Type) 
 		}
 		return parameters, nil
 	}
-	if expression.Kind != syntax.Call {
+	if expression.Kind != semantic.Call {
 		return parameters, nil
 	}
 	var signature *types.Signature
@@ -192,7 +192,7 @@ func (e *emitter) valueParameters(expression *syntax.Expr, expected types.Type) 
 		signature = e.constructorSignature(variant)
 	} else if binding := e.bindings[expression.Name]; binding != nil && (binding.Kind == "build" || binding.Kind == "guard") {
 		kind = binding.Kind
-		_, candidate, err := e.host.Hook(binding.GoName)
+		_, candidate, err := e.host.Hook(binding.HostName)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +213,7 @@ func (e *emitter) valueParameters(expression *syntax.Expr, expected types.Type) 
 	return parameters, nil
 }
 
-func (e *emitter) arithmeticEvaluation(rule *syntax.Rule, expression *syntax.Expr, expected types.Type) (*matchir.Evaluation, types.Type, error) {
+func (e *emitter) arithmeticEvaluation(rule *semantic.Rule, expression *semantic.Expr, expected types.Type) (*matchir.Evaluation, types.Type, error) {
 	typ, err := e.arithmeticType(expression, expected)
 	if err != nil {
 		return nil, nil, err
@@ -221,7 +221,7 @@ func (e *emitter) arithmeticEvaluation(rule *syntax.Rule, expression *syntax.Exp
 	operation, _ := compiler.Arithmetic(expression.Name)
 	result := &matchir.Evaluation{Kind: matchir.ArithmeticEvaluation, Type: e.tables.typeID(typ), Arithmetic: operation}
 	for _, argument := range expression.Args {
-		if argument.Kind == syntax.Call {
+		if argument.Kind == semantic.Call {
 			if _, arithmetic := compiler.Arithmetic(argument.Name); arithmetic {
 				nested, _, err := e.arithmeticEvaluation(rule, argument, typ)
 				if err != nil {
@@ -231,7 +231,7 @@ func (e *emitter) arithmeticEvaluation(rule *syntax.Rule, expression *syntax.Exp
 				continue
 			}
 		}
-		if argument.Kind != syntax.Variable && argument.Kind != syntax.Symbol && argument.Kind != syntax.Literal {
+		if argument.Kind != semantic.Variable && argument.Kind != semantic.Symbol && argument.Kind != semantic.Literal {
 			return nil, nil, e.fail(argument, "arithmetic operands require values; bind domain operations with let")
 		}
 		operand, _, err := e.comparisonOperand(argument)
@@ -244,7 +244,7 @@ func (e *emitter) arithmeticEvaluation(rule *syntax.Rule, expression *syntax.Exp
 	return result, typ, nil
 }
 
-func (e *emitter) local(rule *syntax.Rule, clause syntax.Clause) error {
+func (e *emitter) local(rule *semantic.Rule, clause semantic.Clause) error {
 	if _, exists := e.captures[clause.Name]; exists {
 		return e.fail(clause.Value, "local binding cannot shadow capture or local $"+clause.Name)
 	}
@@ -263,7 +263,7 @@ func (e *emitter) local(rule *syntax.Rule, clause syntax.Clause) error {
 	if _, err := e.valueExpected(prepared, "build", typ); err != nil {
 		return err
 	}
-	if prepared.Kind == syntax.Variable && !strings.Contains(prepared.Name, ".") {
+	if prepared.Kind == semantic.Variable && !strings.Contains(prepared.Name, ".") {
 		e.captures[clause.Name] = e.captures[prepared.Name]
 		return nil
 	}

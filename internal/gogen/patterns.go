@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
-func (e *emitter) bind(x *syntax.Expr, name string, value matchir.ValueID, t types.Type) error {
+func (e *emitter) bind(x *semantic.Expr, name string, value matchir.ValueID, t types.Type) error {
 	if strings.Contains(name, ".") {
 		return e.fail(x, "field projections cannot bind captures")
 	}
@@ -44,8 +44,8 @@ func safeEquality(t types.Type) bool {
 	}
 	return true
 }
-func (e *emitter) pattern(x *syntax.Expr, value matchir.ValueID, t types.Type) error {
-	if x.Kind == syntax.Variable && strings.Contains(x.Name, ".") {
+func (e *emitter) pattern(x *semantic.Expr, value matchir.ValueID, t types.Type) error {
+	if x.Kind == semantic.Variable && strings.Contains(x.Name, ".") {
 		return e.fail(x, "field projections are read-only values, not capture patterns")
 	}
 	view := e.capturedView(x)
@@ -55,25 +55,25 @@ func (e *emitter) pattern(x *syntax.Expr, value matchir.ValueID, t types.Type) e
 		}
 	}
 	switch x.Kind {
-	case syntax.Alternation:
+	case semantic.Alternation:
 		if len(x.Args) != 1 {
 			return e.fail(x, "unexpanded alternatives")
 		}
 		return e.pattern(x.Args[0], value, t)
-	case syntax.Wildcard:
+	case semantic.Wildcard:
 		return nil
-	case syntax.Variable:
+	case semantic.Variable:
 		return e.bind(x, x.Name, value, t)
-	case syntax.Literal:
+	case semantic.Literal:
 		e.cursor.Test(matchir.Value(value), matchir.Literal(e.tables.literalID(x.Name)))
 		return nil
-	case syntax.Symbol:
+	case semantic.Symbol:
 		if err := e.checkConstant(x, t); err != nil {
 			return err
 		}
 		e.cursor.Test(matchir.Value(value), matchir.Constant(e.constants[x.Name].schema.ID))
 		return nil
-	case syntax.Call:
+	case semantic.Call:
 		name, sig, indices, err := e.matcher(x, t)
 		if err != nil {
 			return err

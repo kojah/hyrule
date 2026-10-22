@@ -5,24 +5,24 @@ import (
 	"go/types"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
-func (e *emitter) comparisonOperand(expression *syntax.Expr) (matchir.Operand, types.Type, error) {
+func (e *emitter) comparisonOperand(expression *semantic.Expr) (matchir.Operand, types.Type, error) {
 	switch expression.Kind {
-	case syntax.Variable:
+	case semantic.Variable:
 		value, known := e.captures[expression.Name]
 		if !known {
 			return matchir.Operand{}, nil, e.fail(expression, "unbound capture $"+expression.Name)
 		}
 		return matchir.Value(value.id), value.typ, nil
-	case syntax.Symbol:
+	case semantic.Symbol:
 		value, err := e.constant(expression)
 		if err != nil {
 			return matchir.Operand{}, nil, err
 		}
 		return matchir.Constant(value.schema.ID), value.object.Type(), nil
-	case syntax.Literal:
+	case semantic.Literal:
 		value, err := types.Eval(token.NewFileSet(), e.host.Package, token.NoPos, expression.Name)
 		if err != nil {
 			return matchir.Operand{}, nil, e.fail(expression, "invalid comparison literal")
@@ -33,7 +33,7 @@ func (e *emitter) comparisonOperand(expression *syntax.Expr) (matchir.Operand, t
 	}
 }
 
-func (e *emitter) compare(expression *syntax.Expr) error {
+func (e *emitter) compare(expression *semantic.Expr) error {
 	left, leftType, err := e.comparisonOperand(expression.Args[0])
 	if err != nil {
 		return err

@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
-func (e *emitter) recordValue(expression *syntax.Expr, record *boundRecord) (string, error) {
+func (e *emitter) recordValue(expression *semantic.Expr, record *boundRecord) (string, error) {
 	if record.declaration.View {
 		return "", e.fail(expression, "views are read-only; use a builder for construction")
 	}
@@ -30,7 +30,7 @@ func (e *emitter) recordLiteral(record *boundRecord, arguments []string) string 
 	return e.host.TypeName(record.typ) + "{" + strings.Join(fields, ", ") + "}"
 }
 
-func (e *emitter) recordConstruction(rule *syntax.Rule, expression *syntax.Expr, record *boundRecord) (*matchir.Construction, error) {
+func (e *emitter) recordConstruction(rule *semantic.Rule, expression *semantic.Expr, record *boundRecord) (*matchir.Construction, error) {
 	if record.declaration.View {
 		return nil, e.fail(expression, "views are read-only")
 	}
@@ -55,7 +55,7 @@ func (e *emitter) recordConstructionValue(construction *matchir.Construction) (s
 		if err != nil {
 			return "", err
 		}
-		if expression.expression.Kind == syntax.Call {
+		if expression.expression.Kind == semantic.Call {
 			e.serial++
 			temporary := fmt.Sprintf("hv%d", e.serial)
 			fmt.Fprintf(&e.out, "var %s %s = %s\n", temporary, e.host.TypeName(record.fields[field.Field].Type()), value)

@@ -10,18 +10,18 @@ import (
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/compiler"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
 type field struct {
-	declaration syntax.DerivedField
+	declaration semantic.DerivedField
 	member      *types.Var
 }
 
 type operation struct {
 	host        *hostapi.Host
 	program     *compiler.Program
-	declaration *syntax.DerivedOperation
+	declaration *semantic.DerivedOperation
 	typ         types.Type
 	sig         *types.Signature
 	fields      []field
@@ -37,18 +37,18 @@ func Generate(host *hostapi.Host, program *compiler.Program) (string, error) {
 	var result strings.Builder
 	for _, derive := range program.Derivations {
 		record := program.RecordNames[derive.Record]
-		typ, err := host.Type(record.GoType)
+		typ, err := host.Type(record.HostType)
 		if err != nil {
 			return "", err
 		}
 		structure, ok := typ.Underlying().(*types.Struct)
 		if !ok {
-			return "", &syntax.Diagnostic{Position: derive.Position, Message: "derive requires struct storage"}
+			return "", &semantic.Diagnostic{Position: derive.Position, Message: "derive requires struct storage"}
 		}
 		members := map[string]*types.Var{}
 		for _, declared := range record.Fields {
 			for i := 0; i < structure.NumFields(); i++ {
-				if structure.Field(i).Name() == declared.GoName {
+				if structure.Field(i).Name() == declared.HostName {
 					members[declared.Name] = structure.Field(i)
 				}
 			}
@@ -60,7 +60,7 @@ func Generate(host *hostapi.Host, program *compiler.Program) (string, error) {
 			}
 			sig, ok := resolved.Underlying().(*types.Signature)
 			if !ok || sig.Variadic() || sig.TypeParams() != nil && sig.TypeParams().Len() != 0 {
-				return "", &syntax.Diagnostic{Position: declaration.Position, Message: "derivation requires non-generic function signature"}
+				return "", &semantic.Diagnostic{Position: declaration.Position, Message: "derivation requires non-generic function signature"}
 			}
 			op := operation{host: host, program: program, declaration: declaration, typ: typ, sig: sig}
 			for _, policy := range declaration.Fields {
@@ -80,7 +80,7 @@ func Generate(host *hostapi.Host, program *compiler.Program) (string, error) {
 }
 
 func (op *operation) fail(message string) error {
-	return &syntax.Diagnostic{Position: op.declaration.Position, Message: op.declaration.Kind + " " + op.declaration.Function + ": " + message}
+	return &semantic.Diagnostic{Position: op.declaration.Position, Message: op.declaration.Kind + " " + op.declaration.Function + ": " + message}
 }
 
 func (op *operation) emit() error {

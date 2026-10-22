@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/gogen"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
 	"golang.org/x/tools/go/packages"
 )
@@ -27,52 +26,21 @@ type Artifact struct {
 // selected targets, and type-checks the complete generated package before
 // returning artifacts. An empty target selects all targets. It writes no files.
 func (c *Config) Compile(ctx context.Context, target string) ([]Artifact, error) {
-	overlay, err := c.obsoleteOverlay()
+	prepared, err := c.prepare(target)
 	if err != nil {
 		return nil, err
 	}
-	selected := []Target{}
-	parsed := map[string][]*syntax.File{}
-	for _, t := range c.Targets {
-		files, err := c.rules(t)
-		if err != nil {
-			return nil, err
-		}
-		parsed[t.Name] = files
-		functions := []hostapi.FunctionStub{}
-		if !t.Schema {
-			functions = append(functions, hostapi.FunctionStub{Signature: t.Signature, Function: t.Function})
-		}
-		for _, file := range files {
-			for _, item := range file.Items {
-				if item.Derivation != nil {
-					for _, operation := range item.Derivation.Operations {
-						functions = append(functions, hostapi.FunctionStub{Signature: operation.Signature, Function: operation.Function})
-					}
-				}
-			}
-		}
-		data, err := hostapi.Stubs(filepath.Join(c.root, t.Bindings), functions)
-		if err != nil {
-			return nil, fmt.Errorf("target %s: %w", t.Name, err)
-		}
-		overlay[filepath.Join(c.root, t.Out)] = data
-		if target == "" || target == t.Name {
-			selected = append(selected, t)
-		}
-	}
-	if len(selected) == 0 && target == "" {
+	if len(prepared.targets) == 0 {
 		return nil, nil
 	}
-	if len(selected) == 0 {
-		return nil, fmt.Errorf("unknown target %q", target)
-	}
+	overlay := prepared.overlay
 	loaded, err := c.loadPackages(ctx, overlay)
 	if err != nil {
 		return nil, err
 	}
 	artifacts := []Artifact{}
-	for _, t := range selected {
+	for _, selected := range prepared.targets {
+		t := selected.target
 		pkg := loaded[filepath.Join(c.root, t.Package)]
 		if pkg == nil {
 			return nil, fmt.Errorf("target %s: package not loaded", t.Name)
@@ -89,7 +57,7 @@ func (c *Config) Compile(ctx context.Context, target string) ([]Artifact, error)
 				return nil, fmt.Errorf("%s is not a function signature", t.Signature)
 			}
 		}
-		files := parsed[t.Name]
+		program := selected.program
 		names := map[string]*types.Package{}
 		for _, file := range pkg.Syntax {
 			if filepath.Clean(pkg.Fset.Position(file.Pos()).Filename) != filepath.Join(c.root, t.Bindings) {
@@ -105,7 +73,7 @@ func (c *Config) Compile(ctx context.Context, target string) ([]Artifact, error)
 				}
 			}
 		}
-		data, err := gogen.Generate(gogen.Host{Package: pkg.Types, Signature: sig, Function: t.Function, ImportNames: names}, files)
+		data, err := gogen.Generate(gogen.Host{Package: pkg.Types, Signature: sig, Function: t.Function, ImportNames: names}, program)
 		if err != nil {
 			return nil, fmt.Errorf("target %s: %w", t.Name, err)
 		}

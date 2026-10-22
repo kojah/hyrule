@@ -8,23 +8,23 @@ import (
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
 // Native APIs reuse the ordered recognizer internally. Only the generated
 // boundary packs values: callers and host hooks retain their original Go APIs.
 // A total boundary must explicitly say what failed recognition means.
 type nativeSignature struct {
-	declaration   *syntax.API
+	declaration   *semantic.API
 	original      *types.Signature
 	function      string
 	input, output *types.Struct
 }
 
-func nativeAPI(h *Host, api *syntax.API) (*nativeSignature, error) {
+func nativeAPI(h *Host, api *semantic.API) (*nativeSignature, error) {
 	sig := h.Signature
 	if api != nil && api.Fallback != nil && containsQuery(api.Fallback) {
-		return nil, &syntax.Diagnostic{Position: api.Position, Message: "signature fallback cannot run a query"}
+		return nil, &semantic.Diagnostic{Position: api.Position, Message: "signature fallback cannot run a query"}
 	}
 	if sig.Variadic() || sig.TypeParams().Len() != 0 || sig.Params().Len() < 1 {
 		return nil, fmt.Errorf("signature requires non-generic, non-variadic parameters")
@@ -73,7 +73,7 @@ func (e *emitter) bindNativeRecords(native *nativeSignature) {
 	}{
 		{"inputs", native.input, native.original.Params()}, {"outputs", native.output, native.original.Results()},
 	} {
-		record := &boundRecord{declaration: &syntax.Record{Name: item.name}, typ: item.storage,
+		record := &boundRecord{declaration: &semantic.Record{Name: item.name}, typ: item.storage,
 			schema: &matchir.RecordSchema{ID: matchir.RecordID(len(e.records)), Name: item.name, Type: e.tables.typeID(item.storage)}}
 		results := make([]*types.Var, item.storage.NumFields(), item.storage.NumFields()+1)
 		for i := range results {
@@ -129,7 +129,7 @@ func (e *emitter) emitNativeAPI(native *nativeSignature) error {
 
 // forwardingCall substitutes only values, never evaluating a nested host call.
 // Free captures are explicit lexical inputs from the rule that invokes it.
-func (e *emitter) forwardingCall(x *syntax.Expr, kind string) (*syntax.Expr, error) {
+func (e *emitter) forwardingCall(x *semantic.Expr, kind string) (*semantic.Expr, error) {
 	b := e.bindings[x.Name]
 	if b == nil || b.Body == nil {
 		return x, nil
@@ -137,7 +137,7 @@ func (e *emitter) forwardingCall(x *syntax.Expr, kind string) (*syntax.Expr, err
 	if b.Kind != kind || len(x.Args) != len(b.Parameters) {
 		return nil, e.fail(x, "forwarding binding arity or kind mismatch")
 	}
-	params := map[string]*syntax.Expr{}
+	params := map[string]*semantic.Expr{}
 	for i, name := range b.Parameters {
 		if x.Args[i].Field != "" {
 			return nil, e.fail(x.Args[i], "forwarding arguments must be positional")
@@ -151,15 +151,15 @@ func (e *emitter) forwardingCall(x *syntax.Expr, kind string) (*syntax.Expr, err
 	call.Args = nil
 	for _, arg := range b.Body.Args {
 		copy := *arg
-		if arg.Kind == syntax.Variable {
+		if arg.Kind == semantic.Variable {
 			base, path, _ := strings.Cut(arg.Name, ".")
 			if actual := params[base]; actual != nil {
-				if actual.Kind != syntax.Variable && actual.Kind != syntax.Literal && actual.Kind != syntax.Symbol {
+				if actual.Kind != semantic.Variable && actual.Kind != semantic.Literal && actual.Kind != semantic.Symbol {
 					return nil, e.fail(actual, "forwarded arguments require captures, constants or literals")
 				}
 				copy = *actual
 				if path != "" {
-					if copy.Kind != syntax.Variable {
+					if copy.Kind != semantic.Variable {
 						return nil, e.fail(actual, "field projection requires a capture")
 					}
 					copy.Name += "." + path
@@ -171,8 +171,8 @@ func (e *emitter) forwardingCall(x *syntax.Expr, kind string) (*syntax.Expr, err
 	return &call, nil
 }
 
-func containsQuery(x *syntax.Expr) bool {
-	if x.Kind == syntax.Query || x.Kind == syntax.Selection || x.Kind == syntax.Do || x.Kind == syntax.Decline {
+func containsQuery(x *semantic.Expr) bool {
+	if x.Kind == semantic.Query || x.Kind == semantic.Selection || x.Kind == semantic.Do || x.Kind == semantic.Decline {
 		return true
 	}
 	for _, child := range x.Args {

@@ -7,18 +7,18 @@ import (
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
 // Queries are committed construction continuations, never matching predicates.
 // They cannot be shared with another rule or retried by its failure edges. Each
 // reached occurrence executes once. Ordinary decisions are exhaustive; a select
 // leaves other valid outcomes unanswered within its ordered alternatives.
-func (e *emitter) queryValue(x *syntax.Expr, expected types.Type) (string, error) {
+func (e *emitter) queryValue(x *semantic.Expr, expected types.Type) (string, error) {
 	return e.queryResult(x, expected, "")
 }
 
-func (e *emitter) queryResult(x *syntax.Expr, expected types.Type, answered string) (string, error) {
+func (e *emitter) queryResult(x *semantic.Expr, expected types.Type, answered string) (string, error) {
 	x = selectionOutcomes(x)
 	outer := e.captures
 	e.captures = cloneCaptures(outer)
@@ -27,7 +27,7 @@ func (e *emitter) queryResult(x *syntax.Expr, expected types.Type, answered stri
 		return "", e.fail(x, "query capture shadows $"+x.Name)
 	}
 	call := x.Args[0]
-	if call.Kind != syntax.Call || call.Bind != "" {
+	if call.Kind != semantic.Call || call.Bind != "" {
 		return "", e.fail(call, "query requires a query hook call")
 	}
 	expanded, err := e.forwardingCall(call, "query")
@@ -48,7 +48,7 @@ func (e *emitter) queryResult(x *syntax.Expr, expected types.Type, answered stri
 	if sig.Results().Len() < 1 || sig.Params().Len() != len(call.Args) {
 		return "", e.fail(call, "query requires results and one parameter per argument")
 	}
-	if x.Sequential && x.Arms[0].Pattern.Kind == syntax.Variable {
+	if x.BindResult && x.Arms[0].Pattern.Kind == semantic.Variable {
 		return e.bindQueryResult(x, call, name, sig, expected, answered)
 	}
 	if sig.Results().Len() == 1 && types.Identical(sig.Results().At(0).Type().Underlying(), types.Typ[types.Bool]) {
@@ -101,7 +101,7 @@ func (e *emitter) queryResult(x *syntax.Expr, expected types.Type, answered stri
 // A whole-result binding consumes every result without choosing a success tag.
 // Declared union values still cross the same validation boundary as decisions.
 func (e *emitter) bindQueryResult(
-	x, call *syntax.Expr, name string, sig *types.Signature, expected types.Type, answered string,
+	x, call *semantic.Expr, name string, sig *types.Signature, expected types.Type, answered string,
 ) (string, error) {
 	pattern := x.Arms[0].Pattern
 	if _, exists := e.captures[pattern.Name]; exists || strings.Contains(pattern.Name, ".") || pattern.Bind != "" || pattern.Field != "" {
@@ -143,10 +143,10 @@ func (e *emitter) emitQueryCall(name string, sig *types.Signature, arguments []s
 	return id
 }
 
-func (e *emitter) queryArguments(call *syntax.Expr, sig *types.Signature) ([]string, error) {
+func (e *emitter) queryArguments(call *semantic.Expr, sig *types.Signature) ([]string, error) {
 	arguments := make([]string, len(call.Args))
 	for i, arg := range call.Args {
-		if arg.Field != "" || arg.Bind != "" || (arg.Kind != syntax.Variable && arg.Kind != syntax.Literal && arg.Kind != syntax.Symbol) {
+		if arg.Field != "" || arg.Bind != "" || (arg.Kind != semantic.Variable && arg.Kind != semantic.Literal && arg.Kind != semantic.Symbol) {
 			return nil, e.fail(arg, "query arguments must be positional captures, constants or literals")
 		}
 		value, err := e.value(arg, "build")
@@ -163,12 +163,12 @@ func (e *emitter) queryArguments(call *syntax.Expr, sig *types.Signature) ([]str
 // Each arm handles a complete variant, and payloads stay inside that arm.
 // Ordinary decisions require all variants. A selection deliberately handles chosen
 // variants, but cannot refine them or turn captures into equality tests.
-func (e *emitter) checkDecision(x *syntax.Expr, union *boundUnion) error {
+func (e *emitter) checkDecision(x *semantic.Expr, union *boundUnion) error {
 	seen := map[string]struct{}{}
 	for _, arm := range x.Arms {
 		pattern := arm.Pattern
 		variant := e.constructors[pattern.Name]
-		if pattern.Kind != syntax.Call || pattern.Bind != "" || variant == nil || variant.union != union {
+		if pattern.Kind != semantic.Call || pattern.Bind != "" || variant == nil || variant.union != union {
 			return e.fail(pattern, "decision arm must name a variant of "+union.declaration.Name)
 		}
 		if _, exists := seen[pattern.Name]; exists {
@@ -186,11 +186,11 @@ func (e *emitter) checkDecision(x *syntax.Expr, union *boundUnion) error {
 			names[name] = struct{}{}
 		}
 		for _, arg := range pattern.Args {
-			if arg.Kind == syntax.Wildcard {
+			if arg.Kind == semantic.Wildcard {
 				continue
 			}
 			_, exists := names[arg.Name]
-			if arg.Kind != syntax.Variable || exists || strings.Contains(arg.Name, ".") {
+			if arg.Kind != semantic.Variable || exists || strings.Contains(arg.Name, ".") {
 				return e.fail(arg, "decision fields require fresh captures or wildcards; refinements are not exhaustive")
 			}
 			names[arg.Name] = struct{}{}
@@ -202,10 +202,10 @@ func (e *emitter) checkDecision(x *syntax.Expr, union *boundUnion) error {
 			missing = append(missing, variant.declaration.Name)
 		}
 	}
-	if len(missing) != 0 && x.Kind != syntax.Selection {
+	if len(missing) != 0 && x.Kind != semantic.Selection {
 		return e.fail(x, "non-exhaustive query decision: missing "+strings.Join(missing, ", "))
 	}
-	if x.Kind == syntax.Selection && len(x.Arms) > 1 {
+	if x.Kind == semantic.Selection && len(x.Arms) > 1 {
 		return e.checkSelectionCaptures(x, union)
 	}
 	return nil
@@ -213,25 +213,25 @@ func (e *emitter) checkDecision(x *syntax.Expr, union *boundUnion) error {
 
 // A selected OR expands into switch arms after one query. It never expands the
 // query itself, so state and budget charges occur once for the whole selection.
-func selectionOutcomes(x *syntax.Expr) *syntax.Expr {
-	if x.Kind != syntax.Selection || len(x.Arms) != 1 {
+func selectionOutcomes(x *semantic.Expr) *semantic.Expr {
+	if x.Kind != semantic.Selection || len(x.Arms) != 1 {
 		return x
 	}
 	pattern := x.Arms[0].Pattern
-	if pattern.Kind != syntax.Alternation || pattern.Bind != "" || pattern.Field != "" {
+	if pattern.Kind != semantic.Alternation || pattern.Bind != "" || pattern.Field != "" {
 		return x
 	}
 	copy := *x
 	copy.Arms = nil
 	for _, pattern := range x.Arms[0].Pattern.Args {
-		copy.Arms = append(copy.Arms, syntax.DecisionArm{Pattern: pattern, Result: x.Arms[0].Result})
+		copy.Arms = append(copy.Arms, semantic.DecisionArm{Pattern: pattern, Result: x.Arms[0].Result})
 	}
 	return &copy
 }
 
 // Every selected variant exposes the same typed scope to the shared result.
 // Field names and positions may differ; capture names and Go types must agree.
-func (e *emitter) checkSelectionCaptures(x *syntax.Expr, union *boundUnion) error {
+func (e *emitter) checkSelectionCaptures(x *semantic.Expr, union *boundUnion) error {
 	var common map[string]types.Type
 	for _, arm := range x.Arms {
 		pattern := arm.Pattern
@@ -242,7 +242,7 @@ func (e *emitter) checkSelectionCaptures(x *syntax.Expr, union *boundUnion) erro
 		}
 		captures := map[string]types.Type{}
 		for i, arg := range pattern.Args {
-			if arg.Kind == syntax.Variable {
+			if arg.Kind == semantic.Variable {
 				captures[arg.Name] = variant.fields[indices[i]].Type()
 			}
 		}
@@ -264,13 +264,13 @@ func (e *emitter) checkSelectionCaptures(x *syntax.Expr, union *boundUnion) erro
 	return nil
 }
 
-func (e *emitter) bindOutcome(pattern *syntax.Expr, variant *boundVariant, input string) error {
+func (e *emitter) bindOutcome(pattern *semantic.Expr, variant *boundVariant, input string) error {
 	_, _, indices, err := e.matcher(pattern, variant.union.typ)
 	if err != nil {
 		return err
 	}
 	for i, arg := range pattern.Args {
-		if arg.Kind == syntax.Wildcard {
+		if arg.Kind == semantic.Wildcard {
 			continue
 		}
 		field := variant.fields[indices[i]]
@@ -284,11 +284,11 @@ func (e *emitter) bindOutcome(pattern *syntax.Expr, variant *boundVariant, input
 
 // Boolean outcomes are closed by the Go type itself; no schema or tag aliases
 // are needed. A named capture retains its exact (possibly named) Boolean type.
-func (e *emitter) booleanQuery(x, call *syntax.Expr, name string, sig *types.Signature, expected types.Type, answered string) (string, error) {
+func (e *emitter) booleanQuery(x, call *semantic.Expr, name string, sig *types.Signature, expected types.Type, answered string) (string, error) {
 	seen := map[string]bool{}
 	for _, arm := range x.Arms {
 		p := arm.Pattern
-		if p.Kind != syntax.Literal || (p.Name != "true" && p.Name != "false") || p.Bind != "" || p.Field != "" {
+		if p.Kind != semantic.Literal || (p.Name != "true" && p.Name != "false") || p.Bind != "" || p.Field != "" {
 			return "", e.fail(p, "Boolean decision arms require true and false")
 		}
 		if seen[p.Name] {
@@ -296,7 +296,7 @@ func (e *emitter) booleanQuery(x, call *syntax.Expr, name string, sig *types.Sig
 		}
 		seen[p.Name] = true
 	}
-	if x.Kind != syntax.Selection && (!seen["true"] || !seen["false"]) {
+	if x.Kind != semantic.Selection && (!seen["true"] || !seen["false"]) {
 		return "", e.fail(x, "non-exhaustive Boolean query decision: require true and false")
 	}
 	args, err := e.queryArguments(call, sig)
@@ -331,7 +331,7 @@ func (e *emitter) booleanQuery(x, call *syntax.Expr, name string, sig *types.Sig
 // edge. Each query and its result construction stay inside a lazy branch. The
 // final pure answer makes the continuation total without manufacturing Option
 // wrappers or letting an unanswered query retry a different rule.
-func (e *emitter) alternativesValue(x *syntax.Expr, expected types.Type) (string, error) {
+func (e *emitter) alternativesValue(x *semantic.Expr, expected types.Type) (string, error) {
 	outer := e.captures
 	defer func() { e.captures = outer }()
 	e.serial++
@@ -341,11 +341,11 @@ func (e *emitter) alternativesValue(x *syntax.Expr, expected types.Type) (string
 	for i, alternative := range x.Args {
 		e.captures = cloneCaptures(outer)
 		last := i == len(x.Args)-1
-		if last && alternative.Kind != syntax.Pure {
+		if last && alternative.Kind != semantic.Pure {
 			return "", e.fail(alternative, "ordered alternatives require a final pure fallback")
 		}
 		fmt.Fprintf(&e.out, "if !%s {\n", answered)
-		if alternative.Kind == syntax.Pure {
+		if alternative.Kind == semantic.Pure {
 			if !last {
 				return "", e.fail(alternative, "pure must be the final ordered alternative")
 			}
@@ -355,12 +355,12 @@ func (e *emitter) alternativesValue(x *syntax.Expr, expected types.Type) (string
 			}
 			fmt.Fprintf(&e.out, "%s = %s\n", output, value)
 		} else {
-			if alternative.Kind != syntax.Selection && alternative.Kind != syntax.Do {
+			if alternative.Kind != semantic.Selection && alternative.Kind != semantic.Do {
 				return "", e.fail(alternative, "ordered alternative requires query ... select, do, or a final pure fallback")
 			}
 			var value string
 			var err error
-			if alternative.Kind == syntax.Selection {
+			if alternative.Kind == semantic.Selection {
 				value, err = e.queryResult(alternative, expected, answered)
 			} else {
 				value, err = e.answerValue(alternative, expected, answered)
@@ -378,16 +378,16 @@ func (e *emitter) alternativesValue(x *syntax.Expr, expected types.Type) (string
 // An answer flag belongs to the nearest ordered choice. Nested queries propagate
 // it without declaring success until a terminal result is constructed. Decline
 // leaves it false; effects already performed by queries are never rolled back.
-func (e *emitter) answerValue(x *syntax.Expr, expected types.Type, answered string) (string, error) {
+func (e *emitter) answerValue(x *semantic.Expr, expected types.Type, answered string) (string, error) {
 	if answered == "" {
 		return e.resultValue(x, expected)
 	}
 	switch x.Kind {
-	case syntax.Do:
+	case semantic.Do:
 		return e.answerValue(x.Args[0], expected, answered)
-	case syntax.Query:
+	case semantic.Query:
 		return e.queryResult(x, expected, answered)
-	case syntax.Decline:
+	case semantic.Decline:
 		e.serial++
 		zero := fmt.Sprintf("hv%d", e.serial)
 		fmt.Fprintf(&e.out, "var %s %s\n", zero, e.host.TypeName(expected))

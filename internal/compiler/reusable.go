@@ -4,7 +4,7 @@ import (
 	"iter"
 	"sort"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
 // Reuse is bounded independently of OR variants: ordinary nested matchers can
@@ -13,7 +13,7 @@ const maxPatternNodes = 10000
 const maxPatternDepth = 64
 
 type patternArgument struct {
-	expression *syntax.Expr
+	expression *semantic.Expr
 	scope      map[string]patternArgument
 }
 
@@ -22,7 +22,7 @@ type patternExpansion struct {
 	remaining int
 }
 
-func (e *Program) reuseRules(rules iter.Seq[*syntax.Rule]) ([]*syntax.Rule, error) {
+func (e *Program) reuseRules(rules iter.Seq[*semantic.Rule]) ([]*semantic.Rule, error) {
 	names := make([]string, 0, len(e.patterns))
 	for name := range e.patterns {
 		names = append(names, name)
@@ -42,7 +42,7 @@ func (e *Program) reuseRules(rules iter.Seq[*syntax.Rule]) ([]*syntax.Rule, erro
 			return nil, err
 		}
 	}
-	var result []*syntax.Rule
+	var result []*semantic.Rule
 	for rule := range rules {
 		e.rule = rule.Name
 		expansion := patternExpansion{emitter: e, remaining: maxPatternNodes}
@@ -57,7 +57,7 @@ func (e *Program) reuseRules(rules iter.Seq[*syntax.Rule]) ([]*syntax.Rule, erro
 	return result, nil
 }
 
-func (expansion *patternExpansion) expand(x *syntax.Expr, scope map[string]patternArgument, depth int) (*syntax.Expr, error) {
+func (expansion *patternExpansion) expand(x *semantic.Expr, scope map[string]patternArgument, depth int) (*semantic.Expr, error) {
 	e := expansion.emitter
 	if depth >= maxPatternDepth {
 		return nil, e.fail(x, "expanded pattern nesting exceeds 64")
@@ -66,7 +66,7 @@ func (expansion *patternExpansion) expand(x *syntax.Expr, scope map[string]patte
 		return nil, e.fail(x, "pattern expansion exceeds 10000 nodes")
 	}
 	expansion.remaining--
-	if x.Kind == syntax.Variable {
+	if x.Kind == semantic.Variable {
 		if argument, ok := scope[x.Name]; ok {
 			result, err := expansion.expand(argument.expression, argument.scope, depth+1)
 			if err != nil {
@@ -83,10 +83,10 @@ func (expansion *patternExpansion) expand(x *syntax.Expr, scope map[string]patte
 	return expansion.bindExpanded(x, result, scope, depth)
 }
 
-func (expansion *patternExpansion) expandShape(x *syntax.Expr, scope map[string]patternArgument, depth int) (*syntax.Expr, error) {
+func (expansion *patternExpansion) expandShape(x *semantic.Expr, scope map[string]patternArgument, depth int) (*semantic.Expr, error) {
 	e := expansion.emitter
-	var result *syntax.Expr
-	if definition := e.patterns[x.Name]; x.Kind == syntax.Call && definition != nil {
+	var result *semantic.Expr
+	if definition := e.patterns[x.Name]; x.Kind == semantic.Call && definition != nil {
 		if len(x.Args) != len(definition.Parameters) {
 			return nil, e.fail(x, "reusable pattern arity mismatch for "+x.Name)
 		}
@@ -119,7 +119,7 @@ func (expansion *patternExpansion) expandShape(x *syntax.Expr, scope map[string]
 	return result, nil
 }
 
-func (expansion *patternExpansion) bindExpanded(x, result *syntax.Expr, scope map[string]patternArgument, depth int) (*syntax.Expr, error) {
+func (expansion *patternExpansion) bindExpanded(x, result *semantic.Expr, scope map[string]patternArgument, depth int) (*semantic.Expr, error) {
 	e := expansion.emitter
 	if x.Bind == "" {
 		return result, nil
@@ -131,16 +131,16 @@ func (expansion *patternExpansion) bindExpanded(x, result *syntax.Expr, scope ma
 			return nil, err
 		}
 		switch resolved.Kind {
-		case syntax.Wildcard:
+		case semantic.Wildcard:
 			return result, nil
-		case syntax.Variable:
+		case semantic.Variable:
 			name = resolved.Name
 		default:
 			return nil, e.fail(x, "whole-input pattern parameter requires a capture or wildcard")
 		}
 	}
 	if result.Bind != "" {
-		return &syntax.Expr{Position: x.Position, Kind: syntax.Alternation, Bind: name, Field: x.Field, Args: []*syntax.Expr{result}}, nil
+		return &semantic.Expr{Position: x.Position, Kind: semantic.Alternation, Bind: name, Field: x.Field, Args: []*semantic.Expr{result}}, nil
 	}
 	result.Bind = name
 	return result, nil

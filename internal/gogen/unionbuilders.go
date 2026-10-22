@@ -6,10 +6,10 @@ import (
 	"go/types"
 	"strings"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
-func (e *emitter) constructorValue(expression *syntax.Expr, variant *boundVariant) (string, error) {
+func (e *emitter) constructorValue(expression *semantic.Expr, variant *boundVariant) (string, error) {
 	if len(expression.Args) != len(variant.fields) && !hasNamedArguments(expression) {
 		return "", e.fail(expression, "union constructor requires every declared field")
 	}
@@ -34,11 +34,11 @@ func (e *emitter) constructorSignature(variant *boundVariant) *types.Signature {
 	return types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), result, false)
 }
 
-func (e *emitter) construction(rule *syntax.Rule, expression *syntax.Expr) (*matchir.Construction, error) {
-	if expression.Kind == syntax.Update {
+func (e *emitter) construction(rule *semantic.Rule, expression *semantic.Expr) (*matchir.Construction, error) {
+	if expression.Kind == semantic.Update {
 		return e.updateConstruction(rule, expression)
 	}
-	if expression.Kind == syntax.List {
+	if expression.Kind == semantic.List {
 		collection, known := e.host.Signature.Results().At(0).Type().Underlying().(*types.Slice)
 		if !known {
 			return nil, e.fail(expression, "list construction requires a slice result type")
@@ -49,13 +49,13 @@ func (e *emitter) construction(rule *syntax.Rule, expression *syntax.Expr) (*mat
 		}
 		return &matchir.Construction{List: list}, nil
 	}
-	if expression.Kind == syntax.Call {
+	if expression.Kind == semantic.Call {
 		if record := e.recordNames[expression.Name]; record != nil {
 			return e.recordConstruction(rule, expression, record)
 		}
 	}
 	variant := e.constructors[expression.Name]
-	if expression.Kind != syntax.Call || variant == nil {
+	if expression.Kind != semantic.Call || variant == nil {
 		return nil, nil
 	}
 	positions, err := e.builderPositions(expression, e.constructorSignature(variant), "build")
@@ -90,7 +90,7 @@ func (e *emitter) constructionValue(construction *matchir.Construction) (string,
 		if err != nil {
 			return "", err
 		}
-		if expression.expression.Kind == syntax.Call || expression.expression.Kind == syntax.Effects {
+		if expression.expression.Kind == semantic.Call || expression.expression.Kind == semantic.Effects {
 			e.serial++
 			temporary := fmt.Sprintf("hv%d", e.serial)
 			fmt.Fprintf(&e.out, "var %s %s = %s\n", temporary, e.host.TypeName(variant.fields[field.Field].Type()), value)

@@ -3,7 +3,7 @@ package compiler
 import (
 	"iter"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
 // maxAlternatives bounds code growth before allocating expanded pattern trees.
@@ -11,8 +11,8 @@ const maxAlternatives = 64
 
 // expandRules gives OR the semantics of adjacent source rules: a failed guard
 // retries the next alternative, and builders run only after all guards succeed.
-func (e *Program) expandRules(rules iter.Seq[*syntax.Rule], check func(*syntax.Rule) error) ([]*syntax.Rule, error) {
-	var expanded []*syntax.Rule
+func (e *Program) expandRules(rules iter.Seq[*semantic.Rule], check func(*semantic.Rule) error) ([]*semantic.Rule, error) {
+	var expanded []*semantic.Rule
 	for rule := range rules {
 		e.rule = rule.Name
 		if _, err := e.variantCount(rule.Match); err != nil {
@@ -30,9 +30,9 @@ func (e *Program) expandRules(rules iter.Seq[*syntax.Rule], check func(*syntax.R
 	return expanded, nil
 }
 
-func (e *Program) variantCount(x *syntax.Expr) (int, error) {
+func (e *Program) variantCount(x *semantic.Expr) (int, error) {
 	count := 1
-	if x.Kind == syntax.Alternation {
+	if x.Kind == semantic.Alternation {
 		count = 0
 	}
 	for _, child := range x.Args {
@@ -40,7 +40,7 @@ func (e *Program) variantCount(x *syntax.Expr) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if x.Kind == syntax.Alternation {
+		if x.Kind == semantic.Alternation {
 			if count > maxAlternatives-n {
 				return 0, e.fail(x, "or expansion exceeds 64 alternatives per rule")
 			}
@@ -55,15 +55,15 @@ func (e *Program) variantCount(x *syntax.Expr) (int, error) {
 	return count, nil
 }
 
-func expandPattern(x *syntax.Expr) []*syntax.Expr {
-	if x.Kind == syntax.Alternation {
-		var result []*syntax.Expr
+func expandPattern(x *semantic.Expr) []*semantic.Expr {
+	if x.Kind == semantic.Alternation {
+		var result []*semantic.Expr
 		for _, child := range x.Args {
 			for _, variant := range expandPattern(child) {
 				copy := *variant
 				// Preserve an outer whole-input capture without replacing an inner one.
 				if x.Bind != "" && copy.Bind != "" {
-					copy = syntax.Expr{Position: x.Position, Kind: syntax.Alternation, Bind: x.Bind, Args: []*syntax.Expr{variant}}
+					copy = semantic.Expr{Position: x.Position, Kind: semantic.Alternation, Bind: x.Bind, Args: []*semantic.Expr{variant}}
 				} else if x.Bind != "" {
 					copy.Bind = x.Bind
 				}
@@ -75,14 +75,14 @@ func expandPattern(x *syntax.Expr) []*syntax.Expr {
 	}
 	copy := *x
 	copy.Args = nil
-	variants := []*syntax.Expr{&copy}
+	variants := []*semantic.Expr{&copy}
 	for _, child := range x.Args {
 		choices := expandPattern(child)
-		next := make([]*syntax.Expr, 0, len(variants)*len(choices))
+		next := make([]*semantic.Expr, 0, len(variants)*len(choices))
 		for _, partial := range variants {
 			for _, choice := range choices {
 				composed := *partial
-				composed.Args = append(append([]*syntax.Expr(nil), partial.Args...), choice)
+				composed.Args = append(append([]*semantic.Expr(nil), partial.Args...), choice)
 				next = append(next, &composed)
 			}
 		}

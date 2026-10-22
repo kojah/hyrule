@@ -3,12 +3,12 @@ package gogen
 import (
 	"go/types"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
 // matcher resolves child positions once for both contract checking and emission.
 // Named fields refer to Go result names; the final success bool is never a child.
-func (e *emitter) matcher(x *syntax.Expr, input types.Type) (string, *types.Signature, []int, error) {
+func (e *emitter) matcher(x *semantic.Expr, input types.Type) (string, *types.Signature, []int, error) {
 	var name string
 	var sig *types.Signature
 	var err error
@@ -65,7 +65,7 @@ func (e *emitter) matcher(x *syntax.Expr, input types.Type) (string, *types.Sign
 
 // checkPattern joins capture contracts at each OR, before later siblings can
 // hide a missing binding. It never invokes a host hook or constructs effects.
-func (e *emitter) checkPattern(x *syntax.Expr, input types.Type) error {
+func (e *emitter) checkPattern(x *semantic.Expr, input types.Type) error {
 	if x.Bind != "" {
 		captured := input
 		if view := e.capturedView(x); view != nil {
@@ -76,11 +76,11 @@ func (e *emitter) checkPattern(x *syntax.Expr, input types.Type) error {
 		}
 	}
 	switch x.Kind {
-	case syntax.Variable:
+	case semantic.Variable:
 		return e.bind(x, x.Name, 0, input)
-	case syntax.Symbol:
+	case semantic.Symbol:
 		return e.checkConstant(x, input)
-	case syntax.Call:
+	case semantic.Call:
 		_, sig, indices, err := e.matcher(x, input)
 		if err != nil {
 			return err
@@ -90,7 +90,7 @@ func (e *emitter) checkPattern(x *syntax.Expr, input types.Type) error {
 				return err
 			}
 		}
-	case syntax.Alternation:
+	case semantic.Alternation:
 		incoming := e.captures
 		var joined map[string]capture
 		for _, alternative := range x.Args {
@@ -132,7 +132,7 @@ func sameCaptures(left, right map[string]capture) bool {
 	return true
 }
 
-func (e *emitter) matchSignature(x *syntax.Expr) (string, *types.Signature, error) {
+func (e *emitter) matchSignature(x *semantic.Expr) (string, *types.Signature, error) {
 	if record := e.recordNames[x.Name]; record != nil {
 		return x.Name, record.signature, nil
 	}

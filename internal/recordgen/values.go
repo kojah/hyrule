@@ -133,7 +133,7 @@ func (op *operation) keyFields(resultType types.Type, exact bool) ([]string, err
 		if record.View {
 			continue
 		}
-		candidate, err := op.host.Type(record.GoType)
+		candidate, err := op.host.Type(record.HostType)
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +144,7 @@ func (op *operation) keyFields(resultType types.Type, exact bool) ([]string, err
 		resultFields = map[string]*types.Var{}
 		for _, declared := range record.Fields {
 			for i := 0; i < structure.NumFields(); i++ {
-				if structure.Field(i).Name() == declared.GoName {
+				if structure.Field(i).Name() == declared.HostName {
 					resultFields[declared.Name] = structure.Field(i)
 				}
 			}

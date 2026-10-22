@@ -7,18 +7,18 @@ import (
 	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
 type boundRecord struct {
-	declaration *syntax.Record
+	declaration *semantic.Record
 	schema      *matchir.RecordSchema
 	typ         types.Type
 	fields      []*types.Var
 	signature   *types.Signature
 }
 
-func (e *emitter) bindRecords(declarations []*syntax.Record) error {
+func (e *emitter) bindRecords(declarations []*semantic.Record) error {
 	e.recordNames = map[string]*boundRecord{}
 	for _, declaration := range declarations {
 		if err := e.bindRecord(declaration); err != nil {
@@ -28,13 +28,13 @@ func (e *emitter) bindRecords(declarations []*syntax.Record) error {
 	return nil
 }
 
-func (e *emitter) bindRecord(declaration *syntax.Record) error {
+func (e *emitter) bindRecord(declaration *semantic.Record) error {
 	failure := func(message string) error {
-		return &syntax.Diagnostic{Position: declaration.Position, Message: message}
+		return &semantic.Diagnostic{Position: declaration.Position, Message: message}
 	}
-	typ, err := e.host.Type(declaration.GoType)
+	typ, err := e.host.Type(declaration.HostType)
 	if err != nil || genericStorage(typ) {
-		return failure("record requires a non-generic Go type " + declaration.GoType)
+		return failure("record requires a non-generic Go type " + declaration.HostType)
 	}
 	storageType := typ
 	if pointer, ok := storageType.Underlying().(*types.Pointer); ok && declaration.View {
@@ -55,13 +55,13 @@ func (e *emitter) bindRecord(declaration *syntax.Record) error {
 	names, storage := map[string]bool{}, map[string]bool{}
 	var results []*types.Var
 	for index, field := range declaration.Fields {
-		if names[field.Name] || storage[field.GoName] {
+		if names[field.Name] || storage[field.HostName] {
 			return failure("duplicate record field or storage field " + field.Name)
 		}
-		names[field.Name], storage[field.GoName] = true, true
-		member := directField(structure, field.GoName)
+		names[field.Name], storage[field.HostName] = true, true
+		member := directField(structure, field.HostName)
 		if member == nil || !member.Exported() && member.Pkg() != e.host.Package {
-			return failure("missing or inaccessible direct record field " + field.GoName)
+			return failure("missing or inaccessible direct record field " + field.HostName)
 		}
 		record.fields = append(record.fields, member)
 		results = append(results, types.NewVar(token.NoPos, e.host.Package, field.Name, member.Type()))
@@ -101,7 +101,7 @@ func (e *emitter) recordSignature(record *boundRecord) *types.Signature {
 // viewMatcher emits a read-only structural extraction. Interface inputs are
 // checked with a Go type assertion; nil pointers never expose fields. There is
 // no host callback to hide state changes inside the shared matching graph.
-func (e *emitter) viewMatcher(x *syntax.Expr, record *boundRecord, input types.Type) (string, *types.Signature, error) {
+func (e *emitter) viewMatcher(x *semantic.Expr, record *boundRecord, input types.Type) (string, *types.Signature, error) {
 	var parameters, values, assignments []string
 	for i, field := range record.fields {
 		name := fmt.Sprintf("hr%d", i)
@@ -142,8 +142,8 @@ func (e *emitter) viewMatcher(x *syntax.Expr, record *boundRecord, input types.T
 // A whole view capture is the successfully asserted storage value, rather than
 // its wider input interface. It has the same identity and is usable by hooks
 // requiring that concrete Go type. The extra matcher output is not a field.
-func (e *emitter) capturedView(x *syntax.Expr) *boundRecord {
-	if x.Kind != syntax.Call || x.Bind == "" {
+func (e *emitter) capturedView(x *semantic.Expr) *boundRecord {
+	if x.Kind != semantic.Call || x.Bind == "" {
 		return nil
 	}
 	if record := e.recordNames[x.Name]; record != nil && record.declaration.View {

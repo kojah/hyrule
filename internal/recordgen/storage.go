@@ -67,7 +67,7 @@ func (op *operation) storage() error {
 	var freeze string
 	for _, derive := range op.program.Derivations {
 		record := op.program.RecordNames[derive.Record]
-		typ, err := op.host.Type(record.GoType)
+		typ, err := op.host.Type(record.HostType)
 		if err != nil {
 			return err
 		}

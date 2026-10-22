@@ -1,6 +1,6 @@
 package compiler
 
-import "github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+import "github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 
 // validateDefinition checks the entire declaration graph, including unused
 // definitions, without expansion. Every capture is an explicit parameter.
@@ -26,7 +26,7 @@ func (e *Program) validateDefinition(name string, checked, active map[string]str
 		return e.fail(definition.Body, "arithmetic operation is reserved: "+name)
 	}
 	for _, binding := range e.Bindings {
-		if binding.Name == name || binding.GoName == name {
+		if binding.Name == name || binding.HostName == name {
 			return e.fail(definition.Body, "pattern collides with Go hook "+name)
 		}
 	}
@@ -56,7 +56,7 @@ func (e *Program) validateDefinition(name string, checked, active map[string]str
 	return nil
 }
 
-func (e *Program) validatePatternBody(x *syntax.Expr, parameters, used map[string]struct{}, visit func(string) error) error {
+func (e *Program) validatePatternBody(x *semantic.Expr, parameters, used map[string]struct{}, visit func(string) error) error {
 	for _, capture := range []string{x.Bind, captureName(x)} {
 		if capture != "" {
 			used[capture] = struct{}{}
@@ -65,7 +65,7 @@ func (e *Program) validatePatternBody(x *syntax.Expr, parameters, used map[strin
 			}
 		}
 	}
-	if x.Kind == syntax.Call {
+	if x.Kind == semantic.Call {
 		if definition := e.patterns[x.Name]; definition != nil {
 			if len(x.Args) != len(definition.Parameters) {
 				return e.fail(x, "reusable pattern arity mismatch for "+x.Name)
@@ -77,7 +77,7 @@ func (e *Program) validatePatternBody(x *syntax.Expr, parameters, used map[strin
 			return e.fail(x, "unknown match pattern "+x.Name)
 		}
 	}
-	if x.Kind == syntax.Symbol {
+	if x.Kind == semantic.Symbol {
 		if binding := e.Bindings[x.Name]; binding == nil || binding.Kind != "const" {
 			return e.fail(x, "unknown constant "+x.Name)
 		}
@@ -90,8 +90,8 @@ func (e *Program) validatePatternBody(x *syntax.Expr, parameters, used map[strin
 	return nil
 }
 
-func captureName(x *syntax.Expr) string {
-	if x.Kind == syntax.Variable {
+func captureName(x *semantic.Expr) string {
+	if x.Kind == semantic.Variable {
 		return x.Name
 	}
 	return ""

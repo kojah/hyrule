@@ -6,14 +6,14 @@ import (
 	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
-func (e *emitter) decisions(rules []*syntax.Rule, input types.Type) (*matchir.Node, error) {
+func (e *emitter) decisions(rules []*semantic.Rule, input types.Type) (*matchir.Node, error) {
 	union := e.unionFor(input)
 	for _, declared := range e.unions {
 		if declared.declaration.Exhaustive && declared != union {
-			return nil, &syntax.Diagnostic{Position: declared.declaration.Position, Message: "exhaustive union must be the target input type"}
+			return nil, &semantic.Diagnostic{Position: declared.declaration.Position, Message: "exhaustive union must be the target input type"}
 		}
 	}
 	if union != nil {
@@ -22,11 +22,11 @@ func (e *emitter) decisions(rules []*syntax.Rule, input types.Type) (*matchir.No
 		}
 		dispatch := &matchir.Node{Kind: matchir.Dispatch, Union: union.schema, Input: 0, Fallback: &matchir.Node{Kind: matchir.Fail}}
 		for _, variant := range union.variants {
-			var selected []*syntax.Rule
+			var selected []*semantic.Rule
 			for _, rule := range rules {
 				root := rootPattern(rule.Match)
 				constructor := e.constructors[root.Name]
-				if root.Kind == syntax.Call && constructor != nil && constructor.union == union && constructor != variant {
+				if root.Kind == semantic.Call && constructor != nil && constructor.union == union && constructor != variant {
 					continue
 				}
 				selected = append(selected, rule)
@@ -42,14 +42,14 @@ func (e *emitter) decisions(rules []*syntax.Rule, input types.Type) (*matchir.No
 	return e.orderedDecisions(rules, input)
 }
 
-func rootPattern(expression *syntax.Expr) *syntax.Expr {
-	for expression.Kind == syntax.Alternation && len(expression.Args) == 1 {
+func rootPattern(expression *semantic.Expr) *semantic.Expr {
+	for expression.Kind == semantic.Alternation && len(expression.Args) == 1 {
 		expression = expression.Args[0]
 	}
 	return expression
 }
 
-func (e *emitter) checkCoverage(union *boundUnion, rules []*syntax.Rule) error {
+func (e *emitter) checkCoverage(union *boundUnion, rules []*semantic.Rule) error {
 	if !union.declaration.Exhaustive {
 		return nil
 	}
@@ -59,11 +59,11 @@ func (e *emitter) checkCoverage(union *boundUnion, rules []*syntax.Rule) error {
 			continue
 		}
 		root := rootPattern(rule.Match)
-		if root.Kind == syntax.Wildcard || root.Kind == syntax.Variable {
+		if root.Kind == semantic.Wildcard || root.Kind == semantic.Variable {
 			return nil
 		}
 		variant := e.constructors[root.Name]
-		if root.Kind != syntax.Call || variant == nil || variant.union != union {
+		if root.Kind != semantic.Call || variant == nil || variant.union != union {
 			continue
 		}
 		seen := map[string]struct{}{}
@@ -72,10 +72,10 @@ func (e *emitter) checkCoverage(union *boundUnion, rules []*syntax.Rule) error {
 		}
 		unrestricted := true
 		for _, field := range root.Args {
-			if field.Kind == syntax.Wildcard {
+			if field.Kind == semantic.Wildcard {
 				continue
 			}
-			if field.Kind != syntax.Variable {
+			if field.Kind != semantic.Variable {
 				unrestricted = false
 				break
 			}
@@ -99,7 +99,7 @@ func (e *emitter) checkCoverage(union *boundUnion, rules []*syntax.Rule) error {
 		return nil
 	}
 	message := "non-exhaustive union " + union.declaration.Name + ": missing unconditional variants " + strings.Join(missing, ", ")
-	return &syntax.Diagnostic{Position: union.declaration.Position, Message: message}
+	return &semantic.Diagnostic{Position: union.declaration.Position, Message: message}
 }
 
 func (e *emitter) emitDispatch(node *matchir.Node) error {

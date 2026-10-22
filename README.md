@@ -266,6 +266,12 @@ rule's execution path. The caller applies returned effects after matching.
 Host code owns memory identity, soundness, unknown-value policy, lifecycle,
 control flow, budgets and scheduling.
 
+The parser retains formatting and source spelling for round-trip formatting.
+`frontend.Lower` copies it into an owned `semantic` model, resolves outer-call
+shorthand across all input files, and removes comments and formatting flags.
+Declaration collection runs on this model before host-package loading. Compiler,
+record generation and Go planning do not import the parser representation.
+
 The shared compiler expands reusable patterns and OR alternatives while retaining
 source priority. The matching IR uses opaque compiler-owned hook, type, value,
 literal and expression IDs; its optimizer and decision edges contain no Go

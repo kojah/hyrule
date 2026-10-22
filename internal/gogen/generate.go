@@ -11,7 +11,7 @@ import (
 	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/recordgen"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
 // Host is the typed Go generation context.
@@ -26,7 +26,7 @@ type capture struct {
 }
 type emitter struct {
 	host         *Host
-	bindings     map[string]*syntax.Binding
+	bindings     map[string]*semantic.Binding
 	captures     map[string]capture
 	out          strings.Builder
 	rule         string
@@ -44,12 +44,8 @@ type emitter struct {
 
 // Generate validates structural contracts and emits a single ordered dispatcher.
 // The caller must type-check the result to validate literals and assignments.
-func Generate(h Host, files []*syntax.File) ([]byte, error) {
+func Generate(h Host, program *compiler.Program) ([]byte, error) {
 	h.Imports = map[string]string{}
-	program, err := compiler.Collect(files)
-	if err != nil {
-		return nil, err
-	}
 	if h.Signature == nil {
 		if program.API != nil || len(program.Bindings) != 0 || len(program.Unions) != 0 || program.HasRules() {
 			return nil, fmt.Errorf("schema target accepts only records and derivations")
@@ -79,20 +75,16 @@ func Generate(h Host, files []*syntax.File) ([]byte, error) {
 	if native != nil {
 		e.bindNativeRecords(native)
 	}
-	for _, file := range files {
-		for _, item := range file.Items {
-			if binding := item.Binding; binding != nil {
-				if binding.Kind == "const" {
-					if err := e.bindConstant(binding); err != nil {
-						return nil, err
-					}
-				} else if _, _, err := e.host.Hook(binding.GoName); err != nil {
-					return nil, &syntax.Diagnostic{Position: binding.Position, Message: err.Error()}
-				}
+	for _, binding := range program.BindingOrder {
+		if binding.Kind == "const" {
+			if err := e.bindConstant(binding); err != nil {
+				return nil, err
 			}
+		} else if _, _, err := e.host.Hook(binding.HostName); err != nil {
+			return nil, &semantic.Diagnostic{Position: binding.Position, Message: err.Error()}
 		}
 	}
-	rules, err := program.Expand(func(rule *syntax.Rule) error {
+	rules, err := program.Expand(func(rule *semantic.Rule) error {
 		checker := emitter{host: e.host, bindings: e.bindings, constructors: e.constructors, recordNames: e.recordNames, constants: e.constants, captures: map[string]capture{}, rule: rule.Name}
 		return checker.checkPattern(rule.Match, sig.Params().At(0).Type())
 	})
@@ -168,40 +160,40 @@ func renderSource(h *Host, body string) ([]byte, error) {
 	return result, nil
 }
 
-func (e *emitter) fail(x *syntax.Expr, message string) error {
-	return &syntax.Diagnostic{Position: x.Position, Rule: e.rule, Message: message}
+func (e *emitter) fail(x *semantic.Expr, message string) error {
+	return &semantic.Diagnostic{Position: x.Position, Rule: e.rule, Message: message}
 }
-func (e *emitter) binding(x *syntax.Expr, kind string) (string, *types.Signature, error) {
+func (e *emitter) binding(x *semantic.Expr, kind string) (string, *types.Signature, error) {
 	b := e.bindings[x.Name]
 	if b == nil || b.Kind != kind {
 		return "", nil, e.fail(x, "expected "+kind+" binding for "+x.Name)
 	}
-	name, sig, err := e.host.Hook(b.GoName)
+	name, sig, err := e.host.Hook(b.HostName)
 	if err != nil {
 		return "", nil, e.fail(x, err.Error())
 	}
 	return name, sig, nil
 }
-func (e *emitter) value(x *syntax.Expr, kind string) (string, error) {
+func (e *emitter) value(x *semantic.Expr, kind string) (string, error) {
 	return e.valueExpected(x, kind, nil)
 }
 
-func (e *emitter) valueExpected(x *syntax.Expr, kind string, expected types.Type) (string, error) {
+func (e *emitter) valueExpected(x *semantic.Expr, kind string, expected types.Type) (string, error) {
 	if x.Bind != "" {
 		return "", e.fail(x, "captures may only be bound in patterns")
 	}
 	switch x.Kind {
-	case syntax.List:
+	case semantic.List:
 		if kind != "build" {
 			return "", e.fail(x, "lists are construction expressions")
 		}
 		return e.listValue(x, expected)
-	case syntax.Update:
+	case semantic.Update:
 		if kind != "build" {
 			return "", e.fail(x, "updates are construction expressions")
 		}
 		return e.updateValue(x)
-	case syntax.Variable:
+	case semantic.Variable:
 		var c capture
 		var ok bool
 		name, path, _ := strings.Cut(x.Name, ".")
@@ -216,15 +208,15 @@ func (e *emitter) valueExpected(x *syntax.Expr, kind string, expected types.Type
 			return valueName(c.id) + "." + path, nil
 		}
 		return valueName(c.id), nil
-	case syntax.Literal:
+	case semantic.Literal:
 		return x.Name, nil
-	case syntax.Symbol:
+	case semantic.Symbol:
 		value, err := e.constant(x)
 		if err != nil {
 			return "", err
 		}
 		return value.object.Name(), nil
-	case syntax.Call:
+	case semantic.Call:
 		if record := e.recordNames[x.Name]; record != nil {
 			if kind != "build" {
 				return "", e.fail(x, "record constructors are not guard expressions")
@@ -263,14 +255,14 @@ func (e *emitter) valueExpected(x *syntax.Expr, kind string, expected types.Type
 			return "", err
 		}
 		return name + "(" + strings.Join(args, ", ") + ")", nil
-	case syntax.Query, syntax.Do, syntax.Decline:
+	case semantic.Query, semantic.Do, semantic.Decline:
 		return "", e.fail(x, "query/do/decline is only allowed as a rule result or decision arm")
-	case syntax.Effects:
+	case semantic.Effects:
 		if kind != "build" || expected == nil {
 			return "", e.fail(x, "effects requires a typed build context")
 		}
 		return e.typedValue(x, expected)
-	case syntax.Alternation:
+	case semantic.Alternation:
 		return "", e.fail(x, "or is only allowed in matcher patterns")
 	default:
 		return "", e.fail(x, "wildcards are only allowed in patterns")

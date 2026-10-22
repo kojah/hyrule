@@ -4,11 +4,11 @@ import (
 	"go/types"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
 // decisionTables belongs to the Go adapter. The shared IR knows only its opaque
-// IDs, never these Go types, hook spellings, syntax expressions or capture maps.
+// IDs, never these Go types, hook spellings, semantic expressions or capture maps.
 type decisionTables struct {
 	types       []types.Type
 	hooks       []string
@@ -17,8 +17,8 @@ type decisionTables struct {
 	constants   []*boundConstant
 }
 type decisionExpression struct {
-	rule       *syntax.Rule
-	expression *syntax.Expr
+	rule       *semantic.Rule
+	expression *semantic.Expr
 	captures   map[string]capture
 }
 
@@ -49,14 +49,14 @@ func (t *decisionTables) literalID(text string) matchir.LiteralID {
 	t.literals = append(t.literals, text)
 	return matchir.LiteralID(len(t.literals) - 1)
 }
-func (e *emitter) expressionID(rule *syntax.Rule, expression *syntax.Expr) matchir.ExprID {
+func (e *emitter) expressionID(rule *semantic.Rule, expression *semantic.Expr) matchir.ExprID {
 	e.tables.expressions = append(e.tables.expressions, decisionExpression{rule, expression, cloneCaptures(e.captures)})
 	return matchir.ExprID(len(e.tables.expressions) - 1)
 }
 
 // decisions adapts resolved Go hook signatures to the neutral matching graph.
 // The graph owns extraction identity, pure-prefix sharing and fallback edges.
-func (e *emitter) orderedDecisions(rules []*syntax.Rule, input types.Type) (*matchir.Node, error) {
+func (e *emitter) orderedDecisions(rules []*semantic.Rule, input types.Type) (*matchir.Node, error) {
 	e.graph = matchir.New(e.tables.typeID(input))
 	for _, rule := range rules {
 		e.rule = rule.Name
@@ -76,7 +76,7 @@ func (e *emitter) orderedDecisions(rules []*syntax.Rule, input types.Type) (*mat
 			if err != nil {
 				return nil, err
 			}
-			if condition.Kind == syntax.Comparison {
+			if condition.Kind == semantic.Comparison {
 				if err := e.compare(condition); err != nil {
 					return nil, err
 				}
