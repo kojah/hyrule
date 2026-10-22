@@ -100,3 +100,26 @@ func TestBehavior(t *testing.T) {
 		t.Fatalf("generated type switch: %v\n%s\n%s", err, out, generated)
 	}
 }
+
+// A view over its own non-pointer input type always matches, so the generated
+// dispatcher must not append an unreachable failure return that go vet rejects.
+func TestInfallibleViewPassesVet(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "input.rules", `view Point = Node
+  a: A
+
+@First
+rewrite (Point (a: a)) = a
+`)
+	c, artifacts := compile(t, root)
+	if err := c.Publish(artifacts, false); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command("go", "vet", ".")
+	command.Dir = root
+	command.Env = append(os.Environ(), "GOWORK=off")
+	if out, err := command.CombinedOutput(); err != nil {
+		generated, _ := os.ReadFile(root + "/rewrite_gen.go")
+		t.Fatalf("go vet: %v\n%s\n%s", err, out, generated)
+	}
+}

@@ -42,7 +42,7 @@ func (e *emitter) emitDecisions(node, stop *matchir.Node) error {
 			continue
 		}
 		terminal := node.Kind == matchir.Variant && e.variantReturns(node) ||
-			(node.Kind == matchir.Record || node.Kind == matchir.Evaluate) && continuationReturns(node.Next, node.Fallback)
+			e.infallible(node) && e.continuationReturns(node.Next, node.Fallback)
 		if terminal {
 			if err := e.emitDeadSuffix(node.Fallback, stop); err != nil {
 				return err
@@ -62,17 +62,26 @@ func (e *emitter) emitDecisions(node, stop *matchir.Node) error {
 	return nil
 }
 
-// Infallible extractions/evaluations enter their continuation unconditionally.
-// Recognizing that terminal path avoids emitting unreachable trailing failure
-// returns, while unreachable rules still receive Go type validation above it.
-func decisionReturns(node *matchir.Node) bool { return continuationReturns(node, nil) }
+// Recognizing an always-returning path avoids emitting unreachable trailing
+// failure returns, while unreachable rules still receive Go type validation.
+func (e *emitter) decisionReturns(node *matchir.Node) bool { return e.continuationReturns(node, nil) }
 
-func continuationReturns(node, stop *matchir.Node) bool {
+// infallible extractions enter their continuation unconditionally: records,
+// evaluations and views whose input already has the view's non-pointer type.
+func (e *emitter) infallible(node *matchir.Node) bool {
+	if node.Kind == matchir.Record || node.Kind == matchir.Evaluate {
+		return true
+	}
+	view := e.viewFor(node)
+	return view != nil && !view.Assert && !view.Pointer
+}
+
+func (e *emitter) continuationReturns(node, stop *matchir.Node) bool {
 	for node != nil && node != stop && node.Kind != matchir.Fail {
 		if node.Kind == matchir.Build {
 			return true
 		}
-		if (node.Kind == matchir.Record || node.Kind == matchir.Evaluate) && continuationReturns(node.Next, node.Fallback) {
+		if e.infallible(node) && e.continuationReturns(node.Next, node.Fallback) {
 			return true
 		}
 		node = node.Fallback

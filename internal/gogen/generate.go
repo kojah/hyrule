@@ -51,7 +51,7 @@ func Generate(program *goplan.Program, declarations string) ([]byte, error) {
 	if err := e.emitDecisions(program.Root, nil); err != nil {
 		return nil, err
 	}
-	if !decisionReturns(program.Root) {
+	if !e.decisionReturns(program.Root) {
 		fmt.Fprintf(&e.out, "var zero %s; return zero, false\n", output)
 	}
 	e.out.WriteString("}\n")

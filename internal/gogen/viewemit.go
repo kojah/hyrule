@@ -146,7 +146,7 @@ func (e *emitter) emitClause(clause *typeClause, storage string) error {
 		if dead {
 			e.out.WriteString("}\n")
 		}
-		dead = dead || continuationReturns(node.Next, node.Fallback)
+		dead = dead || e.continuationReturns(node.Next, node.Fallback)
 	}
 	return nil
 }
