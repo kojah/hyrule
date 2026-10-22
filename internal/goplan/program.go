@@ -22,12 +22,27 @@ type Program struct {
 	Serial  int
 }
 
-// Tables gives host meanings to compiler-owned IDs.
+// Tables gives host meanings to compiler-owned IDs. Views is parallel to
+// Hooks; a non-nil entry describes a structural view the backend may inline.
 type Tables struct {
 	Types                    []types.Type
 	Members, Hooks, Literals []string
+	Views                    []*ViewHook
 	Expressions              []Expression
 	Constants                []*types.Const
+}
+
+// ViewHook is a pure structural extraction: an optional type assertion, a nil
+// check for pointer storage, then direct field reads. Outputs are Fields in
+// order, followed by the matched storage itself when Whole is set. Concrete
+// assertions are mutually exclusive, so ordered runs may share a type switch.
+type ViewHook struct {
+	Type     string
+	Assert   bool
+	Concrete bool
+	Pointer  bool
+	Fields   []string
+	Whole    bool
 }
 
 // Expression is either a pure value computation or a committed continuation.

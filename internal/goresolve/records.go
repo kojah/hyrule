@@ -6,6 +6,7 @@ import (
 	"go/types"
 	"strings"
 
+	"github.com/kojah/lockdoc/tools/hyrule/internal/goplan"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
@@ -120,11 +121,19 @@ func (e *resolver) viewMatcher(x *semantic.Expr, record *boundRecord, input type
 	}
 	results = append(results, types.NewVar(token.NoPos, e.host.Package, "matched", types.Typ[types.Bool]))
 	parameters = append(parameters, "hok bool")
+	view := &goplan.ViewHook{Type: e.host.TypeName(record.typ), Whole: x.Bind != ""}
+	for _, field := range record.fields {
+		view.Fields = append(view.Fields, field.Name())
+	}
+	_, view.Pointer = record.typ.Underlying().(*types.Pointer)
+	_, abstract := record.typ.Underlying().(*types.Interface)
+	view.Concrete = !abstract
 	var extraction string
 	if types.Identical(input, record.typ) {
 		extraction = "hvalue := hinput\n"
 	} else if iface, ok := input.Underlying().(*types.Interface); ok && types.AssertableTo(iface, record.typ) {
 		extraction = "hvalue, hok := hinput.(" + e.host.TypeName(record.typ) + ")\nif !hok { return }\n"
+		view.Assert = true
 	} else {
 		return "", nil, e.fail(x, "view input must be its storage type or a compatible interface")
 	}
@@ -136,6 +145,7 @@ func (e *resolver) viewMatcher(x *semantic.Expr, record *boundRecord, input type
 	body := fmt.Sprintf("(func(hinput %s) (%s) { %s%s; return %s })",
 		e.host.TypeName(input), strings.Join(parameters, ","), extraction, strings.Join(assignments, ";"), strings.Join(values, ","))
 	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(types.NewVar(token.NoPos, e.host.Package, "input", input)), types.NewTuple(results...), false)
+	e.tables.view(body, view)
 	return body, sig, nil
 }
 

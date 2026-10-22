@@ -9,6 +9,9 @@ import (
 
 // emitMatch scopes typed extractions to their successful matching continuation.
 func (e *emitter) emitMatch(node *matchir.Node) error {
+	if view := e.viewFor(node); view != nil {
+		return e.emitViewMatch(node, view)
+	}
 	outputs := make([]string, 0, len(node.Outputs)+1)
 	for _, output := range node.Outputs {
 		outputs = append(outputs, valueName(output))

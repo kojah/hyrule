@@ -33,6 +33,13 @@ func (e *emitter) decisionValue(node *matchir.Node, kind string) string {
 // source spelling, calls and locals; the shared graph is never interpreted.
 func (e *emitter) emitDecisions(node, stop *matchir.Node) error {
 	for node != nil && node != stop && node.Kind != matchir.Fail {
+		if run := e.typeRun(node, stop); len(run) > 1 {
+			if err := e.emitTypeSwitch(run); err != nil {
+				return err
+			}
+			node = run[len(run)-1].Fallback
+			continue
+		}
 		terminal := node.Kind == matchir.Variant && e.variantReturns(node) ||
 			(node.Kind == matchir.Record || node.Kind == matchir.Evaluate) && continuationReturns(node.Next, node.Fallback)
 		if terminal {

@@ -10,6 +10,9 @@ import (
 func (e *resolver) publish(root *matchir.Node, native *nativeSignature) *goplan.Program {
 	result := &goplan.Program{Host: *e.host, Root: root, Serial: e.serial,
 		Tables: goplan.Tables{Types: e.tables.types, Members: e.tables.members, Hooks: e.tables.hooks, Literals: e.tables.literals}}
+	for _, hook := range e.tables.hooks {
+		result.Tables.Views = append(result.Tables.Views, e.tables.views[hook])
+	}
 	for _, expression := range e.tables.expressions {
 		result.Tables.Expressions = append(result.Tables.Expressions, goplan.Expression{Value: expression.value, Result: expression.result})
 	}

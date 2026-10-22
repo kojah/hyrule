@@ -210,7 +210,11 @@ binding tables. The portable IRs contain opaque IDs, not Go types or syntax.
 The matching DAG shares adjacent identical pure prefixes while retaining failure
 and guard fallthrough. A bottom-up hash-consing pass then shares identical pure subgraphs without
 mutating the input or merging construction/allocation nodes. Union schemas allow
-checked exclusive dispatch. Generated
+checked exclusive dispatch. View extractions are emitted inline. Consecutive
+alternatives asserting concrete view types on one value share a Go type switch:
+each type's alternatives keep source order, typed nil pointers never match, and
+any other rule ends the run. Cases with identical bodies that bind no fields
+share one clause. Generated
 functions use typed locals and direct branches, without runtime graphs, capture
 maps, boxing or reflection. Go is the only implemented backend. See
 [decision-graph measurements](DECISION_GRAPH.md) for the original benchmark scope.

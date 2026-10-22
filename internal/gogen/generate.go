@@ -24,6 +24,7 @@ type emitter struct {
 	unions      []*goplan.Union
 	established *goplan.Variant
 	serial      int
+	storage     int
 	out         strings.Builder
 }
 

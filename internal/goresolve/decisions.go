@@ -1,6 +1,7 @@
 package goresolve
 
 import (
+	"github.com/kojah/lockdoc/tools/hyrule/internal/goplan"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/valueir"
 	"go/types"
 
@@ -15,6 +16,7 @@ type decisionTables struct {
 	types       []types.Type
 	members     []string
 	hooks       []string
+	views       map[string]*goplan.ViewHook
 	literals    []string
 	expressions []decisionExpression
 	constants   []*boundConstant
@@ -42,6 +44,14 @@ func (t *decisionTables) hookID(name string) matchir.HookID {
 	t.hooks = append(t.hooks, name)
 	return matchir.HookID(len(t.hooks) - 1)
 }
+// view records inline extraction data for a view hook spelled by name.
+func (t *decisionTables) view(name string, view *goplan.ViewHook) {
+	if t.views == nil {
+		t.views = map[string]*goplan.ViewHook{}
+	}
+	t.views[name] = view
+}
+
 func (t *decisionTables) literalID(text string) matchir.LiteralID {
 	for index, existing := range t.literals {
 		if existing == text {
