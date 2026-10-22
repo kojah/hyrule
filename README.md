@@ -476,3 +476,9 @@ operations remain typed host hooks. `schema: true` targets generate these APIs
 without a rewrite dispatcher. See [derivation contracts](DERIVATIONS.md) and
 [the complete example](examples/derived/snapshot.rules). Copied aggregate storage
 in `internal/lower/identity/value` uses derived traversal and transformation.
+
+## Frontend design proposal
+
+[The indentation-based frontend proposal](FRONTEND_PROPOSAL.md) keeps `do` and
+`<|>`, simplifies common rule bodies, and maps the existing feature set to proposed
+syntax. It is a design document; the syntax described there is not implemented.
