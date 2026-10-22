@@ -167,8 +167,8 @@ qualifiers and the result of that alternative. Failed earlier guards prevent
 local evaluation. Arithmetic uses typed unchecked integer `+ - * / %`; overflow
 and division follow Go behavior. Establish nonzero divisors and container bounds
 with explicit guards where required. Comparison operators are `== != < <= > >=`;
-types must be compatible and equality must be safely comparable. Boolean `||`
-is not part of the language.
+types must be compatible and equality must be safely comparable. Boolean
+`&&`, `||` and `not` are described under "Guards, conditionals and where".
 
 `request with (field: value)` copies a captured product and preserves unmentioned
 fields, including reference identity. It never mutates input. Duplicate/unknown
