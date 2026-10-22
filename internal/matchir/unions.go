@@ -40,23 +40,6 @@ type VariantCase struct {
 	Next    *Node
 }
 
-// FieldExpression binds one construction field to a frontend expression.
-// Fields retain written evaluation order, independently of storage order.
-type FieldExpression struct {
-	Field      FieldID
-	Expression ExprID
-}
-
-// Construction is a complete tagged value, rather than an opaque hook call.
-type Construction struct {
-	Union   *UnionSchema
-	Record  *RecordSchema
-	List    *ListConstruction
-	Update  *RecordUpdate
-	Variant VariantID
-	Fields  []FieldExpression
-}
-
 // Variant appends an exclusive constructor test and its typed field extraction.
 // Adjacent identical tests share their canonical outputs; different variants
 // are never treated as overlapping matcher hooks.

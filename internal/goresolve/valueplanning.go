@@ -1,4 +1,4 @@
-package gogen
+package goresolve
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ func untyped(typ types.Type) bool {
 	return known && basic.Info()&types.IsUntyped != 0
 }
 
-func (e *emitter) expressionType(expression *semantic.Expr) (types.Type, error) {
+func (e *resolver) expressionType(expression *semantic.Expr) (types.Type, error) {
 	switch expression.Kind {
 	case semantic.Variable:
 		name, path, _ := strings.Cut(expression.Name, ".")
@@ -78,7 +78,7 @@ func (e *emitter) expressionType(expression *semantic.Expr) (types.Type, error) 
 	}
 }
 
-func (e *emitter) arithmeticType(expression *semantic.Expr, expected types.Type) (types.Type, error) {
+func (e *resolver) arithmeticType(expression *semantic.Expr, expected types.Type) (types.Type, error) {
 	if len(expression.Args) != 2 || hasNamedArguments(expression) {
 		return nil, e.fail(expression, "arithmetic requires two positional operands")
 	}
@@ -108,7 +108,7 @@ func (e *emitter) arithmeticType(expression *semantic.Expr, expected types.Type)
 // prepareValue binds arithmetic values before their construction context.
 // Operations use ordinary Go integer semantics. Private names cannot collide
 // with parsed capture identifiers.
-func (e *emitter) prepareValue(rule *semantic.Rule, expression *semantic.Expr, expected types.Type) (*semantic.Expr, error) {
+func (e *resolver) prepareValue(expression *semantic.Expr, expected types.Type) (*semantic.Expr, error) {
 	// Ordered query continuations bind their outcome captures only at the winning
 	// result. Do not lift work from those arms into the matching graph.
 	switch expression.Kind {
@@ -120,7 +120,11 @@ func (e *emitter) prepareValue(rule *semantic.Rule, expression *semantic.Expr, e
 		if err != nil {
 			return nil, err
 		}
-		evaluation := &matchir.Evaluation{Kind: matchir.ForeignEvaluation, Type: e.tables.typeID(typ), Expression: e.expressionID(rule, expression)}
+		value, err := e.resolveValue(expression, "build", typ)
+		if err != nil {
+			return nil, err
+		}
+		evaluation := &matchir.Evaluation{Kind: matchir.ForeignEvaluation, Type: e.tables.typeID(typ), Expression: e.storeValue(value)}
 		output := e.cursor.Evaluate(evaluation)
 		e.serial = max(e.serial, int(output))
 		name := fmt.Sprintf("#%d", output)
@@ -129,7 +133,7 @@ func (e *emitter) prepareValue(rule *semantic.Rule, expression *semantic.Expr, e
 	}
 	if expression.Kind == semantic.Call {
 		if _, arithmetic := compiler.Arithmetic(expression.Name); arithmetic {
-			evaluation, typ, err := e.arithmeticEvaluation(rule, expression, expected)
+			evaluation, typ, err := e.arithmeticEvaluation(expression, expected)
 			if err != nil {
 				return nil, err
 			}
@@ -147,7 +151,7 @@ func (e *emitter) prepareValue(rule *semantic.Rule, expression *semantic.Expr, e
 		return nil, err
 	}
 	for index, argument := range expression.Args {
-		prepared, err := e.prepareValue(rule, argument, parameters[index])
+		prepared, err := e.prepareValue(argument, parameters[index])
 		if err != nil {
 			return nil, err
 		}
@@ -156,7 +160,7 @@ func (e *emitter) prepareValue(rule *semantic.Rule, expression *semantic.Expr, e
 	return &copy, nil
 }
 
-func (e *emitter) valueParameters(expression *semantic.Expr, expected types.Type) ([]types.Type, error) {
+func (e *resolver) valueParameters(expression *semantic.Expr, expected types.Type) ([]types.Type, error) {
 	parameters := make([]types.Type, len(expression.Args))
 	if (expression.Kind == semantic.List || expression.Kind == semantic.Effects) && expected != nil {
 		if collection, known := expected.Underlying().(*types.Slice); known {
@@ -213,7 +217,7 @@ func (e *emitter) valueParameters(expression *semantic.Expr, expected types.Type
 	return parameters, nil
 }
 
-func (e *emitter) arithmeticEvaluation(rule *semantic.Rule, expression *semantic.Expr, expected types.Type) (*matchir.Evaluation, types.Type, error) {
+func (e *resolver) arithmeticEvaluation(expression *semantic.Expr, expected types.Type) (*matchir.Evaluation, types.Type, error) {
 	typ, err := e.arithmeticType(expression, expected)
 	if err != nil {
 		return nil, nil, err
@@ -223,7 +227,7 @@ func (e *emitter) arithmeticEvaluation(rule *semantic.Rule, expression *semantic
 	for _, argument := range expression.Args {
 		if argument.Kind == semantic.Call {
 			if _, arithmetic := compiler.Arithmetic(argument.Name); arithmetic {
-				nested, _, err := e.arithmeticEvaluation(rule, argument, typ)
+				nested, _, err := e.arithmeticEvaluation(argument, typ)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -244,7 +248,7 @@ func (e *emitter) arithmeticEvaluation(rule *semantic.Rule, expression *semantic
 	return result, typ, nil
 }
 
-func (e *emitter) local(rule *semantic.Rule, clause semantic.Clause) error {
+func (e *resolver) local(clause semantic.Clause) error {
 	if _, exists := e.captures[clause.Name]; exists {
 		return e.fail(clause.Value, "local binding cannot shadow capture or local $"+clause.Name)
 	}
@@ -256,18 +260,19 @@ func (e *emitter) local(rule *semantic.Rule, clause semantic.Clause) error {
 	if typ == types.Typ[types.UntypedNil] {
 		return e.fail(clause.Value, "cannot infer a local type from nil")
 	}
-	prepared, err := e.prepareValue(rule, clause.Value, typ)
+	prepared, err := e.prepareValue(clause.Value, typ)
 	if err != nil {
 		return err
 	}
-	if _, err := e.valueExpected(prepared, "build", typ); err != nil {
+	value, err := e.resolveValue(prepared, "build", typ)
+	if err != nil {
 		return err
 	}
 	if prepared.Kind == semantic.Variable && !strings.Contains(prepared.Name, ".") {
 		e.captures[clause.Name] = e.captures[prepared.Name]
 		return nil
 	}
-	evaluation := &matchir.Evaluation{Kind: matchir.ForeignEvaluation, Type: e.tables.typeID(typ), Expression: e.expressionID(rule, prepared)}
+	evaluation := &matchir.Evaluation{Kind: matchir.ForeignEvaluation, Type: e.tables.typeID(typ), Expression: e.storeValue(value)}
 	output := e.cursor.Evaluate(evaluation)
 	e.serial = max(e.serial, int(output))
 	e.captures[clause.Name] = capture{id: output, typ: typ}

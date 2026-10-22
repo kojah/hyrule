@@ -280,6 +280,14 @@ captures, maps IDs to Go types/functions, emits branches and formats imports.
 Go is the only implemented backend. A future backend can consume the matching
 IR with its own hook/type tables; a universal bindings language is not provided.
 
+Typed Go resolution lives in `goresolve`. It produces a `goplan.Program` with
+resolved Go storage tables, a matching DAG, and `valueir` values/continuations.
+The value IR retains field positions, assignment types, written evaluation order,
+query outcomes, lexical choice and decline. Neither IR retains semantic expression
+nodes or capture-name maps. `gogen` and `valuegen` emit from those plans without
+resolving source names or interpreting rule syntax. Schema-derived maintenance
+helpers currently use the separate `recordgen` path.
+
 The compiler folds adjacent identical pure matcher/test prefixes into an ordered
 decision DAG. Match failure and exhausted guard alternatives rejoin explicit
 fallback edges; builders remain separate leaves. It does not reorder unrelated

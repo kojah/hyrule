@@ -1,4 +1,4 @@
-package gogen
+package goresolve
 
 import (
 	"go/types"
@@ -8,7 +8,7 @@ import (
 	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
-func (e *emitter) bind(x *semantic.Expr, name string, value matchir.ValueID, t types.Type) error {
+func (e *resolver) bind(x *semantic.Expr, name string, value matchir.ValueID, t types.Type) error {
 	if strings.Contains(name, ".") {
 		return e.fail(x, "field projections cannot bind captures")
 	}
@@ -44,7 +44,7 @@ func safeEquality(t types.Type) bool {
 	}
 	return true
 }
-func (e *emitter) pattern(x *semantic.Expr, value matchir.ValueID, t types.Type) error {
+func (e *resolver) pattern(x *semantic.Expr, value matchir.ValueID, t types.Type) error {
 	if x.Kind == semantic.Variable && strings.Contains(x.Name, ".") {
 		return e.fail(x, "field projections are read-only values, not capture patterns")
 	}

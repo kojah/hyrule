@@ -1,6 +1,7 @@
-package gogen
+package goresolve
 
 import (
+	"github.com/kojah/lockdoc/tools/hyrule/internal/valueir"
 	"go/types"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
@@ -11,15 +12,15 @@ import (
 // IDs, never these Go types, hook spellings, semantic expressions or capture maps.
 type decisionTables struct {
 	types       []types.Type
+	members     []string
 	hooks       []string
 	literals    []string
 	expressions []decisionExpression
 	constants   []*boundConstant
 }
 type decisionExpression struct {
-	rule       *semantic.Rule
-	expression *semantic.Expr
-	captures   map[string]capture
+	value  *valueir.Value
+	result *valueir.Result
 }
 
 func (t *decisionTables) typeID(typ types.Type) matchir.TypeID {
@@ -49,14 +50,18 @@ func (t *decisionTables) literalID(text string) matchir.LiteralID {
 	t.literals = append(t.literals, text)
 	return matchir.LiteralID(len(t.literals) - 1)
 }
-func (e *emitter) expressionID(rule *semantic.Rule, expression *semantic.Expr) matchir.ExprID {
-	e.tables.expressions = append(e.tables.expressions, decisionExpression{rule, expression, cloneCaptures(e.captures)})
+func (e *resolver) storeValue(value *valueir.Value) matchir.ExprID {
+	e.tables.expressions = append(e.tables.expressions, decisionExpression{value: value})
+	return matchir.ExprID(len(e.tables.expressions) - 1)
+}
+func (e *resolver) storeResult(result *valueir.Result) matchir.ExprID {
+	e.tables.expressions = append(e.tables.expressions, decisionExpression{result: result})
 	return matchir.ExprID(len(e.tables.expressions) - 1)
 }
 
 // decisions adapts resolved Go hook signatures to the neutral matching graph.
 // The graph owns extraction identity, pure-prefix sharing and fallback edges.
-func (e *emitter) orderedDecisions(rules []*semantic.Rule, input types.Type) (*matchir.Node, error) {
+func (e *resolver) orderedDecisions(rules []*semantic.Rule, input types.Type) (*matchir.Node, error) {
 	e.graph = matchir.New(e.tables.typeID(input))
 	for _, rule := range rules {
 		e.rule = rule.Name
@@ -67,12 +72,12 @@ func (e *emitter) orderedDecisions(rules []*semantic.Rule, input types.Type) (*m
 		}
 		for _, clause := range rule.Clauses {
 			if clause.Name != "" {
-				if err := e.local(rule, clause); err != nil {
+				if err := e.local(clause); err != nil {
 					return nil, err
 				}
 				continue
 			}
-			condition, err := e.prepareValue(rule, clause.Value, types.Typ[types.Bool])
+			condition, err := e.prepareValue(clause.Value, types.Typ[types.Bool])
 			if err != nil {
 				return nil, err
 			}
@@ -82,26 +87,23 @@ func (e *emitter) orderedDecisions(rules []*semantic.Rule, input types.Type) (*m
 				}
 				continue
 			}
-			if _, err := e.value(condition, "guard"); err != nil {
+			value, err := e.resolveValue(condition, "guard", types.Typ[types.Bool])
+			if err != nil {
 				return nil, err
 			}
-			e.cursor.Guard(e.expressionID(rule, condition))
+			e.cursor.Guard(e.storeValue(value))
 		}
 		prepared := *rule
 		var err error
-		prepared.Build, err = e.prepareValue(rule, rule.Build, e.host.Signature.Results().At(0).Type())
+		prepared.Build, err = e.prepareValue(rule.Build, e.host.Signature.Results().At(0).Type())
 		if err != nil {
 			return nil, err
 		}
-		if _, err := e.resultValue(prepared.Build, sigOutput(e)); err != nil {
-			return nil, err
-		}
-		node := e.cursor.Build(e.expressionID(&prepared, prepared.Build))
-		construction, err := e.construction(&prepared, prepared.Build)
+		result, err := e.resolveResult(prepared.Build, sigOutput(e), false)
 		if err != nil {
 			return nil, err
 		}
-		node.Construction = construction
+		e.cursor.Build(e.storeResult(result))
 	}
 	e.cursor = nil
 	return e.graph.Root(), nil

@@ -1,4 +1,4 @@
-package gogen
+package goresolve
 
 import (
 	"go/token"
@@ -8,7 +8,7 @@ import (
 	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
 
-func (e *emitter) comparisonOperand(expression *semantic.Expr) (matchir.Operand, types.Type, error) {
+func (e *resolver) comparisonOperand(expression *semantic.Expr) (matchir.Operand, types.Type, error) {
 	switch expression.Kind {
 	case semantic.Variable:
 		value, known := e.captures[expression.Name]
@@ -33,7 +33,7 @@ func (e *emitter) comparisonOperand(expression *semantic.Expr) (matchir.Operand,
 	}
 }
 
-func (e *emitter) compare(expression *semantic.Expr) error {
+func (e *resolver) compare(expression *semantic.Expr) error {
 	left, leftType, err := e.comparisonOperand(expression.Args[0])
 	if err != nil {
 		return err
@@ -73,8 +73,4 @@ func (e *emitter) compare(expression *semantic.Expr) error {
 	}
 	e.cursor.Compare(operator, left, right)
 	return nil
-}
-
-func comparisonSpelling(operator matchir.Comparison) string {
-	return [...]string{"==", "!=", "<", "<=", ">", ">="}[operator]
 }

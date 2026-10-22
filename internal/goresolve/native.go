@@ -1,7 +1,8 @@
-package gogen
+package goresolve
 
 import (
 	"fmt"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/valueir"
 	"go/token"
 	"go/types"
 	"strings"
@@ -16,6 +17,7 @@ import (
 // A total boundary must explicitly say what failed recognition means.
 type nativeSignature struct {
 	declaration   *semantic.API
+	fallback      *valueir.Result
 	original      *types.Signature
 	function      string
 	input, output *types.Struct
@@ -65,7 +67,7 @@ func nativeAPI(h *Host, api *semantic.API) (*nativeSignature, error) {
 	return native, nil
 }
 
-func (e *emitter) bindNativeRecords(native *nativeSignature) {
+func (e *resolver) bindNativeRecords(native *nativeSignature) {
 	for _, item := range []struct {
 		name     string
 		storage  *types.Struct
@@ -94,42 +96,9 @@ func (e *emitter) bindNativeRecords(native *nativeSignature) {
 	}
 }
 
-func (e *emitter) emitNativeAPI(native *nativeSignature) error {
-	var params, fields, outputs []string
-	for i := 0; i < native.original.Params().Len(); i++ {
-		name := fmt.Sprintf("hparam%d", i)
-		params = append(params, name+" "+e.host.TypeName(native.original.Params().At(i).Type()))
-		fields = append(fields, native.input.Field(i).Name()+":"+name)
-	}
-	for i := 0; i < native.original.Results().Len(); i++ {
-		outputs = append(outputs, e.host.TypeName(native.original.Results().At(i).Type()))
-	}
-	fmt.Fprintf(&e.out, "func %s(%s) (%s) {\n", native.function, strings.Join(params, ","), strings.Join(outputs, ","))
-	fmt.Fprintf(&e.out, "hvalue, hok := %s(%s{%s})\n", e.host.Function, e.host.TypeName(native.input), strings.Join(fields, ","))
-	if native.declaration.Mode == "total" {
-		e.captures = map[string]capture{}
-		e.rule = "signature fallback"
-		fmt.Fprintln(&e.out, "if !hok {")
-		fallback, err := e.resultValue(native.declaration.Fallback, native.output)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(&e.out, "hvalue = %s\n}\n", fallback)
-	}
-	var returns []string
-	for i := 0; i < native.output.NumFields(); i++ {
-		returns = append(returns, fmt.Sprintf("hvalue.V%d", i))
-	}
-	if native.declaration.Mode == "partial" {
-		returns = append(returns, "hok")
-	}
-	fmt.Fprintf(&e.out, "return %s\n}\n", strings.Join(returns, ","))
-	return nil
-}
-
 // forwardingCall substitutes only values, never evaluating a nested host call.
 // Free captures are explicit lexical inputs from the rule that invokes it.
-func (e *emitter) forwardingCall(x *semantic.Expr, kind string) (*semantic.Expr, error) {
+func (e *resolver) forwardingCall(x *semantic.Expr, kind string) (*semantic.Expr, error) {
 	b := e.bindings[x.Name]
 	if b == nil || b.Body == nil {
 		return x, nil

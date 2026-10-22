@@ -1,4 +1,4 @@
-package gogen
+package goresolve
 
 import (
 	"go/types"
@@ -8,7 +8,7 @@ import (
 
 // matcher resolves child positions once for both contract checking and emission.
 // Named fields refer to Go result names; the final success bool is never a child.
-func (e *emitter) matcher(x *semantic.Expr, input types.Type) (string, *types.Signature, []int, error) {
+func (e *resolver) matcher(x *semantic.Expr, input types.Type) (string, *types.Signature, []int, error) {
 	var name string
 	var sig *types.Signature
 	var err error
@@ -65,7 +65,7 @@ func (e *emitter) matcher(x *semantic.Expr, input types.Type) (string, *types.Si
 
 // checkPattern joins capture contracts at each OR, before later siblings can
 // hide a missing binding. It never invokes a host hook or constructs effects.
-func (e *emitter) checkPattern(x *semantic.Expr, input types.Type) error {
+func (e *resolver) checkPattern(x *semantic.Expr, input types.Type) error {
 	if x.Bind != "" {
 		captured := input
 		if view := e.capturedView(x); view != nil {
@@ -132,7 +132,7 @@ func sameCaptures(left, right map[string]capture) bool {
 	return true
 }
 
-func (e *emitter) matchSignature(x *semantic.Expr) (string, *types.Signature, error) {
+func (e *resolver) matchSignature(x *semantic.Expr) (string, *types.Signature, error) {
 	if record := e.recordNames[x.Name]; record != nil {
 		return x.Name, record.signature, nil
 	}

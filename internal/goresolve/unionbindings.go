@@ -1,4 +1,4 @@
-package gogen
+package goresolve
 
 import (
 	"go/constant"
@@ -26,7 +26,7 @@ type boundVariant struct {
 	fields      []*types.Var
 }
 
-func (e *emitter) bindUnions(declarations []*semantic.Union) error {
+func (e *resolver) bindUnions(declarations []*semantic.Union) error {
 	e.constructors = map[string]*boundVariant{}
 	for _, declaration := range declarations {
 		var storageType types.Type
@@ -85,7 +85,7 @@ func (e *emitter) bindUnions(declarations []*semantic.Union) error {
 	return nil
 }
 
-func (e *emitter) bindVariant(union *boundUnion, structure *types.Struct, declaration *semantic.Variant) error {
+func (e *resolver) bindVariant(union *boundUnion, structure *types.Struct, declaration *semantic.Variant) error {
 	failure := func(message string) error {
 		return &semantic.Diagnostic{Position: declaration.Position, Message: message}
 	}
@@ -158,4 +158,13 @@ func genericStorage(typ types.Type) bool {
 	default:
 		return false
 	}
+}
+
+func (e *resolver) constructorSignature(variant *boundVariant) *types.Signature {
+	params := make([]*types.Var, len(variant.fields))
+	for index := range params {
+		params[index] = variant.signature.Results().At(index)
+	}
+	result := types.NewTuple(types.NewVar(0, e.host.Package, "", variant.union.typ))
+	return types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), result, false)
 }

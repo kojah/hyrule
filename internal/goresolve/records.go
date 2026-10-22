@@ -1,4 +1,4 @@
-package gogen
+package goresolve
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ type boundRecord struct {
 	signature   *types.Signature
 }
 
-func (e *emitter) bindRecords(declarations []*semantic.Record) error {
+func (e *resolver) bindRecords(declarations []*semantic.Record) error {
 	e.recordNames = map[string]*boundRecord{}
 	for _, declaration := range declarations {
 		if err := e.bindRecord(declaration); err != nil {
@@ -28,7 +28,7 @@ func (e *emitter) bindRecords(declarations []*semantic.Record) error {
 	return nil
 }
 
-func (e *emitter) bindRecord(declaration *semantic.Record) error {
+func (e *resolver) bindRecord(declaration *semantic.Record) error {
 	failure := func(message string) error {
 		return &semantic.Diagnostic{Position: declaration.Position, Message: message}
 	}
@@ -80,7 +80,7 @@ func (e *emitter) bindRecord(declaration *semantic.Record) error {
 	return nil
 }
 
-func (e *emitter) recordFor(typ types.Type) *boundRecord {
+func (e *resolver) recordFor(typ types.Type) *boundRecord {
 	for _, record := range e.records {
 		if !record.declaration.View && types.Identical(record.typ, typ) {
 			return record
@@ -89,7 +89,7 @@ func (e *emitter) recordFor(typ types.Type) *boundRecord {
 	return nil
 }
 
-func (e *emitter) recordSignature(record *boundRecord) *types.Signature {
+func (e *resolver) recordSignature(record *boundRecord) *types.Signature {
 	params := make([]*types.Var, len(record.fields))
 	for index := range params {
 		params[index] = record.signature.Results().At(index)
@@ -101,7 +101,7 @@ func (e *emitter) recordSignature(record *boundRecord) *types.Signature {
 // viewMatcher emits a read-only structural extraction. Interface inputs are
 // checked with a Go type assertion; nil pointers never expose fields. There is
 // no host callback to hide state changes inside the shared matching graph.
-func (e *emitter) viewMatcher(x *semantic.Expr, record *boundRecord, input types.Type) (string, *types.Signature, error) {
+func (e *resolver) viewMatcher(x *semantic.Expr, record *boundRecord, input types.Type) (string, *types.Signature, error) {
 	var parameters, values, assignments []string
 	for i, field := range record.fields {
 		name := fmt.Sprintf("hr%d", i)
@@ -142,7 +142,7 @@ func (e *emitter) viewMatcher(x *semantic.Expr, record *boundRecord, input types
 // A whole view capture is the successfully asserted storage value, rather than
 // its wider input interface. It has the same identity and is usable by hooks
 // requiring that concrete Go type. The extra matcher output is not a field.
-func (e *emitter) capturedView(x *semantic.Expr) *boundRecord {
+func (e *resolver) capturedView(x *semantic.Expr) *boundRecord {
 	if x.Kind != semantic.Call || x.Bind == "" {
 		return nil
 	}

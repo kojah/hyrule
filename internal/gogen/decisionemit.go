@@ -14,21 +14,19 @@ func valueName(value matchir.ValueID) string {
 }
 func (e *emitter) operand(operand matchir.Operand) string {
 	if operand.Kind == matchir.LiteralOperand {
-		return e.tables.literals[operand.Literal]
+		return e.tables.Literals[operand.Literal]
 	}
 	if operand.Kind == matchir.ConstantOperand {
-		return e.tables.constants[operand.Constant].object.Name()
+		return e.tables.Constants[operand.Constant].Name()
 	}
 	return valueName(operand.Value)
 }
-func (e *emitter) decisionValue(node *matchir.Node, kind string) (string, error) {
-	expression := e.tables.expressions[node.Expression]
-	e.rule = expression.rule.Name
-	e.captures = expression.captures
+func (e *emitter) decisionValue(node *matchir.Node, kind string) string {
+	expression := e.tables.Expressions[node.Expression]
 	if kind == "build" {
-		return e.resultValue(expression.expression, sigOutput(e))
+		return e.emitResult(expression.Result)
 	}
-	return e.value(expression.expression, kind)
+	return e.emitValue(expression.Value)
 }
 
 // Structured Go branches stop at their common fallback. This backend owns all
@@ -130,16 +128,7 @@ func (e *emitter) emitBuild(node, stop *matchir.Node) error {
 		return err
 	}
 	fmt.Fprintf(&e.out, "// Rule %s (%s:%d).\n", node.Origin.Rule, node.Origin.File, node.Origin.Line)
-	var build string
-	var err error
-	if node.Construction != nil {
-		build, err = e.constructionValue(node.Construction)
-	} else {
-		build, err = e.decisionValue(node, "build")
-	}
-	if err != nil {
-		return err
-	}
+	build := e.decisionValue(node, "build")
 	if validation := e.validation(e.host.Signature.Results().At(0).Type(), "hresult"); validation != "" {
 		fmt.Fprintf(&e.out, "hresult := %s\nif !%s { var zero %s; return zero,false }\nreturn hresult,true\n",
 			build, validation, e.host.TypeName(e.host.Signature.Results().At(0).Type()))
@@ -155,6 +144,19 @@ func (e *emitter) emitDeadSuffix(node, stop *matchir.Node) error {
 	}
 	e.out.WriteString("if false { // Unreachable rules retain Go type validation.\n")
 	if err := e.emitDecisions(node, stop); err != nil {
+		return err
+	}
+	e.out.WriteString("}\n")
+	return nil
+}
+
+func (e *emitter) emitRecord(node *matchir.Node) error {
+	record := e.records[node.Record.ID]
+	e.out.WriteString("{\n")
+	for index, field := range record.Fields {
+		fmt.Fprintf(&e.out, "%s := %s.%s\n_ = %s\n", valueName(node.Outputs[index]), valueName(node.Input), field.Name(), valueName(node.Outputs[index]))
+	}
+	if err := e.emitDecisions(node.Next, node.Fallback); err != nil {
 		return err
 	}
 	e.out.WriteString("}\n")

@@ -88,7 +88,6 @@ type Node struct {
 	Union          *UnionSchema
 	Variant        VariantID
 	Cases          []VariantCase
-	Construction   *Construction
 	Record         *RecordSchema
 	Comparison     Comparison
 	Evaluation     *Evaluation

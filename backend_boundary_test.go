@@ -13,7 +13,7 @@ import (
 // The matching graph and shared source compiler must remain usable without
 // inheriting Go's source emitter, type model or package loader.
 func TestSharedCompilerHasNoBackendDependency(t *testing.T) {
-	for _, directory := range []string{"internal/compiler", "internal/matchir", "internal/semantic"} {
+	for _, directory := range []string{"internal/compiler", "internal/matchir", "internal/semantic", "internal/valueir"} {
 		entries, err := os.ReadDir(directory)
 		if err != nil {
 			t.Fatal(err)
@@ -50,7 +50,8 @@ func TestSharedCompilerHasNoBackendDependency(t *testing.T) {
 // Parser representation must not leak into planning or host code generation.
 // This contract lets the surface language be replaced independently.
 func TestSemanticConsumersDoNotImportParser(t *testing.T) {
-	for _, directory := range []string{"internal/compiler", "internal/gogen", "internal/recordgen", "internal/semantic", "internal/matchir"} {
+	for _, directory := range []string{"internal/compiler", "internal/gogen", "internal/goresolve", "internal/goplan",
+		"internal/valuegen", "internal/valueir", "internal/recordgen", "internal/semantic", "internal/matchir"} {
 		entries, err := os.ReadDir(directory)
 		if err != nil {
 			t.Fatal(err)
@@ -71,6 +72,37 @@ func TestSemanticConsumersDoNotImportParser(t *testing.T) {
 				}
 				if strings.HasSuffix(dependency, "/syntax") || strings.HasSuffix(dependency, "/frontend") {
 					t.Errorf("semantic consumer imports surface frontend: %s -> %s", name, dependency)
+				}
+			}
+		}
+	}
+}
+
+// Emission consumes resolved plans, never language declarations or symbol scopes.
+func TestGoBackendDoesNotImportSemanticChecking(t *testing.T) {
+	for _, directory := range []string{"internal/gogen", "internal/valuegen", "internal/goplan"} {
+		entries, err := os.ReadDir(directory)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+				continue
+			}
+			name := filepath.Join(directory, entry.Name())
+			file, err := parser.ParseFile(token.NewFileSet(), name, nil, parser.ImportsOnly)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, spec := range file.Imports {
+				dependency, err := strconv.Unquote(spec.Path.Value)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, forbidden := range []string{"/semantic", "/syntax", "/frontend", "/compiler", "/goresolve"} {
+					if strings.HasSuffix(dependency, forbidden) {
+						t.Errorf("backend imports semantic checking: %s -> %s", name, dependency)
+					}
 				}
 			}
 		}

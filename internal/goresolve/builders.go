@@ -1,40 +1,11 @@
-package gogen
+package goresolve
 
 import (
-	"fmt"
-	"go/types"
-
 	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+	"go/types"
 )
 
-// valueArguments preserves evaluation in source order even when named arguments
-// are passed in Go parameter order. Typed temporaries preserve constant/nil
-// assignment contexts and each nested builder is evaluated exactly once.
-func (e *emitter) valueArguments(x *semantic.Expr, signature *types.Signature, kind string) ([]string, error) {
-	indices, err := e.builderPositions(x, signature, kind)
-	if err != nil {
-		return nil, err
-	}
-	arguments := make([]string, len(x.Args))
-	ordered := requiresWrittenOrder(x)
-	for written, argument := range x.Args {
-		parameter := indices[written]
-		value, err := e.typedValue(argument, signature.Params().At(parameter).Type())
-		if err != nil {
-			return nil, err
-		}
-		if ordered && (argument.Kind == semantic.Call || argument.Kind == semantic.Effects) {
-			e.serial++
-			name := fmt.Sprintf("hv%d", e.serial)
-			fmt.Fprintf(&e.out, "var %s %s = %s\n", name, e.host.TypeName(signature.Params().At(parameter).Type()), value)
-			value = name
-		}
-		arguments[parameter] = value
-	}
-	return arguments, nil
-}
-
-func (e *emitter) builderPositions(x *semantic.Expr, signature *types.Signature, kind string) ([]int, error) {
+func (e *resolver) builderPositions(x *semantic.Expr, signature *types.Signature, kind string) ([]int, error) {
 	named := hasNamedArguments(x)
 	indices := make([]int, len(x.Args))
 	if !named {

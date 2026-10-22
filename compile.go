@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/gogen"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/goresolve"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/recordgen"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
 	"golang.org/x/tools/go/packages"
 )
@@ -45,35 +47,7 @@ func (c *Config) Compile(ctx context.Context, target string) ([]Artifact, error)
 		if pkg == nil {
 			return nil, fmt.Errorf("target %s: package not loaded", t.Name)
 		}
-		var sig *types.Signature
-		if !t.Schema {
-			obj := pkg.Types.Scope().Lookup(t.Signature)
-			if obj == nil {
-				return nil, fmt.Errorf("target %s: missing signature %s", t.Name, t.Signature)
-			}
-			var ok bool
-			sig, ok = obj.Type().Underlying().(*types.Signature)
-			if !ok {
-				return nil, fmt.Errorf("%s is not a function signature", t.Signature)
-			}
-		}
-		program := selected.program
-		names := map[string]*types.Package{}
-		for _, file := range pkg.Syntax {
-			if filepath.Clean(pkg.Fset.Position(file.Pos()).Filename) != filepath.Join(c.root, t.Bindings) {
-				continue
-			}
-			for _, spec := range file.Imports {
-				obj := pkg.TypesInfo.Implicits[spec]
-				if spec.Name != nil {
-					obj = pkg.TypesInfo.Defs[spec.Name]
-				}
-				if imported, ok := obj.(*types.PkgName); ok {
-					names[imported.Name()] = imported.Imported()
-				}
-			}
-		}
-		data, err := gogen.Generate(gogen.Host{Package: pkg.Types, Signature: sig, Function: t.Function, ImportNames: names}, program)
+		data, err := c.compileTarget(pkg, selected)
 		if err != nil {
 			return nil, fmt.Errorf("target %s: %w", t.Name, err)
 		}
@@ -85,6 +59,53 @@ func (c *Config) Compile(ctx context.Context, target string) ([]Artifact, error)
 		return nil, fmt.Errorf("generated Go validation: %w", err)
 	}
 	return artifacts, nil
+}
+
+// compileTarget resolves one prepared program against an already loaded host,
+// then emits its typed dispatcher and schema-maintenance declarations.
+func (c *Config) compileTarget(pkg *packages.Package, selected preparedTarget) ([]byte, error) {
+	t := selected.target
+	var sig *types.Signature
+	if !t.Schema {
+		obj := pkg.Types.Scope().Lookup(t.Signature)
+		if obj == nil {
+			return nil, fmt.Errorf("missing signature %s", t.Signature)
+		}
+		var ok bool
+		sig, ok = obj.Type().Underlying().(*types.Signature)
+		if !ok {
+			return nil, fmt.Errorf("%s is not a function signature", t.Signature)
+		}
+	}
+	program := selected.program
+	names := map[string]*types.Package{}
+	for _, file := range pkg.Syntax {
+		if filepath.Clean(pkg.Fset.Position(file.Pos()).Filename) != filepath.Join(c.root, t.Bindings) {
+			continue
+		}
+		for _, spec := range file.Imports {
+			obj := pkg.TypesInfo.Implicits[spec]
+			if spec.Name != nil {
+				obj = pkg.TypesInfo.Defs[spec.Name]
+			}
+			if imported, ok := obj.(*types.PkgName); ok {
+				names[imported.Name()] = imported.Imported()
+			}
+		}
+	}
+	resolved, err := goresolve.Resolve(goresolve.Host{Package: pkg.Types, Signature: sig, Function: t.Function, ImportNames: names}, program)
+	if err != nil {
+		return nil, err
+	}
+	derived, err := recordgen.Generate(&resolved.Host, program)
+	if err != nil {
+		return nil, err
+	}
+	data, err := gogen.Generate(resolved, derived)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 func (c *Config) rules(t Target) ([]*syntax.File, error) {

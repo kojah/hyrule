@@ -1,4 +1,4 @@
-package gogen
+package goresolve
 
 import (
 	"go/types"
@@ -12,7 +12,7 @@ type boundConstant struct {
 	schema matchir.ConstantSchema
 }
 
-func (e *emitter) bindConstant(binding *semantic.Binding) error {
+func (e *resolver) bindConstant(binding *semantic.Binding) error {
 	object, known := e.host.Package.Scope().Lookup(binding.HostName).(*types.Const)
 	if !known {
 		return &semantic.Diagnostic{Position: binding.Position, Message: "constant binding requires a Go constant " + binding.HostName}
@@ -29,7 +29,7 @@ func (e *emitter) bindConstant(binding *semantic.Binding) error {
 	return nil
 }
 
-func (e *emitter) constant(expression *semantic.Expr) (*boundConstant, error) {
+func (e *resolver) constant(expression *semantic.Expr) (*boundConstant, error) {
 	value := e.constants[expression.Name]
 	if value == nil {
 		return nil, e.fail(expression, "unknown constant "+expression.Name)
@@ -37,7 +37,7 @@ func (e *emitter) constant(expression *semantic.Expr) (*boundConstant, error) {
 	return value, nil
 }
 
-func (e *emitter) checkConstant(expression *semantic.Expr, input types.Type) error {
+func (e *resolver) checkConstant(expression *semantic.Expr, input types.Type) error {
 	value, err := e.constant(expression)
 	if err != nil {
 		return err
