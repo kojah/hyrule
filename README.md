@@ -58,6 +58,35 @@ Interface-containing values are rejected because dynamic contents could panic.
 Use distinct captures and a typed equality guard when that contract is unsuitable.
 Capture equality does not establish aliasing, structural equality or solver facts.
 
+### Guards, conditionals and where
+
+```text
+classify (Entry (node: node))
+  | Found (size: size) <- lookup node
+  , size > 0 && not (excluded node)
+  =
+  if size > limit then outputs large else outputs small
+  where
+    limit = base * 2
+    large = Big (size: size)
+```
+
+`&&`, `||` and `not` take bool operands and short-circuit as in Go and Haskell;
+`||` binds looser than `&&`, which binds looser than comparisons. A top-level
+`&&` in a guard is a sequence of ordinary guards. A pattern guard, `Pattern <-
+expression`, evaluates a pure expression once and matches it like an equation
+pattern; a mismatch tries the next alternative, and its captures are in scope for
+later qualifiers and the result. `if condition then a else b` evaluates the pure
+condition and exactly one branch. It may appear as a value or as a result, where
+branches may run `do`/`case` queries or `decline` inside `<|>`.
+
+`where` follows an equation's last guarded alternative and is shared by all of
+them. Each binding is substituted where it is used and evaluated only there, so
+a binding guarded by a condition never runs before it. Bindings see the
+equation's pattern captures and other where bindings, not guard locals or `do`
+results. They cannot recurse, be projected with `.`, or reuse a capture or
+declaration name.
+
 ## Applications and patterns
 
 Calls are saturated whitespace applications: `sum left right`. Parenthesize

@@ -16,6 +16,24 @@ const (
 	Tagged
 	Collection
 	Update
+	// Compare applies Comparison to two arguments.
+	Compare
+	// Logic applies a short-circuit Boolean operator; Not takes one argument.
+	Logic
+	// Arithmetic applies an unchecked integer operation to two arguments.
+	Arithmetic
+	// Conditional evaluates its first argument, then exactly one of the others.
+	Conditional
+)
+
+// LogicOp identifies a Boolean operator. And and Or evaluate their second
+// argument only when the first does not already decide the result.
+type LogicOp uint8
+
+const (
+	And LogicOp = iota
+	Or
+	Not
 )
 
 // MemberID identifies a host-resolved projection path.
@@ -46,4 +64,8 @@ type Value struct {
 	Variant   matchir.VariantID
 	Base      *Value
 	Arguments []Argument
+	// Comparison, Logic and Arithmetic select the operator of their kinds.
+	Comparison matchir.Comparison
+	Logic      LogicOp
+	Arithmetic matchir.Arithmetic
 }

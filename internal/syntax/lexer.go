@@ -71,7 +71,7 @@ func combineTokens(input []token) []token {
 	out := make([]token, 0, len(input))
 	for i := 0; i < len(input); i++ {
 		t := input[i]
-		for _, op := range []string{"<|>", "<-", "->", ">=", "<=", "==", "!=", "&&"} {
+		for _, op := range []string{"<|>", "<-", "->", ">=", "<=", "==", "!=", "&&", "||"} {
 			if t.text != op[:1] || i+len(op) > len(input) {
 				continue
 			}

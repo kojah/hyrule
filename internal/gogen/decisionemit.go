@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/valuegen"
 )
 
 func valueName(value matchir.ValueID) string {
@@ -150,7 +151,7 @@ func (e *emitter) emitDecision(node, stop *matchir.Node) error {
 		}
 		e.out.WriteString("}\n")
 	case matchir.Compare:
-		fmt.Fprintf(&e.out, "if %s %s %s {\n", e.operand(node.Left), comparisonSpelling(node.Comparison), e.operand(node.Right))
+		fmt.Fprintf(&e.out, "if %s %s %s {\n", e.operand(node.Left), valuegen.ComparisonSpelling(node.Comparison), e.operand(node.Right))
 		if err := e.emitDecisions(node.Next, node.Fallback); err != nil {
 			return err
 		}

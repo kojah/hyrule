@@ -83,27 +83,9 @@ func (e *resolver) orderedDecisions(rules []*semantic.Rule, input types.Type) (*
 			return nil, err
 		}
 		for _, clause := range rule.Clauses {
-			if clause.Name != "" {
-				if err := e.local(clause); err != nil {
-					return nil, err
-				}
-				continue
-			}
-			condition, err := e.prepareValue(clause.Value, types.Typ[types.Bool])
-			if err != nil {
+			if err := e.clause(clause); err != nil {
 				return nil, err
 			}
-			if condition.Kind == semantic.Comparison {
-				if err := e.compare(condition); err != nil {
-					return nil, err
-				}
-				continue
-			}
-			value, err := e.resolveValue(condition, "guard", types.Typ[types.Bool])
-			if err != nil {
-				return nil, err
-			}
-			e.cursor.Guard(e.storeValue(value))
 		}
 		prepared := *rule
 		var err error
@@ -119,4 +101,30 @@ func (e *resolver) orderedDecisions(rules []*semantic.Rule, input types.Type) (*
 	}
 	e.cursor = nil
 	return matchir.HashCons(e.graph.Root())
+}
+
+// clause appends one ordered qualifier: a pattern guard, a local or a guard.
+func (e *resolver) clause(clause semantic.Clause) error {
+	if clause.Pattern != nil {
+		return e.patternGuard(clause)
+	}
+	if clause.Name != "" {
+		return e.local(clause)
+	}
+	condition, err := e.prepareValue(clause.Value, types.Typ[types.Bool])
+	if err != nil {
+		return err
+	}
+	if condition.Kind == semantic.Comparison {
+		return e.compare(condition)
+	}
+	if typ, err := e.expressionType(condition); err == nil && !isBoolean(typ) {
+		return e.fail(condition, "guards require bool operands")
+	}
+	value, err := e.resolveValue(condition, "guard", types.Typ[types.Bool])
+	if err != nil {
+		return err
+	}
+	e.cursor.Guard(e.storeValue(value))
+	return nil
 }

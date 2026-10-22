@@ -30,7 +30,11 @@ func (c *Config) prepare(target string) (*preparedCompilation, error) {
 		if err != nil {
 			return nil, err
 		}
-		program, err := compiler.Collect(frontend.Lower(files))
+		lowered, err := frontend.Lower(files)
+		if err != nil {
+			return nil, fmt.Errorf("target %s: %w", t.Name, err)
+		}
+		program, err := compiler.Collect(lowered)
 		if err != nil {
 			return nil, fmt.Errorf("target %s: %w", t.Name, err)
 		}

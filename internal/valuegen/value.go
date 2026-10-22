@@ -39,6 +39,12 @@ func (e *Emitter) Value(value *valueir.Value) string {
 		return e.Value(value.Base) + "." + e.Bindings.ValueMember(value.Member)
 	case valueir.Update:
 		return e.update(value)
+	case valueir.Compare, valueir.Arithmetic:
+		return e.operator(value)
+	case valueir.Logic:
+		return e.logic(value)
+	case valueir.Conditional:
+		return e.conditional(value)
 	}
 	arguments := make([]string, len(value.Arguments))
 	for _, argument := range value.Arguments {

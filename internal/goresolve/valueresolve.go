@@ -5,6 +5,7 @@ import (
 	"go/types"
 	"strings"
 
+	"github.com/kojah/lockdoc/tools/hyrule/internal/compiler"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/valueir"
@@ -34,7 +35,16 @@ func (e *resolver) resolveValue(x *semantic.Expr, kind string, expected types.Ty
 		return &valueir.Value{Kind: valueir.Operand, Type: constant.schema.Type,
 			Operand: matchir.Operand{Kind: matchir.ConstantOperand, Constant: constant.schema.ID}}, nil
 	case semantic.Call:
+		if _, arithmetic := compiler.Arithmetic(x.Name); arithmetic {
+			return e.resolveArithmeticValue(x, expected)
+		}
 		return e.resolveCall(x, kind)
+	case semantic.Logic:
+		return e.resolveLogic(x)
+	case semantic.Comparison:
+		return e.resolveComparisonValue(x)
+	case semantic.Conditional:
+		return e.resolveConditionalValue(x, expected)
 	case semantic.List, semantic.Effects:
 		if kind != "build" || expected == nil {
 			return nil, e.fail(x, "list/effects requires a typed build context")

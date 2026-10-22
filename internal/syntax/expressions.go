@@ -8,16 +8,31 @@ import (
 
 func itoa(value int) string { return strconv.Itoa(value) }
 
+// Precedence follows Haskell's relative order: choice, then ||, &&,
+// comparisons, additive and multiplicative operators.
+const (
+	choiceRank = 1 + iota
+	orRank
+	andRank
+	comparisonRank
+	additiveRank
+	multiplicativeRank
+)
+
 func precedence(op string) int {
 	switch op {
 	case "<|>":
-		return 1
+		return choiceRank
+	case "||":
+		return orRank
+	case "&&":
+		return andRank
 	case "==", "!=", "<", ">", "<=", ">=":
-		return 2
+		return comparisonRank
 	case "+", "-":
-		return 3
+		return additiveRank
 	case "*", "/", "%":
-		return 4
+		return multiplicativeRank
 	}
 	return 0
 }
@@ -56,10 +71,13 @@ func (p *parser) expression(base int, pattern bool, min int) *Expr {
 		p.next()
 		right := p.expression(base, false, rank+1)
 		kind, name := Call, arithmetic(op.text)
-		if rank == 2 {
+		if rank == comparisonRank {
 			kind = Comparison
 		}
-		if rank == 1 {
+		if rank == orRank || rank == andRank {
+			kind = Logic
+		}
+		if rank == choiceRank {
 			if left.Kind == OrderedAlternatives {
 				left.Args = append(left.Args, right)
 				continue
@@ -107,7 +125,7 @@ func (p *parser) application(base int, pattern bool) *Expr {
 func (p *parser) atomStart() bool {
 	t := p.peek()
 	switch t.text {
-	case "of", "else", "with", "let", "do", "case", "decline":
+	case "of", "else", "with", "let", "do", "case", "decline", "if", "then", "not", "where":
 		return false
 	}
 	return t.kind == scanner.Ident || t.kind == scanner.RawString || t.kind == scanner.Int || t.kind == scanner.Float || t.kind == scanner.String ||
@@ -146,6 +164,11 @@ func (p *parser) atom(base int, pattern bool) *Expr {
 		return p.caseExpression(t, base)
 	case !pattern && p.take("decline"):
 		x.Kind = Decline
+	case !pattern && p.take("not"):
+		x.Kind, x.Name = Logic, "not"
+		x.Args = []*Expr{p.atom(base, false)}
+	case !pattern && p.take("if"):
+		return p.conditional(t, base)
 	case p.take("("):
 		p.grouped++
 		p.skipLines()
@@ -208,7 +231,8 @@ func (p *parser) named(base int, pattern bool) []*Expr {
 // identifierText is used by the formatter to retain keyword captures.
 func identifierText(name string) string {
 	switch name {
-	case "do", "case", "of", "else", "decline", "with", "let", "otherwise", "true", "false", "nil":
+	case "do", "case", "of", "else", "decline", "with", "let", "otherwise", "true", "false", "nil",
+		"if", "then", "not", "where":
 		return "`" + name + "`"
 	}
 	return strings.TrimSpace(name)

@@ -24,6 +24,8 @@ func (e *Emitter) Result(result *valueir.Result, answered string) string {
 		name := e.local()
 		fmt.Fprintf(e.Out, "var %s %s\n", name, e.Bindings.ValueType(result.Type))
 		return name
+	case valueir.Branch:
+		return e.branch(result, answered)
 	case valueir.Choice:
 		value := e.choice(result)
 		if answered != "" {

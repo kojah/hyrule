@@ -5,6 +5,7 @@ import "strings"
 func operand(x *Expr, indent int) string {
 	value := render(x, indent)
 	if x.Kind == Call && len(x.Args) > 0 && x.Bind == "" || x.Kind == Comparison || x.Kind == Update ||
+		x.Kind == Logic || x.Kind == Conditional ||
 		x.Kind == OrderedAlternatives || x.Kind == Query || x.Kind == Do || x.Kind == Pure ||
 		x.Kind == Literal && strings.HasPrefix(x.Name, "-") {
 		return "(" + value + ")"
@@ -51,6 +52,17 @@ func render(x *Expr, indent int) string {
 		return strings.Join(parts, "\n"+strings.Repeat(" ", indent)+"<|> ")
 	case Comparison:
 		return operand(x.Args[0], indent) + " " + x.Name + " " + operand(x.Args[1], indent)
+	case Logic:
+		if x.Name == "not" {
+			return "not " + operand(x.Args[0], indent)
+		}
+		left := logicOperand(x.Args[0], indent)
+		if x.Args[0].Kind == Logic && x.Args[0].Name == x.Name {
+			left = render(x.Args[0], indent) // Same-operator chains associate left.
+		}
+		return left + " " + x.Name + " " + logicOperand(x.Args[1], indent)
+	case Conditional:
+		return renderConditional(x, indent)
 	case Alternation:
 		parts := make([]string, len(x.Args))
 		for i, a := range x.Args {
@@ -148,4 +160,24 @@ func renderCall(x *Expr, indent int) string {
 		value = bindPrefix(x) + "(" + value + ")"
 	}
 	return value
+}
+
+// logicOperand leaves comparisons, negations and calls unparenthesized; mixed
+// Boolean operators and other compound operands keep explicit grouping.
+func logicOperand(x *Expr, indent int) string {
+	if x.Kind == Comparison || x.Kind == Logic && x.Name == "not" || x.Kind == Call && x.Bind == "" && infix(x.Name) == "" {
+		return render(x, indent)
+	}
+	return operand(x, indent)
+}
+
+func renderConditional(x *Expr, indent int) string {
+	condition := render(x.Args[0], indent)
+	then, otherwise := render(x.Args[1], indent+2), render(x.Args[2], indent+2)
+	value := "if " + condition + " then " + then + " else " + otherwise
+	if !strings.Contains(value, "\n") && indent+len(value) < 100 {
+		return value
+	}
+	pad := "\n" + strings.Repeat(" ", indent+2)
+	return "if " + condition + pad + "then " + then + pad + "else " + otherwise
 }

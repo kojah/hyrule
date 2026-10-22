@@ -10,6 +10,9 @@ const (
 	Query
 	Choice
 	Decline
+	// Branch evaluates the pure Boolean Value, then continues with
+	// Alternatives[0] when it holds and Alternatives[1] otherwise.
+	Branch
 )
 
 // Result is a typed continuation. Choice tries branches in order until one

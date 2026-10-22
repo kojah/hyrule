@@ -55,6 +55,10 @@ func (e *resolver) expressionType(expression *semantic.Expr) (types.Type, error)
 			return nil, err
 		}
 		return types.NewSlice(types.Default(element)), nil
+	case semantic.Logic, semantic.Comparison:
+		return types.Typ[types.Bool], nil
+	case semantic.Conditional:
+		return e.conditionalType(expression, nil)
 	case semantic.Call:
 		if _, arithmetic := compiler.Arithmetic(expression.Name); arithmetic {
 			return e.arithmeticType(expression, nil)
@@ -112,8 +116,10 @@ func (e *resolver) prepareValue(expression *semantic.Expr, expected types.Type) 
 	// Ordered query continuations bind their outcome captures only at the winning
 	// result. Do not lift work from those arms into the matching graph.
 	switch expression.Kind {
-	case semantic.Query, semantic.OrderedAlternatives, semantic.Selection, semantic.Pure, semantic.Do, semantic.Decline:
+	case semantic.Query, semantic.OrderedAlternatives, semantic.Selection, semantic.Pure, semantic.Do, semantic.Decline, semantic.Conditional:
 		return expression, nil
+	case semantic.Logic:
+		return e.prepareLazy(expression)
 	}
 	if expression.Kind == semantic.Variable && strings.Contains(expression.Name, ".") {
 		typ, err := e.expressionType(expression)

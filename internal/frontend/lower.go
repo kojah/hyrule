@@ -14,7 +14,8 @@ import (
 
 // Lower resolves names and lexical scopes across all input declarations
 // and copies every semantic value. The input remains usable by the formatter.
-func Lower(files []*syntax.File) []*semantic.File {
+// Equation where bindings are substituted at each use.
+func Lower(files []*syntax.File) ([]*semantic.File, error) {
 	constructors := map[string]bool{}
 	names := map[string]bool{}
 	for _, file := range files {
@@ -36,7 +37,7 @@ func Lower(files []*syntax.File) []*semantic.File {
 			}
 		}
 	}
-	lower := lowering{constructors: constructors, names: names, captures: map[string]bool{}}
+	lower := lowering{constructors: constructors, names: names, captures: map[string]bool{}, failure: new(error)}
 	result := make([]*semantic.File, len(files))
 	for i, file := range files {
 		result[i] = &semantic.File{}
@@ -44,10 +45,16 @@ func Lower(files []*syntax.File) []*semantic.File {
 			result[i].Items = append(result[i].Items, lower.item(item))
 		}
 	}
-	return result
+	return result, *lower.failure
 }
 
-type lowering struct{ constructors, names, captures map[string]bool }
+// lowering is copied for nested scopes; where state and the first failure are
+// shared by every copy lowering one rule.
+type lowering struct {
+	constructors, names, captures map[string]bool
+	where                         *whereScope
+	failure                       *error
+}
 
 func position(p syntax.Position) semantic.Position {
 	return semantic.Position{File: p.File, Line: p.Line, Column: p.Column}
@@ -75,6 +82,9 @@ func (l lowering) expression(x *syntax.Expr) *semantic.Expr {
 				return scoped.expression(&merged)
 			}
 		}
+	}
+	if substituted, ok := l.substitute(x); ok {
+		return substituted
 	}
 	result := &semantic.Expr{Position: position(x.Position), Kind: expressionKind(x.Kind), Name: x.Name, Bind: x.Bind, Field: x.Field,
 		BindResult: x.Sequential && len(x.Arms) > 0 && x.Arms[0].Pattern.Kind == syntax.Variable}
@@ -148,6 +158,10 @@ func expressionKind(kind syntax.Kind) semantic.Kind {
 		return semantic.Do
 	case syntax.Decline:
 		return semantic.Decline
+	case syntax.Logic:
+		return semantic.Logic
+	case syntax.Conditional:
+		return semantic.Conditional
 	default:
 		panic("unhandled parser expression kind")
 	}
@@ -170,13 +184,20 @@ func (l lowering) item(item syntax.Item) semantic.Item {
 		l.captures = map[string]bool{}
 		l.capture(x.Match)
 		out.Rule = &semantic.Rule{Position: position(x.Position), Name: x.Name, Family: x.Family, Match: l.expression(x.Match)}
+		l.where = l.bindWhere(x)
 		for _, clause := range x.Clauses {
-			out.Rule.Clauses = append(out.Rule.Clauses, semantic.Clause{Name: clause.Name, Value: l.expression(clause.Value)})
+			lowered := semantic.Clause{Name: clause.Name, Value: l.expression(clause.Value)}
+			if clause.Pattern != nil {
+				l.capture(clause.Pattern)
+				lowered.Pattern = l.expression(clause.Pattern)
+			}
+			out.Rule.Clauses = append(out.Rule.Clauses, lowered)
 			if clause.Name != "" {
 				l.captures[clause.Name] = true
 			}
 		}
 		out.Rule.Build = l.expression(x.Build)
+		l.where = nil
 	}
 	if x := item.Record; x != nil {
 		out.Record = &semantic.Record{Position: position(x.Position), Name: x.Name, HostType: x.GoType, View: x.View, Fields: fields(x.Fields)}

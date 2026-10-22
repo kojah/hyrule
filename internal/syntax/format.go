@@ -186,6 +186,9 @@ func printRule(out *strings.Builder, item *Rule) {
 		if c.Name != "" {
 			out.WriteString("let " + identifierText(c.Name) + " = ")
 		}
+		if c.Pattern != nil {
+			out.WriteString(render(c.Pattern, 2) + " <- ")
+		}
 		out.WriteString(render(c.Value, 2))
 	}
 	if len(r.Clauses) > 0 {
@@ -198,5 +201,11 @@ func printRule(out *strings.Builder, item *Rule) {
 		out.WriteString(" " + result + "\n")
 	} else {
 		out.WriteString("\n  " + result + "\n")
+	}
+	if len(r.Where) > 0 {
+		out.WriteString("  where\n")
+		for _, binding := range r.Where {
+			out.WriteString("    " + identifierText(binding.Name) + " = " + render(binding.Value, 4) + "\n")
+		}
 	}
 }

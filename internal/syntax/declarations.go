@@ -149,6 +149,7 @@ func (p *parser) equation(file *File, comments []string) {
 		label = fmt.Sprintf("%s_L%d_F%x", family, pos.Line, hash.Sum32())
 	}
 	ordinal := 0
+	var rules []*Rule
 	for !p.end() {
 		p.continuation(0)
 		rule := &Rule{Position: pos, Name: label, Family: family, Match: match, Comments: comments}
@@ -157,34 +158,111 @@ func (p *parser) equation(file *File, comments []string) {
 			rule.Comments = nil
 		}
 		if p.take("|") {
-			for !p.end() {
-				p.continuation(0)
-				clause := Clause{}
-				if p.take("let") {
-					clause.Name = p.name()
-					p.expect("=")
-				}
-				clause.Value = p.expression(0, false, 0)
-				if clause.Name != "" || !clause.Value.Bare || clause.Value.Name != "otherwise" {
-					rule.Clauses = append(rule.Clauses, clause)
-				}
-				if !p.take(",") && !p.take("&&") {
-					break
-				}
-			}
+			rule.Clauses = p.qualifiers()
 		} else if ordinal > 0 {
 			break
 		}
 		p.expect("=")
 		rule.Build = p.expression(0, false, 0)
 		file.Items = append(file.Items, Item{Rule: rule})
+		rules = append(rules, rule)
 		ordinal++
 		p.continuation(0)
 		if !p.at("|") {
 			break
 		}
 	}
+	if p.take("where") {
+		where := p.whereBindings()
+		for _, rule := range rules {
+			rule.Where = where
+		}
+	}
 	p.lineEnd()
+}
+
+// qualifiers reads one guard's comma-separated lets, pattern guards and guards.
+func (p *parser) qualifiers() []Clause {
+	var clauses []Clause
+	for !p.end() {
+		p.continuation(0)
+		clause := Clause{}
+		if p.take("let") {
+			clause.Name = p.name()
+			p.expect("=")
+		} else if p.clauseBinds() {
+			clause.Pattern = p.expression(0, true, 0)
+			p.expect("<-")
+		}
+		clause.Value = p.expression(0, false, 0)
+		if clause.Name != "" || clause.Pattern != nil {
+			clauses = append(clauses, clause)
+		} else if !clause.Value.Bare || clause.Value.Name != "otherwise" {
+			// A top-level conjunction is a sequence of ordinary guards.
+			clauses = append(clauses, conjuncts(clause.Value)...)
+		}
+		if !p.take(",") {
+			break
+		}
+	}
+	return clauses
+}
+
+// conjuncts splits a top-level && into ordered guards; nested ones remain.
+func conjuncts(x *Expr) []Clause {
+	if x.Kind == Logic && x.Name == "&&" {
+		return append(conjuncts(x.Args[0]), conjuncts(x.Args[1])...)
+	}
+	return []Clause{{Value: x}}
+}
+
+// clauseBinds reports whether the guard qualifier at the cursor is a pattern
+// guard: a <- before the qualifier's terminating comma or equals sign.
+func (p *parser) clauseBinds() bool {
+	nesting := 0
+	for i := p.index; i < len(p.tokens); i++ {
+		switch p.tokens[i].text {
+		case "(", "[":
+			nesting++
+		case ")", "]":
+			nesting--
+		case "<-":
+			if nesting == 0 {
+				return true
+			}
+		case ",", "=":
+			if nesting == 0 {
+				return false
+			}
+		}
+	}
+	return false
+}
+
+// whereBindings reads one inline binding or an indented block of them.
+func (p *parser) whereBindings() []Clause {
+	var where []Clause
+	if !p.at("\n") {
+		name := p.name()
+		p.expect("=")
+		return append(where, Clause{Name: name, Value: p.expression(0, false, 0)})
+	}
+	level := p.block(0)
+	for !p.end() && p.peek().indent == level {
+		name := p.name()
+		p.expect("=")
+		where = append(where, Clause{Name: name, Value: p.expression(level, false, 0)})
+		if !p.at("\n") {
+			break
+		}
+		before, comments := p.index, len(p.comments)
+		p.skipLines()
+		if p.end() || p.peek().indent != level {
+			p.index, p.comments = before, p.comments[:comments]
+			break
+		}
+	}
+	return where
 }
 
 func (p *parser) hostType() string {

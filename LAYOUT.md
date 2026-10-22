@@ -17,7 +17,10 @@ A greater indentation continues a statement or begins an explicitly introduced
 child block. There are no braces or semicolons as alternative block delimiters.
 
 Equations may continue on indented lines. Guard bars belong to the equation;
-comma-separated guard qualifiers preserve written evaluation order. Parentheses
+comma-separated guard qualifiers preserve written evaluation order. A `where`
+block follows the last alternative on an indented line; its bindings align with
+each other. In `if`, `then` and `else` may each start a line indented past the
+line containing `if`. Parentheses
 and brackets permit expression continuation across lines, so named groups and
 lists can wrap freely. Explicit `do` and `case` blocks inside parentheses still
 use their own statement/arm indentation. Pattern alternatives require parentheses. Result choice `<|>` can

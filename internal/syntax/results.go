@@ -1,7 +1,7 @@
 package syntax
 
 func (p *parser) caseExpression(start token, base int) *Expr {
-	call := p.expression(base, false, 2)
+	call := p.expression(base, false, orRank)
 	p.expect("of")
 	outerGroup := p.grouped
 	p.grouped = 0
@@ -58,7 +58,7 @@ func (p *parser) doBlock(start token) *Expr {
 			p.fail("do sequencing exceeds nesting limit")
 			break
 		}
-		call := p.expression(level, false, 2)
+		call := p.expression(level, false, orRank)
 		step := &Expr{Position: value.Position, Kind: Query, Sequential: true, Args: []*Expr{call}, Arms: []DecisionArm{{Pattern: value}}}
 		p.skipLines()
 		if !p.end() && p.peek().indent > level && p.take("else") {
@@ -93,7 +93,7 @@ func (p *parser) doBlock(start token) *Expr {
 		p.fail("do requires a final result")
 		terminal = &Expr{Position: start.Position}
 	}
-	if terminal.Kind != Do && terminal.Kind != Query && terminal.Kind != OrderedAlternatives && terminal.Kind != Decline {
+	if terminal.Kind != Do && terminal.Kind != Query && terminal.Kind != OrderedAlternatives && terminal.Kind != Decline && terminal.Kind != Conditional {
 		terminal = &Expr{Position: terminal.Position, Kind: Pure, Args: []*Expr{terminal}}
 	}
 	for i := len(steps) - 1; i >= 0; i-- {
@@ -122,4 +122,31 @@ func (p *parser) hasOnLine(operator string) bool {
 		}
 	}
 	return false
+}
+
+// conditional parses if/then/else. Then and else may start indented lines
+// below the if, which the ordinary continuation leaves visible for do-else.
+func (p *parser) conditional(start token, base int) *Expr {
+	condition := p.expression(base, false, orRank)
+	p.keywordLine(start.indent, "then")
+	p.expect("then")
+	then := p.expression(base, false, 0)
+	p.keywordLine(start.indent, "else")
+	p.expect("else")
+	otherwise := p.expression(base, false, 0)
+	return &Expr{Position: start.Position, Kind: Conditional, Args: []*Expr{condition, then, otherwise}}
+}
+
+// keywordLine skips line breaks before keyword when it starts a line indented
+// past the construct's own line.
+func (p *parser) keywordLine(indent int, keyword string) {
+	if !p.at("\n") {
+		return
+	}
+	index, comments := p.index, len(p.comments)
+	p.skipLines()
+	if t := p.peek(); t.text == keyword && t.indent > indent {
+		return
+	}
+	p.index, p.comments = index, p.comments[:comments]
 }

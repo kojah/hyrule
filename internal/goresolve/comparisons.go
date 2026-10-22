@@ -42,8 +42,18 @@ func (e *resolver) compare(expression *semantic.Expr) error {
 	if err != nil {
 		return err
 	}
+	operator, err := e.comparisonOperator(expression, leftType, rightType)
+	if err != nil {
+		return err
+	}
+	e.cursor.Compare(operator, left, right)
+	return nil
+}
+
+// comparisonOperator checks operand types shared by guard and value comparisons.
+func (e *resolver) comparisonOperator(expression *semantic.Expr, leftType, rightType types.Type) (matchir.Comparison, error) {
 	if !types.AssignableTo(leftType, rightType) && !types.AssignableTo(rightType, leftType) {
-		return e.fail(expression, "comparison requires compatible operand types")
+		return 0, e.fail(expression, "comparison requires compatible operand types")
 	}
 	operator, ordered := matchir.Equal, false
 	switch expression.Name {
@@ -59,18 +69,17 @@ func (e *resolver) compare(expression *semantic.Expr) error {
 	case ">=":
 		operator, ordered = matchir.GreaterEqual, true
 	default:
-		return e.fail(expression, "unknown comparison operator")
+		return 0, e.fail(expression, "unknown comparison operator")
 	}
 	if ordered {
 		for _, typ := range []types.Type{leftType, rightType} {
 			basic, known := typ.Underlying().(*types.Basic)
 			if !known || basic.Info()&types.IsOrdered == 0 {
-				return e.fail(expression, "ordered comparison requires ordered scalar types")
+				return 0, e.fail(expression, "ordered comparison requires ordered scalar types")
 			}
 		}
 	} else if !safeEquality(leftType) || !safeEquality(rightType) || !types.Comparable(leftType) && !types.Comparable(rightType) {
-		return e.fail(expression, "equality requires safe comparable operands")
+		return 0, e.fail(expression, "equality requires safe comparable operands")
 	}
-	e.cursor.Compare(operator, left, right)
-	return nil
+	return operator, nil
 }

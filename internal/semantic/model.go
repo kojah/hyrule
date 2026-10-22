@@ -47,6 +47,10 @@ const (
 	Pure
 	Do
 	Decline
+	// Logic is a short-circuit Boolean operator: "&&", "||" or "not".
+	Logic
+	// Conditional is if/then/else: condition, then branch, else branch.
+	Conditional
 )
 
 // Expr is a pattern or construction expression. Bind names an entire matched
@@ -85,10 +89,12 @@ type Rule struct {
 }
 
 // Clause preserves evaluation order. A nonempty Name declares an immutable
-// local; an empty Name requires Value to establish a true Boolean guard.
+// local; a Pattern matches the pure Value (a pattern guard); otherwise Value
+// must establish a true Boolean guard.
 type Clause struct {
-	Name  string
-	Value *Expr
+	Name    string
+	Pattern *Expr
+	Value   *Expr
 }
 
 // Pattern declares a reusable match with explicit, hygienic capture parameters.
