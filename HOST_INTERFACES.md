@@ -123,7 +123,7 @@ accessible fields. Interface input uses a checked type assertion. Other dynamic
 types and nil pointers fail the match; incompatible static types are errors.
 Promoted fields require an explicit captured field path.
 
-Views cannot construct, update or derive representation helpers. They introduce
+Views cannot construct or update values. They introduce
 no mutation, recursive traversal or implicit semantic evidence. Pure extraction
 may be shared by the matching graph; ordered queries remain separate.
 

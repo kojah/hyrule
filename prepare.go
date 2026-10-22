@@ -38,15 +38,7 @@ func (c *Config) prepare(target string) (*preparedCompilation, error) {
 		if err != nil {
 			return nil, fmt.Errorf("target %s: %w", t.Name, err)
 		}
-		functions := []hostapi.FunctionStub{}
-		if !t.Schema {
-			functions = append(functions, hostapi.FunctionStub{Signature: t.Signature, Function: t.Function})
-		}
-		for _, derivation := range program.Derivations {
-			for _, operation := range derivation.Operations {
-				functions = append(functions, hostapi.FunctionStub{Signature: operation.Signature, Function: operation.Function})
-			}
-		}
+		functions := []hostapi.FunctionStub{{Signature: t.Signature, Function: t.Function}}
 		data, err := hostapi.Stubs(filepath.Join(c.root, t.Bindings), functions)
 		if err != nil {
 			return nil, fmt.Errorf("target %s: %w", t.Name, err)

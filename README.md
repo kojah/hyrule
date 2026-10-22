@@ -301,8 +301,8 @@ are limited to 500 lines. `make hyrule-check`, `make hyrule-generate` and
 `make hyrule-generated-check` include the production/example configurations.
 Run `make generate-go` before raw Go commands in a fresh checkout.
 
-Complete record schemas can also derive freezing, keys/equality, visitors,
-transforms, bounded diagnostics and exact snapshot storage. `schema: true`
-targets need no rewrite dispatcher. See [derivation contracts](DERIVATIONS.md).
+Field-complete representation maintenance (snapshots, read-only views, keys,
+visitors and transforms) is not a semantic decision and belongs to
+[Boiler](../boiler/README.md), not to Hyrule schemas.
 The public library provides `Load`, `Compile`, `Publish`, `Format`, `Migrate` and
 configured `MigrateRules`; the CLI is an adapter over those APIs.

@@ -28,12 +28,9 @@ type emitter struct {
 	out         strings.Builder
 }
 
-// Generate emits a resolved recognizer and separately compiled declarations.
-func Generate(program *goplan.Program, declarations string) ([]byte, error) {
+// Generate emits a resolved recognizer.
+func Generate(program *goplan.Program) ([]byte, error) {
 	h := program.Host
-	if h.Signature == nil {
-		return renderSource(&h, declarations)
-	}
 	sig := h.Signature
 	e := emitter{host: &h, tables: program.Tables, records: program.Records, unions: program.Unions, serial: program.Serial}
 	output := h.TypeName(sig.Results().At(0).Type())
@@ -56,8 +53,6 @@ func Generate(program *goplan.Program, declarations string) ([]byte, error) {
 	}
 	e.out.WriteString("}\n")
 	e.emitValidators()
-
-	e.out.WriteString(declarations)
 	if program.Native != nil {
 		e.emitNativeAPI(program.Native)
 	}

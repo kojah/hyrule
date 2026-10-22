@@ -51,7 +51,7 @@ func TestSharedCompilerHasNoBackendDependency(t *testing.T) {
 // This contract lets the surface language be replaced independently.
 func TestSemanticConsumersDoNotImportParser(t *testing.T) {
 	for _, directory := range []string{"internal/compiler", "internal/gogen", "internal/goresolve", "internal/goplan",
-		"internal/valuegen", "internal/valueir", "internal/recordresolve", "internal/recordgen", "internal/semantic", "internal/matchir"} {
+		"internal/valuegen", "internal/valueir", "internal/semantic", "internal/matchir"} {
 		entries, err := os.ReadDir(directory)
 		if err != nil {
 			t.Fatal(err)
@@ -80,7 +80,7 @@ func TestSemanticConsumersDoNotImportParser(t *testing.T) {
 
 // Emission consumes resolved plans, never language declarations or symbol scopes.
 func TestGoBackendDoesNotImportSemanticChecking(t *testing.T) {
-	for _, directory := range []string{"internal/gogen", "internal/valuegen", "internal/recordgen", "internal/goplan"} {
+	for _, directory := range []string{"internal/gogen", "internal/valuegen", "internal/goplan"} {
 		entries, err := os.ReadDir(directory)
 		if err != nil {
 			t.Fatal(err)
@@ -99,7 +99,7 @@ func TestGoBackendDoesNotImportSemanticChecking(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				for _, forbidden := range []string{"/semantic", "/syntax", "/frontend", "/compiler", "/goresolve", "/recordresolve"} {
+				for _, forbidden := range []string{"/semantic", "/syntax", "/frontend", "/compiler", "/goresolve"} {
 					if strings.HasSuffix(dependency, forbidden) {
 						t.Errorf("backend imports semantic checking: %s -> %s", name, dependency)
 					}

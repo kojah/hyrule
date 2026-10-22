@@ -53,8 +53,6 @@ func Parse(name string, input io.Reader) (*File, error) {
 			record := p.recordDeclaration(pos, comments)
 			record.View = kind == "view"
 			file.Items = append(file.Items, Item{Record: record})
-		case "derive":
-			file.Items = append(file.Items, Item{Derivation: p.derivation(pos, comments)})
 		case "signature":
 			file.Items = append(file.Items, Item{API: p.apiDeclaration(pos, comments)})
 		case "pattern":

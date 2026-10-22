@@ -2,7 +2,7 @@
    logical statements; INDENT/DEDENT describe block boundaries, not characters.
    Names are resolved after parsing against all files belonging to a target. *)
 file = { declaration, NEWLINE }, EOF ;
-declaration = host | schema | pattern | signature | derivation | equation ;
+declaration = host | schema | pattern | signature | equation ;
 host = "host", INDENT, hostBinding, { NEWLINE, hostBinding }, DEDENT ;
 hostBinding = name, [ "?" | "!" ], { name }, [ "=", application ] ;
 schema = [ "exhaustive" ], ( "type" | "view" ), name, "=", hostType,
@@ -16,9 +16,6 @@ storage = path | integer ;
 variant = name, [ "(", field, { ",", field }, ")" ], [ "=", path ] ;
 pattern = "pattern", name, { name }, "=", patternExpression ;
 signature = "signature", ( "partial" | "total", "=", expression ) ;
-derivation = "derive", name, INDENT, operation, { NEWLINE, operation }, DEDENT ;
-operation = name, name, ":", name, [ INDENT, policy, { NEWLINE, policy }, DEDENT ] ;
-policy = name, [ ":", ( path | "@", path ) ] ;
 equation = [ "@", name, NEWLINE ], name, patternExpression,
            ( "=", expression | guarded, { guarded } ), [ where ] ;
 guarded = "|", qualifier, { ",", qualifier }, "=", expression ;

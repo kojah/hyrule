@@ -12,8 +12,6 @@ import (
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/gogen"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/goresolve"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/recordgen"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/recordresolve"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
 	"golang.org/x/tools/go/packages"
 )
@@ -63,20 +61,16 @@ func (c *Config) Compile(ctx context.Context, target string) ([]Artifact, error)
 }
 
 // compileTarget resolves one prepared program against an already loaded host,
-// then emits its typed dispatcher and schema-maintenance declarations.
+// then emits its typed dispatcher.
 func (c *Config) compileTarget(pkg *packages.Package, selected preparedTarget) ([]byte, error) {
 	t := selected.target
-	var sig *types.Signature
-	if !t.Schema {
-		obj := pkg.Types.Scope().Lookup(t.Signature)
-		if obj == nil {
-			return nil, fmt.Errorf("missing signature %s", t.Signature)
-		}
-		var ok bool
-		sig, ok = obj.Type().Underlying().(*types.Signature)
-		if !ok {
-			return nil, fmt.Errorf("%s is not a function signature", t.Signature)
-		}
+	obj := pkg.Types.Scope().Lookup(t.Signature)
+	if obj == nil {
+		return nil, fmt.Errorf("missing signature %s", t.Signature)
+	}
+	sig, ok := obj.Type().Underlying().(*types.Signature)
+	if !ok {
+		return nil, fmt.Errorf("%s is not a function signature", t.Signature)
 	}
 	program := selected.program
 	names := map[string]*types.Package{}
@@ -98,12 +92,7 @@ func (c *Config) compileTarget(pkg *packages.Package, selected preparedTarget) (
 	if err != nil {
 		return nil, err
 	}
-	helpers, err := recordresolve.Resolve(&resolved.Host, program)
-	if err != nil {
-		return nil, err
-	}
-	derived := recordgen.Generate(&resolved.Host, helpers)
-	data, err := gogen.Generate(resolved, derived)
+	data, err := gogen.Generate(resolved)
 	if err != nil {
 		return nil, err
 	}

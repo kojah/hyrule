@@ -20,9 +20,6 @@ type UnionField = syntax.UnionField
 type DecisionArm = syntax.DecisionArm
 type Record = syntax.Record
 type API = syntax.API
-type Derivation = syntax.Derivation
-type DerivedOperation = syntax.DerivedOperation
-type DerivedField = syntax.DerivedField
 
 const (
 	Call                = syntax.Call

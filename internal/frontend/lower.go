@@ -212,16 +212,6 @@ func (l lowering) item(item syntax.Item) semantic.Item {
 	if x := item.API; x != nil {
 		out.API = &semantic.API{Position: position(x.Position), Mode: x.Mode, Fallback: l.expression(x.Fallback)}
 	}
-	if x := item.Derivation; x != nil {
-		out.Derivation = &semantic.Derivation{Position: position(x.Position), Record: x.Record}
-		for _, op := range x.Operations {
-			next := &semantic.DerivedOperation{Position: position(op.Position), Kind: op.Kind, Function: op.Function, Signature: op.Signature}
-			for _, f := range op.Fields {
-				next.Fields = append(next.Fields, semantic.DerivedField{Position: position(f.Position), Name: f.Name, Policy: f.Policy})
-			}
-			out.Derivation.Operations = append(out.Derivation.Operations, next)
-		}
-	}
 	return out
 }
 

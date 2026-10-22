@@ -11,7 +11,6 @@ import (
 
 // Program holds ordered source rules and their binding declarations.
 type Program struct {
-	Derivations  []*semantic.Derivation
 	API          *semantic.API
 	Bindings     map[string]*semantic.Binding
 	BindingOrder []*semantic.Binding
@@ -39,7 +38,7 @@ func Collect(files []*semantic.File) (*Program, error) {
 	if err := program.checkNativeNames(); err != nil {
 		return nil, err
 	}
-	if len(program.rules) == 0 && len(program.Derivations) == 0 {
+	if len(program.rules) == 0 {
 		return nil, fmt.Errorf("ruleset is empty")
 	}
 	if err := program.collectUnions(); err != nil {
@@ -76,13 +75,8 @@ func (p *Program) fail(x *semantic.Expr, message string) error {
 	return &semantic.Diagnostic{Position: x.Position, Rule: p.rule, Message: message}
 }
 
-// HasRules distinguishes matching targets from schema-only generation.
-func (p *Program) HasRules() bool { return len(p.rules) != 0 || len(p.patterns) != 0 }
-
 func (program *Program) collectItem(item semantic.Item, names map[string]bool) error {
-	if item.Derivation != nil {
-		program.Derivations = append(program.Derivations, item.Derivation)
-	} else if api := item.API; api != nil {
+	if api := item.API; api != nil {
 		if program.API != nil {
 			return &semantic.Diagnostic{Position: api.Position, Message: "duplicate signature declaration"}
 		}

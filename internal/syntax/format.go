@@ -35,8 +35,6 @@ func Print(file *File) []byte {
 			printAPI(&out, item.API)
 		case item.Pattern != nil:
 			printPattern(&out, item.Pattern)
-		case item.Derivation != nil:
-			printDerivation(&out, item.Derivation)
 		case item.Rule != nil:
 			last := i+1 == len(file.Items) || file.Items[i+1].Rule == nil || !file.Items[i+1].Rule.Continued
 			printRule(&out, item.Rule, last)
@@ -150,20 +148,6 @@ func printPattern(out *strings.Builder, item *Pattern) {
 		out.WriteString(" " + identifierText(arg))
 	}
 	out.WriteString(" = " + render(pat.Body, 0) + "\n")
-
-}
-
-func printDerivation(out *strings.Builder, item *Derivation) {
-
-	d := item
-	printComments(out, d.Comments)
-	out.WriteString("derive " + identifierText(d.Record) + "\n")
-	for _, op := range d.Operations {
-		fmt.Fprintf(out, "  %s %s: %s\n", op.Kind, op.Function, op.Signature)
-		for _, field := range op.Fields {
-			fmt.Fprintf(out, "    %s: %s\n", identifierText(field.Name), strings.ReplaceAll(field.Policy, "$", "@"))
-		}
-	}
 
 }
 

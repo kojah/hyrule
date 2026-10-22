@@ -31,8 +31,6 @@ func (p *parser) declaration(file *File, comments []string) {
 		pattern.Body = p.expression(0, true, 0)
 		file.Items = append(file.Items, Item{Pattern: pattern})
 		p.lineEnd()
-	case p.take("derive"):
-		p.derive(file, pos, comments)
 	default:
 		p.equation(file, comments)
 	}
@@ -100,34 +98,6 @@ func (p *parser) field() UnionField {
 		field.GoName = p.storage()
 	}
 	return field
-}
-
-func (p *parser) derive(file *File, pos Position, comments []string) {
-	derive := &Derivation{Position: pos, Record: p.name(), Comments: comments}
-	level := p.block(0)
-	for !p.end() && p.peek().indent == level {
-		op := &DerivedOperation{Position: p.peek().Position, Kind: p.name(), Function: p.name()}
-		p.expect(":")
-		op.Signature = p.name()
-		p.lineEnd()
-		if !p.end() && p.peek().indent > level {
-			fields := p.peek().indent
-			for !p.end() && p.peek().indent == fields {
-				field := DerivedField{Position: p.peek().Position, Name: p.name(), Policy: "keep"}
-				if p.take(":") {
-					prefix := ""
-					if p.take("@") {
-						prefix = "$"
-					}
-					field.Policy = prefix + p.path()
-				}
-				op.Fields = append(op.Fields, field)
-				p.lineEnd()
-			}
-		}
-		derive.Operations = append(derive.Operations, op)
-	}
-	file.Items = append(file.Items, Item{Derivation: derive})
 }
 
 func (p *parser) equation(file *File, comments []string) {

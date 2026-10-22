@@ -13,7 +13,7 @@ import (
 // FunctionStub is one generated API declared by a named host function type.
 type FunctionStub struct{ Signature, Function string }
 
-// Stubs combines rule and derivation signatures in one pre-generation overlay.
+// Stubs declares the configured rule functions in one pre-generation overlay.
 // Actual generated code is checked separately; no stub is published or executed.
 func Stubs(path string, functions []FunctionStub) ([]byte, error) {
 	fs := token.NewFileSet()

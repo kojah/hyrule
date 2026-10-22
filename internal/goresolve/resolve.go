@@ -3,7 +3,6 @@
 package goresolve
 
 import (
-	"fmt"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/compiler"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/goplan"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
@@ -36,16 +35,6 @@ type resolver struct {
 
 func Resolve(h Host, program *compiler.Program) (*goplan.Program, error) {
 	h.Imports = map[string]string{}
-	if h.Signature == nil {
-		if program.API != nil || len(program.Bindings) != 0 || len(program.Unions) != 0 || program.HasRules() {
-			return nil, fmt.Errorf("schema target accepts only records and derivations")
-		}
-		e := resolver{host: &h}
-		if err := e.bindRecords(program.Records); err != nil {
-			return nil, err
-		}
-		return e.publish(nil, nil), nil
-	}
 	native, err := nativeAPI(&h, program.API)
 	if err != nil {
 		return nil, err

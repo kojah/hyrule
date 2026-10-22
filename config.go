@@ -24,7 +24,6 @@ type Config struct {
 
 // Target connects one ordered ruleset with a Go host signature.
 type Target struct {
-	Schema    bool     `yaml:"schema"`
 	Name      string   `yaml:"name"`
 	Package   string   `yaml:"package"`
 	Rules     []string `yaml:"rules"`
@@ -59,9 +58,7 @@ func Load(path string) (*Config, error) {
 	}
 	names, outputs := map[string]bool{}, map[string]bool{}
 	for _, t := range c.Targets {
-		if !token.IsIdentifier(t.Name) ||
-			!t.Schema && (!token.IsIdentifier(t.Signature) || !token.IsIdentifier(t.Function) || t.Function == "_") ||
-			t.Schema && (t.Signature != "" || t.Function != "") {
+		if !token.IsIdentifier(t.Name) || !token.IsIdentifier(t.Signature) || !token.IsIdentifier(t.Function) || t.Function == "_" {
 			return nil, fmt.Errorf("target %q: invalid name, signature or function", t.Name)
 		}
 		if names[t.Name] {

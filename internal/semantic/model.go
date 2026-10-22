@@ -107,13 +107,12 @@ type Pattern struct {
 
 // Item preserves declaration order for deterministic resolution.
 type Item struct {
-	Derivation *Derivation
-	Binding    *Binding
-	Pattern    *Pattern
-	Union      *Union
-	Record     *Record
-	Rule       *Rule
-	API        *API
+	Binding *Binding
+	Pattern *Pattern
+	Union   *Union
+	Record  *Record
+	Rule    *Rule
+	API     *API
 }
 
 // File holds semantic declarations. Files combine in lexical filename

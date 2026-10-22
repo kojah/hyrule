@@ -10,7 +10,7 @@ Blank lines and comments do not open or close blocks. `//` and `/* ... */`
 comments are preserved by formatting, including comments inside declarations.
 The formatter moves internal comments before their containing declaration.
 
-`host`, schema bodies, `derive` operations, `do`, `case ... of`, and multiline
+`host`, schema bodies, `do`, `case ... of`, and multiline
 `else` introduce blocks. The first child establishes the block's indentation;
 subsequent siblings align with it. A smaller indentation closes the block.
 A greater indentation continues a statement or begins an explicitly introduced

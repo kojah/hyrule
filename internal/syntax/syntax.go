@@ -124,13 +124,12 @@ type Pattern struct {
 
 // Item preserves declaration order for formatting.
 type Item struct {
-	Derivation *Derivation
-	Binding    *Binding
-	Pattern    *Pattern
-	Union      *Union
-	Record     *Record
-	Rule       *Rule
-	API        *API
+	Binding *Binding
+	Pattern *Pattern
+	Union   *Union
+	Record  *Record
+	Rule    *Rule
+	API     *API
 }
 
 // File retains declarations and comments. Files combine in lexical filename
@@ -189,26 +188,4 @@ type API struct {
 	Mode     string
 	Fallback *Expr
 	Comments []string
-}
-
-// Derivation requests explicit operations over one complete record schema.
-// Field policies are language-level names or host hooks resolved by a backend.
-type Derivation struct {
-	Position
-	Record     string
-	Operations []*DerivedOperation
-	Comments   []string
-}
-
-// DerivedOperation names a generated function and its explicit host signature.
-type DerivedOperation struct {
-	Position
-	Kind, Function, Signature string
-	Fields                    []DerivedField
-}
-
-// DerivedField assigns a policy to one logical schema field, including omission.
-type DerivedField struct {
-	Position
-	Name, Policy string
 }
