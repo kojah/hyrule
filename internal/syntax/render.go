@@ -48,6 +48,10 @@ func render(x *Expr, indent int) string {
 		parts := make([]string, len(x.Args))
 		for i, a := range x.Args {
 			parts[i] = render(a, indent)
+			// An unparenthesized else branch would absorb the later choices.
+			if a.Kind == Conditional && i < len(x.Args)-1 {
+				parts[i] = "(" + parts[i] + ")"
+			}
 		}
 		return strings.Join(parts, "\n"+strings.Repeat(" ", indent)+"<|> ")
 	case Comparison:

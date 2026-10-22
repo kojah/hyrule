@@ -164,6 +164,11 @@ rewrite (inputs n host) =
       else
         true -> outputs 5
     outputs n
+
+@Choice
+rewrite (inputs n host) =
+  (if n > 1 then outputs n else decline)
+  <|> outputs 0
 `
 	formatted, err := hyrule.Format("input.rules", []byte(want))
 	if err != nil {
