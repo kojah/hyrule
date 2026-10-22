@@ -171,6 +171,8 @@ func logicOperand(x *Expr, indent int) string {
 	return operand(x, indent)
 }
 
+// renderConditional keeps short ifs on one line. Longer ones put then and else
+// on their own lines; an else-if chain stays at that same indentation.
 func renderConditional(x *Expr, indent int) string {
 	condition := render(x.Args[0], indent)
 	then, otherwise := render(x.Args[1], indent+2), render(x.Args[2], indent+2)
@@ -179,5 +181,11 @@ func renderConditional(x *Expr, indent int) string {
 		return value
 	}
 	pad := "\n" + strings.Repeat(" ", indent+2)
-	return "if " + condition + pad + "then " + then + pad + "else " + otherwise
+	value = "if " + condition + pad + "then " + then
+	for next := x.Args[2]; ; next = next.Args[2] {
+		if next.Kind != Conditional {
+			return value + pad + "else " + render(next, indent+2)
+		}
+		value += pad + "else if " + render(next.Args[0], indent) + pad + "then " + render(next.Args[1], indent+2)
+	}
 }

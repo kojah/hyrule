@@ -156,6 +156,7 @@ func (p *parser) equation(file *File, comments []string) {
 		if ordinal > 0 {
 			rule.Name += "_" + itoa(ordinal+1)
 			rule.Comments = nil
+			rule.Continued = true
 		}
 		if p.take("|") {
 			rule.Clauses = p.qualifiers()

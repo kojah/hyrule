@@ -30,6 +30,9 @@ type Result struct {
 // A nil Union means a Boolean decision, unless Next binds the complete result.
 // TupleSize greater than one packs a host tuple into its declared product type.
 type QueryPlan struct {
+	// Pure, when set, replaces the host call: the decision evaluates this pure
+	// value exactly once at its position, then dispatches like a query result.
+	Pure      *Value
 	Hook      matchir.HookID
 	Type      matchir.TypeID
 	Arguments []Argument

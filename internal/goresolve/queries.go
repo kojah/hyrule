@@ -143,6 +143,9 @@ func (e *resolver) resolveQuery(x *semantic.Expr, expected types.Type, inChoice 
 			return nil, err
 		}
 	} else {
+		if union == nil && q.Pure != nil {
+			return nil, e.fail(x.Args[0], "pure decision requires a bool or declared union result")
+		}
 		if union == nil {
 			return nil, e.fail(x.Args[0], "query result must have a declared union")
 		}
@@ -181,7 +184,10 @@ func (e *resolver) checkBooleanDecision(x *semantic.Expr) error {
 // identity before any outcome introduces payload captures.
 func (e *resolver) resolveQueryCall(x *semantic.Expr) (*valueir.QueryPlan, types.Type, error) {
 	call := x.Args[0]
-	if call.Kind != semantic.Call || call.Bind != "" {
+	if binding := e.bindings[call.Name]; call.Kind != semantic.Call || binding == nil || binding.Kind != "query" {
+		return e.resolvePureDecision(call)
+	}
+	if call.Bind != "" {
 		return nil, nil, e.fail(call, "query requires a query hook call")
 	}
 	expanded, err := e.forwardingCall(call, "query")

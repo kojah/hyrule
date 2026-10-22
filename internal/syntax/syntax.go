@@ -100,6 +100,8 @@ type Rule struct {
 	// alternative. The frontend substitutes them at each use.
 	Where    []Clause
 	Comments []string
+	// Continued marks a later guarded alternative of the preceding equation.
+	Continued bool
 }
 
 // Clause preserves evaluation order. A nonempty Name declares an immutable

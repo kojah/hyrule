@@ -204,6 +204,17 @@ answers. `<|>` tries strategies lazily within the committed result. Only `declin
 tries the next strategy, without undoing effects or retrying another equation.
 The final alternative is a pure total expression. See [transition semantics](TRANSITIONS.md).
 
+A `do` step or `case` may also decide on a pure Boolean or union value, such as
+`false <- proof.Exhausted` or `case kind value of`. The value is evaluated once at
+that step, in written order, and may not call `!` queries. Declare a host `!` only
+when it spends budget, records evidence or reads state that earlier queries
+change; a pure check does not need `!` to branch.
+
+The formatter keeps an equation's guarded alternatives together under one
+pattern, with any `where` block after the last alternative. Long `if` expressions
+put `then` and `else` on indented lines; an `else if` chain stays at that same
+indentation.
+
 ## Host and compiler contracts
 
 Declare a named function type directly in the configured binding file. The

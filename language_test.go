@@ -47,6 +47,8 @@ rewrite (inputs shape host)
 rewrite (inputs shape host) =
   do
     answer <- ask host
+    false <- answer == 0
+      else true -> outputs 1
     if answer > 3 then outputs answer else decline
   <|> outputs 99
 `
@@ -91,6 +93,7 @@ func TestBehavior(t *testing.T) {
   {"pattern guard and conjunction", &A{N: 3}, nil, 0, 3, []string{"probe1", "probe2", "pick", "small"}},
   {"and short-circuits", &A{N: 0}, nil, 5, 5, []string{"probe1", "probe2", "pick", "ask"}},
   {"pattern guard mismatch, if declines", &B{}, nil, 2, 99, []string{"probe1", "probe2", "pick", "ask"}},
+  {"pure do step exits early", &B{}, nil, 0, 1, []string{"probe1", "probe2", "pick", "ask"}},
  } {
   h := &Host{Probes: tt.probes, Answer: tt.answer}
   if got := Rewrite(tt.shape, h); got != tt.want || !reflect.DeepEqual(h.Calls, tt.calls) {
@@ -131,5 +134,42 @@ func TestHaskellLanguageDiagnostics(t *testing.T) {
 				t.Fatalf("want %q: %v", tt.want, err)
 			}
 		})
+	}
+}
+
+// Guarded alternatives stay one equation sharing one where block, and else-if
+// chains stay at one indentation; the canonical form reparses to itself.
+func TestFormatterKeepsEquationsFlat(t *testing.T) {
+	const want = `@Classify
+rewrite (inputs n host)
+  | n > limit
+  =
+  outputs 1
+  | n == 0
+  =
+  if Probe host 1
+    then outputs 2
+    else if Probe host 2
+    then outputs 3
+    else if Probe host 3
+    then outputs 4
+    else outputs limit
+  where
+    limit = 10
+
+@Step
+rewrite (inputs n host) =
+  do
+    false <- n == 0
+      else
+        true -> outputs 5
+    outputs n
+`
+	formatted, err := hyrule.Format("input.rules", []byte(want))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(formatted) != want {
+		t.Fatalf("formatted:\n%s\nwant:\n%s", formatted, want)
 	}
 }

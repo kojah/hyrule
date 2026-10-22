@@ -131,14 +131,14 @@ func TestQueryDecisionDiagnostics(t *testing.T) {
 	}
 	for _, tt := range []struct{ name, result, want string }{
 		{"anonymous missing", "case Ask 0 of\n    Proven -> []", "missing Disproven, Unavailable"},
-		{"anonymous non-query", "case Mark 0 of" + complete, "expected query binding"},
+		{"anonymous non-query", "case Mark 0 of" + complete, "requires a bool or declared union"},
 		{"anonymous unbound result", "case Ask 0 of\n    Proven -> [proof]\n    Disproven -> []\n    Unavailable -> []", "unbound capture"},
 		{"missing", named("p", "Ask 0", "\n    Proven -> []"), "missing Disproven, Unavailable"},
 		{"duplicate", named("p", "Ask 0", complete+"\n    Proven -> []"), "duplicate decision variant"},
 		{"catchall", named("p", "Ask 0", "\n    _ -> []"), "decision arm must name"},
 		{"refined", named("p", "Ask 0", "\n    Proven -> []\n    Disproven -> []\n    Unavailable (reason: 42) -> []"), "refinements are not exhaustive"},
-		{"wrong capture", "do\n    p <- Ask 0\n    case q of\n      Proven -> []", "query requires a query hook call"},
-		{"not query", named("p", "Mark 0", complete), "expected query binding"},
+		{"wrong capture", "do\n    p <- Ask 0\n    case q of\n      Proven -> []", "unbound capture"},
+		{"not query", named("p", "Mark 0", complete), "requires a bool or declared union"},
 		{"wrong arity", named("p", "Ask()", complete), "one parameter per argument"},
 		{"argument type", named("p", "Ask \"bad\"", complete), "cannot use"},
 		{"builder argument", named("p", "Ask (Mark 0)", complete), "captures, constants or literals"},

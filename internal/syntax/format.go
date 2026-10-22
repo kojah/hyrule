@@ -20,7 +20,8 @@ func Print(file *File) []byte {
 	var out strings.Builder
 	for i, item := range file.Items {
 		continuedHost := i > 0 && item.Binding != nil && file.Items[i-1].Binding != nil
-		if i > 0 && !continuedHost {
+		continuedRule := item.Rule != nil && item.Rule.Continued
+		if i > 0 && !continuedHost && !continuedRule {
 			out.WriteByte('\n')
 		}
 		switch {
@@ -37,7 +38,8 @@ func Print(file *File) []byte {
 		case item.Derivation != nil:
 			printDerivation(&out, item.Derivation)
 		case item.Rule != nil:
-			printRule(&out, item.Rule)
+			last := i+1 == len(file.Items) || file.Items[i+1].Rule == nil || !file.Items[i+1].Rule.Continued
+			printRule(&out, item.Rule, last)
 		}
 
 	}
@@ -165,24 +167,48 @@ func printDerivation(out *strings.Builder, item *Derivation) {
 
 }
 
-func printRule(out *strings.Builder, item *Rule) {
-
-	r := item
-	printComments(out, r.Comments)
+// printRule writes one equation, or one later guarded alternative of it,
+// which continues on the line after the previous alternative's result. The
+// shared where block follows the equation's last alternative.
+func printRule(out *strings.Builder, r *Rule, last bool) {
 	family := r.Family
 	if family == "" {
 		family = "rewrite"
 	}
-	if r.Name != "" {
-		out.WriteString("@" + identifierText(r.Name) + "\n")
-	}
-	out.WriteString(family + " " + operand(r.Match, 0))
-	for i, c := range r.Clauses {
-		sep := "\n  | "
-		if i > 0 {
-			sep = "\n  , "
+	header := family + " " + operand(r.Match, 0)
+	if !r.Continued {
+		printComments(out, r.Comments)
+		if r.Name != "" {
+			out.WriteString("@" + identifierText(r.Name) + "\n")
 		}
-		out.WriteString(sep)
+	}
+	result := render(r.Build, 2)
+	switch {
+	case len(r.Clauses) > 0 && r.Continued:
+		out.WriteString(clausesText(r.Clauses) + "\n  =\n  " + result + "\n")
+	case len(r.Clauses) > 0:
+		out.WriteString(header + "\n" + clausesText(r.Clauses) + "\n  =\n  " + result + "\n")
+	case !strings.Contains(result, "\n") && len(family)+len(operand(r.Match, 0))+len(result) < 100:
+		out.WriteString(header + " = " + result + "\n")
+	default:
+		out.WriteString(header + " =\n  " + result + "\n")
+	}
+	if len(r.Where) > 0 && last {
+		out.WriteString("  where\n")
+		for _, binding := range r.Where {
+			out.WriteString("    " + identifierText(binding.Name) + " = " + render(binding.Value, 4) + "\n")
+		}
+	}
+}
+
+func clausesText(clauses []Clause) string {
+	var out strings.Builder
+	for i, c := range clauses {
+		if i == 0 {
+			out.WriteString("  | ")
+		} else {
+			out.WriteString("\n  , ")
+		}
 		if c.Name != "" {
 			out.WriteString("let " + identifierText(c.Name) + " = ")
 		}
@@ -191,21 +217,5 @@ func printRule(out *strings.Builder, item *Rule) {
 		}
 		out.WriteString(render(c.Value, 2))
 	}
-	if len(r.Clauses) > 0 {
-		out.WriteString("\n  =")
-	} else {
-		out.WriteString(" =")
-	}
-	result := render(r.Build, 2)
-	if len(r.Clauses) == 0 && !strings.Contains(result, "\n") && len(family)+len(operand(r.Match, 0))+len(result) < 100 {
-		out.WriteString(" " + result + "\n")
-	} else {
-		out.WriteString("\n  " + result + "\n")
-	}
-	if len(r.Where) > 0 {
-		out.WriteString("  where\n")
-		for _, binding := range r.Where {
-			out.WriteString("    " + identifierText(binding.Name) + " = " + render(binding.Value, 4) + "\n")
-		}
-	}
+	return out.String()
 }

@@ -47,6 +47,11 @@ func captureName(id matchir.ValueID) string {
 
 func (e *Emitter) query(result *valueir.Result, answered string) string {
 	q := result.Query
+	if q.Pure != nil {
+		value := e.Value(q.Pure)
+		fmt.Fprintf(e.Out, "%s := %s\n", captureName(q.Capture), value)
+		return e.decide(result, answered)
+	}
 	args := make([]string, len(q.Arguments))
 	for i, arg := range q.Arguments {
 		args[i] = e.temporary(arg.Type, e.Value(arg.Value), false)
@@ -63,6 +68,13 @@ func (e *Emitter) query(result *valueir.Result, answered string) string {
 		}
 		fmt.Fprintf(e.Out, "%s := %s\n%s := %s{%s}\n", strings.Join(vars, ","), call, name, e.Bindings.ValueType(q.Type), strings.Join(fields, ","))
 	}
+	return e.decide(result, answered)
+}
+
+// decide validates and dispatches an established query or pure decision value.
+func (e *Emitter) decide(result *valueir.Result, answered string) string {
+	q := result.Query
+	name := captureName(q.Capture)
 	fmt.Fprintf(e.Out, "_ = %s\n", name)
 	if q.Union != nil {
 		if check := e.Bindings.ValueValidation(q.Type, name); check != "" {

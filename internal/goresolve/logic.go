@@ -208,3 +208,25 @@ func (e *resolver) containsHostQuery(x *semantic.Expr) bool {
 	}
 	return false
 }
+
+// resolvePureDecision lets do and case branch on a pure value. It is evaluated
+// once at the decision's position; ordered host queries still require !.
+func (e *resolver) resolvePureDecision(value *semantic.Expr) (*valueir.QueryPlan, types.Type, error) {
+	if value.Bind != "" {
+		return nil, nil, e.fail(value, "query requires a query hook call")
+	}
+	if e.containsHostQuery(value) {
+		return nil, nil, e.fail(value, "decision on a query must call it directly")
+	}
+	typ, err := e.expressionType(value)
+	if err != nil {
+		return nil, nil, err
+	}
+	typ = types.Default(typ)
+	resolved, err := e.resolveValue(value, "build", typ)
+	if err != nil {
+		return nil, nil, err
+	}
+	e.serial++
+	return &valueir.QueryPlan{Pure: resolved, Type: e.tables.typeID(typ), TupleSize: 1, Capture: matchir.ValueID(e.serial)}, typ, nil
+}

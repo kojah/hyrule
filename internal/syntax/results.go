@@ -126,14 +126,26 @@ func (p *parser) hasOnLine(operator string) bool {
 
 // conditional parses if/then/else. Then and else may start indented lines
 // below the if, which the ordinary continuation leaves visible for do-else.
+// An if directly after else continues the chain at the first if's
+// indentation, so else-if chains need no deeper nesting.
 func (p *parser) conditional(start token, base int) *Expr {
+	return p.conditionalAt(start, base, start.indent)
+}
+
+func (p *parser) conditionalAt(start token, base, indent int) *Expr {
 	condition := p.expression(base, false, orRank)
-	p.keywordLine(start.indent, "then")
+	p.keywordLine(indent, "then")
 	p.expect("then")
 	then := p.expression(base, false, 0)
-	p.keywordLine(start.indent, "else")
+	p.keywordLine(indent, "else")
 	p.expect("else")
-	otherwise := p.expression(base, false, 0)
+	var otherwise *Expr
+	if t := p.peek(); t.text == "if" {
+		p.next()
+		otherwise = p.conditionalAt(t, base, indent)
+	} else {
+		otherwise = p.expression(base, false, 0)
+	}
 	return &Expr{Position: start.Position, Kind: Conditional, Args: []*Expr{condition, then, otherwise}}
 }
 
