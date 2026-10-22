@@ -103,7 +103,7 @@ func (e *resolver) forwardingCall(x *semantic.Expr, kind string) (*semantic.Expr
 	if b == nil || b.Body == nil {
 		return x, nil
 	}
-	if b.Kind != kind || len(x.Args) != len(b.Parameters) {
+	if !bindingKindMatches(b.Kind, kind) || len(x.Args) != len(b.Parameters) {
 		return nil, e.fail(x, "forwarding binding arity or kind mismatch")
 	}
 	params := map[string]*semantic.Expr{}

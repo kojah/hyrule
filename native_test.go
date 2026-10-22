@@ -23,29 +23,34 @@ const (Yes Kind = iota; No; Unknown)
 func Ready(h *Host, name string) bool { h.Calls=append(h.Calls,"ready"); return name!="skip" }
 func Ask(h *Host,n,offset int)(Kind,int) { h.Calls=append(h.Calls,"ask");return Kind(n),offset+7 }
 `
-const nativeRules = `signature total fallback outputs 0 -1;
-view Entry = *goast.Ident { name:Name; };
-query ready($name) = Ready $host $name;
-query ask($n, $context) = Ask $context $n $context.Offset.Value;
-guard named($name) = strings.HasPrefix $name "";
-union Proof = (Kind, int) tag 0 {
- Proven = Yes { reason:1; };
- Disproven = No;
- Unavailable = Unknown { reason:1; };
-};
-rule Main:
- inputs (Entry name:$name) $n $host
- let $offset = $host.Offset.Value
- && $offset >= 0
- && named $name
- => query ready $name {
-  false => outputs 10 20;
-  true => query ask $n $host {
-   Proven reason:$why => outputs $why 1;
-   Disproven => outputs 0 2;
-   Unavailable reason:$why => outputs $why 3;
-  };
- };
+const nativeRules = `signature total = outputs 0 (-1)
+
+view Entry = *goast.Ident
+  name: Name
+
+host
+  ready! name = Ready host name
+  ask! n context = Ask context n context.Offset.Value
+  named name = strings.HasPrefix name ""
+
+type Proof = (Kind, int)
+  tag 0
+  Proven (reason: 1) = Yes
+  Disproven = No
+  Unavailable (reason: 1) = Unknown
+
+@Main
+rewrite (inputs (Entry (name: name)) n host)
+  | let offset = host.Offset.Value
+  , offset >= 0
+  , named name
+  =
+  case ready name of
+    false -> outputs 10 20
+    true -> case ask n host of
+      Proven (reason: why) -> outputs why 1
+      Disproven() -> outputs 0 2
+      Unavailable (reason: why) -> outputs why 3
 `
 
 func TestNativeHostInterfaces(t *testing.T) {
@@ -54,8 +59,10 @@ func TestNativeHostInterfaces(t *testing.T) {
 			root := fixture(t)
 			host, rules := nativeHost, nativeRules
 			if mode == "partial" {
-				host = strings.Replace(host, "(int, int)", "(int, int, bool)", 1)
-				rules = strings.Replace(rules, "signature total fallback outputs 0 -1;", "signature partial;", 1)
+				host = replaceFixture(t, host, "(int, int)", "(int, int, bool)")
+				rules = replaceFixture(t, rules, `signature total = outputs 0 (-1)
+`, `signature partial
+`)
 			}
 			formatted, err := hyrule.Format("input.rules", []byte(rules))
 			if err != nil {
@@ -107,15 +114,15 @@ func TestBehavior(t *testing.T){
 
 func TestNativeInterfaceDiagnostics(t *testing.T) {
 	for _, tt := range []struct{ name, rules, want string }{
-		{"bool missing", strings.Replace(nativeRules, "false => outputs 10 20;", "", 1), "non-exhaustive Boolean"},
-		{"bool duplicate", strings.Replace(nativeRules, "false => outputs 10 20;", "false => outputs 10 20; false => outputs 0 0;", 1), "duplicate Boolean"},
-		{"tuple missing", strings.Replace(nativeRules, "Disproven => outputs 0 2;", "", 1), "non-exhaustive query"},
-		{"tuple slot", strings.Replace(nativeRules, "reason:1;", "reason:9;", 1), "missing or invalid direct variant"},
-		{"projection", strings.Replace(nativeRules, "Offset.Value", "Missing.Value", 1), "missing or inaccessible field"},
-		{"view field", strings.Replace(nativeRules, "name:Name;", "name:Missing;", 1), "missing or inaccessible direct record field"},
-		{"view construction", strings.Replace(nativeRules, "outputs 10 20", "Entry name:1", 1), "read-only"},
-		{"nested forwarding", strings.Replace(nativeRules, "Ready $host $name", "Ready $host (Ready $host $name)", 1), "forwarding arguments"},
-		{"typed forwarding", strings.Replace(nativeRules, "Ready $host $name", "Ready $host 99", 1), "cannot use"},
+		{"bool missing", replaceFixture(t, nativeRules, "false -> outputs 10 20", ""), "non-exhaustive Boolean"},
+		{"bool duplicate", replaceFixture(t, nativeRules, "false -> outputs 10 20", "false -> outputs 10 20\n    false -> outputs 0 0"), "duplicate Boolean"},
+		{"tuple missing", replaceFixture(t, nativeRules, "Disproven() -> outputs 0 2", ""), "non-exhaustive query"},
+		{"tuple slot", replaceFixture(t, nativeRules, "reason: 1", "reason: 9"), "missing or invalid direct variant"},
+		{"projection", replaceFixture(t, nativeRules, "Offset.Value", "Missing.Value"), "missing or inaccessible field"},
+		{"view field", replaceFixture(t, nativeRules, "name: Name", "name: Missing"), "missing or inaccessible direct record field"},
+		{"view construction", replaceFixture(t, nativeRules, "outputs 10 20", "Entry (name: 1)"), "read-only"},
+		{"nested forwarding", replaceFixture(t, nativeRules, "Ready host name", "Ready host (Ready host name)"), "captures, constants or literals"},
+		{"typed forwarding", replaceFixture(t, nativeRules, "Ready host name", "Ready host 99"), "cannot use"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := fixture(t)
@@ -140,10 +147,16 @@ func TestNativeParametersAreNotQueryOutcomes(t *testing.T) {
  const (Yes Kind=iota;No)
  type Signature func(Kind,int) int
  `)
-	write(t, root, "input.rules", `signature total fallback outputs -1;
- union Proof=(Kind,int) tag 0 { Proven=Yes; Disproven=No; };
- rule Any: inputs _ _ => outputs 42;
- `)
+	write(t, root, "input.rules", `signature total = outputs (-1)
+
+type Proof = (Kind, int)
+  tag 0
+  Proven = Yes
+  Disproven = No
+
+@Any
+rewrite (inputs _ _) = outputs 42
+`)
 	c, a := compile(t, root)
 	if err := c.Publish(a, false); err != nil {
 		t.Fatal(err)
@@ -157,7 +170,7 @@ func TestNativeParametersAreNotQueryOutcomes(t *testing.T) {
 func TestNativeViewRejectsRecursivePointerStorage(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", nativeHost+"\ntype Recursive *Recursive\n")
-	write(t, root, "input.rules", strings.Replace(nativeRules, "*goast.Ident", "Recursive", 1))
+	write(t, root, "input.rules", replaceFixture(t, nativeRules, "*goast.Ident", "Recursive"))
 	c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -175,13 +188,19 @@ func TestNativeBooleanResultIsData(t *testing.T) {
  type Signature func(bool,*Host) bool
  func Observe(host *Host,value bool)bool{host.Calls++;return !value}
  `)
-	write(t, root, "input.rules", `signature total fallback outputs false;
- query observe($value)=Observe $host $value;
- rule Invert: inputs $input $host => query $answer=observe $input decide $answer {
-  true=>outputs $answer;
-  false=>outputs $answer;
- };
- `)
+	write(t, root, "input.rules", `signature total = outputs false
+
+host
+  observe! value = Observe host value
+
+@Invert
+rewrite (inputs input host) =
+  do
+    answer <- observe input
+    case answer of
+      true -> outputs answer
+      false -> outputs answer
+`)
 	c, a := compile(t, root)
 	if err := c.Publish(a, false); err != nil {
 		t.Fatal(err)
@@ -201,15 +220,21 @@ func TestNativeExplicitReceiverMethods(t *testing.T) {
  func(h *Host) ready(n int)bool{h.Calls++;return n>0}
  func(h Host) adjusted(n int)int{return n+h.Offset}
  `)
-	write(t, root, "input.rules", `signature partial;
- query ready($n)=Host.ready $host $n;
- build adjusted=Host.adjusted;
- rule Main: inputs $n $host => query ready $n {
-  true=>outputs (adjusted (copy $host) $n);
-  false=>outputs 0;
- };
- build copy=copyHost;
- `)
+	write(t, root, "input.rules", `signature partial
+
+host
+  ready! n = Host.ready host n
+  adjusted = Host.adjusted
+
+@Main
+rewrite (inputs n host) =
+  case ready n of
+    true -> outputs (adjusted (copy host) n)
+    false -> outputs 0
+
+host
+  copy = copyHost
+`)
 	// A value method's receiver stays a value; the explicit copy is ordinary Go.
 	write(t, root, "copy.go", `package fixture;func copyHost(h *Host)Host{return *h}`)
 	c, a := compile(t, root)
@@ -233,14 +258,20 @@ func TestNativeWholeViewCaptureKeepsConcreteTypeAndIdentity(t *testing.T) {
  var Calls int
  func valid(node *goast.Ident)bool{Calls++;return node.Name!=""}
  `)
-	write(t, root, "input.rules", `signature partial;
- view Entry=*goast.Ident { name:Name; };
- query valid;
- rule Same: inputs $node:(Entry name:$name) $node:(Entry) => query valid $node {
-  true=>outputs $node;
-  false=>outputs nil;
- };
- `)
+	write(t, root, "input.rules", `signature partial
+
+view Entry = *goast.Ident
+  name: Name
+
+host
+  valid!
+
+@Same
+rewrite (inputs node@(Entry (name: name)) node@(Entry())) =
+  case valid node of
+    true -> outputs node
+    false -> outputs nil
+`)
 	c, a := compile(t, root)
 	if err := c.Publish(a, false); err != nil {
 		t.Fatal(err)

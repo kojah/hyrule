@@ -2,103 +2,259 @@ package syntax
 
 import (
 	"fmt"
-	"strings"
+	"hash/fnv"
 )
 
-// bindings expands exact-name groups before typed hook resolution. Each name
-// retains its own position so duplicate and missing-hook errors stay precise.
-func (p *parser) bindings(position Position, kind string, comments []string) []Item {
-	binding := &Binding{Position: position, Kind: kind, Name: p.identifier(), Comments: comments}
-	binding.GoName = binding.Name
-	if p.text == "(" {
-		if kind != "query" && kind != "build" && kind != "guard" {
-			p.fail(position, "only query, build and guard bindings support argument forwarding")
+func (p *parser) declaration(file *File, comments []string) {
+	pos := p.peek().Position
+	switch {
+	case p.take("host"):
+		p.hostDeclarations(file, comments)
+	case p.at("type") || p.at("view") || p.at("exhaustive"):
+		p.schema(file, comments)
+	case p.take("signature"):
+		api := &API{Position: pos, Mode: p.name(), Comments: comments}
+		if api.Mode == "total" {
+			p.expect("=")
+			api.Fallback = p.expression(0, false, 0)
+		} else if api.Mode != "partial" {
+			p.fail("expected partial or total signature")
 		}
-		p.next()
-		for p.text != ")" && p.failure == nil {
-			p.expect("$")
-			binding.Parameters = append(binding.Parameters, p.identifier())
-			if p.text != "," {
-				break
-			}
-			p.next()
+		file.Items = append(file.Items, Item{API: api})
+		p.lineEnd()
+	case p.take("pattern"):
+		pattern := &Pattern{Position: pos, Name: p.name(), Comments: comments}
+		for !p.end() && !p.at("=") {
+			pattern.Parameters = append(pattern.Parameters, p.name())
+		}
+		p.expect("=")
+		pattern.Body = p.expression(0, true, 0)
+		file.Items = append(file.Items, Item{Pattern: pattern})
+		p.lineEnd()
+	case p.take("derive"):
+		p.derive(file, pos, comments)
+	default:
+		p.equation(file, comments)
+	}
+}
+
+func (p *parser) schema(file *File, comments []string) {
+	pos := p.peek().Position
+	exhaustive := p.take("exhaustive")
+	view := p.take("view")
+	if !view {
+		p.expect("type")
+	}
+	name := p.name()
+	p.expect("=")
+	var tuple []string
+	host := ""
+	if p.take("(") {
+		tuple = append(tuple, p.hostType())
+		for p.take(",") {
+			tuple = append(tuple, p.hostType())
 		}
 		p.expect(")")
-		p.expect("=")
-		binding.Body = p.outerExpression(0)
-		if binding.Body.Kind != Call || binding.Body.Bind != "" {
-			p.fail(position, "forwarding binding requires a function application")
+	} else {
+		if p.take("*") {
+			host = "*"
 		}
-		for _, arg := range binding.Body.Args {
-			if arg.Bind != "" || arg.Field != "" || (arg.Kind != Variable && arg.Kind != Literal && arg.Kind != Symbol) {
-				p.fail(arg.Position, "forwarding arguments require positional captures, constants or literals")
+		host += p.path()
+	}
+	// Empty products need no artificial field or empty block.
+	p.lineEnd()
+	if p.end() || p.peek().indent == 0 {
+		if exhaustive || len(tuple) > 0 {
+			p.fail("union schema requires a tag and variants")
+			return
+		}
+		file.Items = append(file.Items, Item{Record: &Record{Position: pos, Name: name, GoType: host, View: view, Comments: comments}})
+		return
+	}
+	level := p.peek().indent
+	if p.take("tag") {
+		union := &Union{Position: pos, Name: name, GoType: host, Types: tuple, Tag: p.storage(), Exhaustive: exhaustive, Comments: comments}
+		if view {
+			p.fail("view cannot declare a union")
+		}
+		p.unionVariants(union, level)
+		file.Items = append(file.Items, Item{Union: union})
+		return
+	}
+	if exhaustive || len(tuple) > 0 {
+		p.fail("union schema requires tag before variants")
+	}
+	record := &Record{Position: pos, Name: name, GoType: host, View: view, Comments: comments}
+	for !p.end() && p.peek().indent == level {
+		record.Fields = append(record.Fields, p.field())
+		p.lineEnd()
+	}
+	file.Items = append(file.Items, Item{Record: record})
+}
+
+func (p *parser) field() UnionField {
+	field := UnionField{Position: p.peek().Position, Name: p.name()}
+	field.GoName = field.Name
+	field.Implicit = !p.take(":")
+	if !field.Implicit {
+		field.GoName = p.storage()
+	}
+	return field
+}
+
+func (p *parser) derive(file *File, pos Position, comments []string) {
+	derive := &Derivation{Position: pos, Record: p.name(), Comments: comments}
+	level := p.block(0)
+	for !p.end() && p.peek().indent == level {
+		op := &DerivedOperation{Position: p.peek().Position, Kind: p.name(), Function: p.name()}
+		p.expect(":")
+		op.Signature = p.name()
+		p.lineEnd()
+		if !p.end() && p.peek().indent > level {
+			fields := p.peek().indent
+			for !p.end() && p.peek().indent == fields {
+				field := DerivedField{Position: p.peek().Position, Name: p.name(), Policy: "keep"}
+				if p.take(":") {
+					prefix := ""
+					if p.take("@") {
+						prefix = "$"
+					}
+					field.Policy = prefix + p.path()
+				}
+				op.Fields = append(op.Fields, field)
+				p.lineEnd()
 			}
 		}
-		binding.GoName = binding.Body.Name
-		p.expect(";")
-		return []Item{{Binding: binding}}
+		derive.Operations = append(derive.Operations, op)
 	}
-	binding.Implicit = p.text != "="
-	if !binding.Implicit {
-		p.next()
-		binding.GoName = p.hookName()
-	}
-	items := []Item{{Binding: binding}}
-	for binding.Implicit && p.text == "," && p.failure == nil {
-		p.next()
-		namePosition := p.position
-		name := p.identifier()
-		items = append(items, Item{Binding: &Binding{
-			Position: namePosition, Kind: kind, Name: name, GoName: name,
-			Implicit: true, Continued: true,
-		}})
-	}
-	binding.Comments = append(binding.Comments, p.comments...)
-	p.comments = nil
-	p.expect(";")
-	return items
+	file.Items = append(file.Items, Item{Derivation: derive})
 }
 
-func (p *parser) patternDeclaration(position Position, comments []string) *Pattern {
-	pattern := &Pattern{Position: position, Name: p.identifier(), Comments: comments}
-	p.rule = pattern.Name
-	p.expect("(")
-	for p.text != ")" && p.failure == nil {
-		p.expect("$")
-		pattern.Parameters = append(pattern.Parameters, p.identifier())
-		if p.text != "," {
+func (p *parser) equation(file *File, comments []string) {
+	pos := p.peek().Position
+	label := ""
+	if p.take("@") {
+		label = p.name()
+		p.lineEnd()
+	}
+	family := p.name()
+	if p.family != "" && p.family != family {
+		p.fail("equations in a file must use one family")
+	}
+	p.family = family
+	match := p.expression(0, true, 0)
+	if label == "" {
+		hash := fnv.New32a()
+		_, _ = hash.Write([]byte(pos.File))
+		label = fmt.Sprintf("%s_L%d_F%x", family, pos.Line, hash.Sum32())
+	}
+	ordinal := 0
+	for !p.end() {
+		p.continuation(0)
+		rule := &Rule{Position: pos, Name: label, Family: family, Match: match, Comments: comments}
+		if ordinal > 0 {
+			rule.Name += "_" + itoa(ordinal+1)
+			rule.Comments = nil
+		}
+		if p.take("|") {
+			for !p.end() {
+				p.continuation(0)
+				clause := Clause{}
+				if p.take("let") {
+					clause.Name = p.name()
+					p.expect("=")
+				}
+				clause.Value = p.expression(0, false, 0)
+				if clause.Name != "" || !clause.Value.Bare || clause.Value.Name != "otherwise" {
+					rule.Clauses = append(rule.Clauses, clause)
+				}
+				if !p.take(",") && !p.take("&&") {
+					break
+				}
+			}
+		} else if ordinal > 0 {
 			break
 		}
-		p.next()
+		p.expect("=")
+		rule.Build = p.expression(0, false, 0)
+		file.Items = append(file.Items, Item{Rule: rule})
+		ordinal++
+		p.continuation(0)
+		if !p.at("|") {
+			break
+		}
 	}
-	p.expect(")")
-	p.expect("=")
-	pattern.Body = p.outerExpression(0)
-	pattern.Comments = append(pattern.Comments, p.comments...)
-	p.comments = nil
-	p.expect(";")
-	p.rule = ""
-	return pattern
+	p.lineEnd()
 }
 
-// formatBinding preserves grouping without changing the resolved declarations.
-func formatBinding(items []Item, index int) string {
-	binding := items[index].Binding
-	text := fmt.Sprintf("%s %s", binding.Kind, binding.Name)
-	if binding.Continued {
-		text = ", " + binding.Name
+func (p *parser) hostType() string {
+	prefix := ""
+	if p.take("*") {
+		prefix = "*"
 	}
-	if binding.Body != nil {
-		names := make([]string, len(binding.Parameters))
-		for i, name := range binding.Parameters {
-			names[i] = "$" + name
+	return prefix + p.path()
+}
+
+func (p *parser) unionVariants(union *Union, level int) {
+	p.lineEnd()
+	for !p.end() && p.peek().indent == level {
+		variant := &Variant{Position: p.peek().Position, Name: p.name()}
+		variant.GoTag = variant.Name
+		variant.OmitFields = !p.take("(")
+		if !variant.OmitFields {
+			p.grouped++
+			p.skipLines()
+			for !p.end() && !p.at(")") {
+				variant.Fields = append(variant.Fields, p.field())
+				p.skipLines()
+				if !p.take(",") {
+					break
+				}
+				p.skipLines()
+			}
+			p.expect(")")
+			p.grouped--
 		}
-		text += "(" + strings.Join(names, ", ") + ") = " + render(binding.Body)
-	} else if !binding.Implicit {
-		text += " = " + binding.GoName
+		variant.Implicit = !p.take("=")
+		if !variant.Implicit {
+			variant.GoTag = p.path()
+		}
+		union.Variants = append(union.Variants, variant)
+		p.lineEnd()
 	}
-	if index+1 == len(items) || items[index+1].Binding == nil || !items[index+1].Binding.Continued {
-		text += ";\n"
+}
+
+func (p *parser) hostDeclarations(file *File, comments []string) {
+
+	level := p.block(0)
+	for !p.end() && p.peek().indent == level {
+		comments = append(comments, p.comments...)
+		p.comments = nil
+		binding := &Binding{Position: p.peek().Position, Kind: "value", Name: p.name(), Comments: comments}
+		comments = nil
+		if p.take("?") {
+			binding.Kind = "match"
+		} else if p.take("!") {
+			binding.Kind = "query"
+		}
+		for !p.end() && !p.at("=") && !p.at("\n") {
+			binding.Parameters = append(binding.Parameters, p.name())
+		}
+		binding.GoName = binding.Name
+		binding.Implicit = !p.take("=")
+		if binding.Implicit && len(binding.Parameters) > 0 {
+			p.fail("forwarding parameters require an explicit body")
+		}
+		if !binding.Implicit {
+			p.continuation(level)
+			if len(binding.Parameters) > 0 {
+				binding.Body = p.expression(level, false, 0)
+				binding.GoName = binding.Body.Name
+			} else {
+				binding.GoName = p.path()
+			}
+		}
+		file.Items = append(file.Items, Item{Binding: binding})
+		p.lineEnd()
 	}
-	return text
 }

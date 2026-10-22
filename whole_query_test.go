@@ -8,19 +8,26 @@ import (
 	"github.com/kojah/lockdoc/tools/hyrule"
 )
 
-const wholeQueryRules = `signature total fallback outputs 0 -1;
-query advance, Ready, keepGoing, pair;
-rule Main:
- inputs _ $n $host
- => do {
-   $unused <- query advance $host $n;
-   $step <- query advance $host $n;
-   $ready <- query Ready $host "ok";
-   true <- query keepGoing $host $step.Number else decline;
-   $answer <- query pair $host $step.Number $ready;
-   pure $answer;
- }
- <|> pure outputs 9 10;
+const wholeQueryRules = `signature total = outputs 0 (-1)
+
+host
+  advance!
+  Ready!
+  keepGoing!
+  pair!
+
+@Main
+rewrite (inputs _ n host) =
+  do
+    unused <- advance host n
+    step <- advance host n
+    ready <- Ready host "ok"
+    true <- keepGoing host step.Number
+      else
+        false -> decline
+    answer <- pair host step.Number ready
+    answer
+  <|> outputs 9 10
 `
 
 const wholeQueryHost = nativeHost + `
@@ -65,17 +72,17 @@ func TestBehavior(t *testing.T){
 
 func TestWholeQueryBindingDiagnostics(t *testing.T) {
 	for _, tt := range []struct{ old, new, want string }{
-		{"$step <-", "$n <-", "fresh capture"},
-		{"$step <-", "$step.Number <-", "fresh capture"},
-		{"$step <- query advance $host $n;", "$step <- query advance $host $n else { true => outputs 0 0; };", "cannot have else"},
-		{"$step <- query advance $host $n;", "$step <- query advance $host $n else outputs 0 0;", "cannot have else"},
-		{"pure outputs 9 10", "pure outputs $step.Number 10", "unbound capture"},
-		{"$step.Number $ready", "$step.Number $step", "cannot use"},
+		{"step <-", "n <-", "fresh capture"},
+		{"step <-", "step.Number <-", "fresh capture"},
+		{"step <- advance host n", "step <- advance host n\n      else true -> outputs 0 0", "cannot have else"},
+		{"step <- advance host n", "step <- advance host n\n      else outputs 0 0", "single-expression else requires"},
+		{"outputs 9 10", "outputs step.Number 10", "unbound capture"},
+		{"step.Number ready", "step.Number step", "cannot use"},
 	} {
 		t.Run(tt.want+tt.new, func(t *testing.T) {
 			root := fixture(t)
 			write(t, root, "bindings.go", wholeQueryHost)
-			write(t, root, "input.rules", strings.Replace(wholeQueryRules, tt.old, tt.new, 1))
+			write(t, root, "input.rules", replaceFixture(t, wholeQueryRules, tt.old, tt.new))
 			c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 			if err == nil {
 				_, err = c.Compile(t.Context(), "")
@@ -89,7 +96,7 @@ func TestWholeQueryBindingDiagnostics(t *testing.T) {
 
 func TestWholeQueryBindingValidatesDeclaredUnion(t *testing.T) {
 	root := fixture(t)
-	rules := strings.Replace(doRules, "=> do {", "=> do {\n $complete <- query ask $host $n 0;", 1)
+	rules := replaceFixture(t, doRules, "  do\n", "  do\n    complete <- ask host n 0\n")
 	// The retained whole tuple is unused; even then its invalid tag must stop
 	// before the next question, rather than silently forwarding opaque data.
 	write(t, root, "bindings.go", nativeHost+`func mark(h *Host,n int)int{h.Calls=append(h.Calls,"mark");return n}`)

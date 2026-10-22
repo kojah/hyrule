@@ -1,19 +1,19 @@
-match Append = Append;
-match Header = Decode;
-guard Fits = Fits;
-build Empty = Empty;
-build Reuse = Reuse;
-build Grow = Grow;
+host
+  Append? = Append
+  Header? = Decode
+  Fits = Fits
+  Empty = Empty
+  Reuse = Reuse
+  Grow = Grow
 
-rule Empty:
-  (Append $header:(Header length:0))
-  => (Empty $header);
+@Empty
+rewrite (Append header@(Header (length: 0))) = Empty header
 
-rule Reuse:
-  (Append $header:(Header length:$length capacity:$capacity))
-  && (Fits $length $capacity)
-  => (Reuse $header);
+@Reuse
+rewrite (Append header@(Header (length: length, capacity: capacity)))
+  | Fits length capacity
+  =
+  Reuse header
 
-rule Grow:
-  (Append $header:(Header length:_))
-  => (Grow $header);
+@Grow
+rewrite (Append header@(Header (length: _))) = Grow header

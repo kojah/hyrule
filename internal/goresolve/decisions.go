@@ -107,5 +107,5 @@ func (e *resolver) orderedDecisions(rules []*semantic.Rule, input types.Type) (*
 		e.cursor.Build(e.storeResult(result))
 	}
 	e.cursor = nil
-	return e.graph.Root(), nil
+	return matchir.HashCons(e.graph.Root())
 }

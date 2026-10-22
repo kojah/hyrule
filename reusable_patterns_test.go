@@ -22,24 +22,33 @@ func TestReusablePatternsPreserveTypedOrderedMatches(t *testing.T) {
  func Positive(input int)bool{return input>0}
  func Sum(left,right int)int{Builds++;return left+right}
  `)
-	write(t, root, "input.rules", `match Pair = Pair;
- guard Positive = Positive;
- build Sum = Sum;
- pattern Whole($source, $left, $right) = $source:(Choice $left $right);
- pattern Choice($left, $right) =
-  (or (Pair left:$left right:$right) (Pair left:$right right:$left));
- rule Pick: $outer:(Whole $inner $x $y) && (Positive $x) => (Sum $x $y);
- rule Literal: (First (Small)) => (Sum 0 0);
- `)
+	write(t, root, "input.rules", `host
+  Pair? = Pair
+  Positive = Positive
+  Sum = Sum
+
+pattern Whole source left right = source@(Choice left right)
+
+pattern Choice left right = (Pair (left: left, right: right) | Pair (left: right, right: left))
+
+@Pick
+rewrite outer@(Whole inner x y)
+  | Positive x
+  =
+  Sum x y
+
+@Literal
+rewrite (First Small()) = Sum 0 0
+`)
 	write(t, root, "second.rules", `// Forward reference in another configured file.
- pattern First($value) = (Pair left:$value);
- pattern Small() = (or 0 1);
- `)
+pattern First value = Pair (left: value)
+pattern Small = (0 | 1)
+`)
 	data, err := os.ReadFile(filepath.Join(root, "hyrule.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	write(t, root, "hyrule.yaml", strings.Replace(string(data), "[input.rules]", "[second.rules, input.rules]", 1))
+	write(t, root, "hyrule.yaml", replaceFixture(t, string(data), "[input.rules]", "[second.rules, input.rules]"))
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {
 		t.Fatal(err)
@@ -63,30 +72,118 @@ func TestReusablePatternsPreserveTypedOrderedMatches(t *testing.T) {
 
 func TestReusablePatternDiagnostics(t *testing.T) {
 	cases := []struct{ name, rules, want string }{
-		{"duplicate", `pattern Shared() = _; pattern Shared() = _; rule R: _ => 0;`, "duplicate pattern"},
-		{"duplicate parameter", `pattern Shared($x, $x) = $x; rule R: _ => 0;`, "duplicate pattern parameter"},
-		{"unused parameter", `pattern Shared($x) = _; rule R: _ => 0;`, "unused pattern parameter"},
-		{"free capture", `pattern Shared() = (Pair $secret _); rule R: _ => 0;`, "free capture $secret"},
-		{"free whole capture", `pattern Shared() = $secret:(Pair _ _); rule R: _ => 0;`, "free capture $secret"},
-		{"unknown unused body", `pattern Shared() = (Missing); rule R: _ => 0;`, "unknown match pattern Missing"},
-		{"direct recursion", `pattern Shared() = (Shared); rule R: _ => 0;`, "recursive pattern"},
-		{"indirect recursion", `pattern Shared() = (Other); pattern Other() = (Shared); rule R: _ => 0;`, "recursive pattern"},
-		{"hook alias collision", `pattern Pair() = _; rule R: _ => 0;`, "collides with Go hook Pair"},
-		{"hook function collision", `match Alias = Pair; pattern Pair() = _; rule R: _ => 0;`, "collides with Go hook Pair"},
-		{"arity", `pattern Shared($x) = (Pair $x _); rule R: (Shared) => 0;`, "reusable pattern arity mismatch"},
-		{"named actual", `pattern Shared($x) = (Pair $x _); rule R: (Shared x:$x) => 0;`, "arguments are positional"},
-		{"build use", `pattern Shared() = _; rule R: _ => (Shared);`, "expected build binding"},
-		{"guard use", `pattern Shared() = _; rule R: _ && (Shared) => 0;`, "expected guard binding"},
-		{"whole input actual", `pattern Shared($x) = $x:(Pair _ _); rule R: (Shared 1) => 0;`, "requires a capture or wildcard"},
-		{"typed actual", `pattern Shared($x) = (Pair $x _); rule R: (Shared "wrong") => 0;`, "mismatched types"},
-		{"capture join", `pattern Shared($x) = (or (Pair $x _) (Pair _ _)); rule R: (Shared $x) => 0;`, "identical capture names and types"},
-		{"repeated capture", `pattern Shared($x) = (Pair $x $x); rule R: (Shared $x) => $x;`, ""},
-		{"wildcard actual", `pattern Shared($x) = $x:(Pair _ _); rule R: (Shared _) => 0;`, ""},
+		{"duplicate", `pattern Shared = _
+
+pattern Shared = _
+
+@R
+rewrite _ = 0
+`, "duplicate pattern"},
+		{"duplicate parameter", `pattern Shared x x = x
+
+@R
+rewrite _ = 0
+`, "duplicate pattern parameter"},
+		{"unused parameter", `pattern Shared x = _
+
+@R
+rewrite _ = 0
+`, "unused pattern parameter"},
+		{"free capture", `pattern Shared = Pair secret _
+
+@R
+rewrite _ = 0
+`, "free capture $secret"},
+		{"free whole capture", `pattern Shared = secret@(Pair _ _)
+
+@R
+rewrite _ = 0
+`, "free capture $secret"},
+		{"unknown unused body", `pattern Shared = Missing()
+
+@R
+rewrite _ = 0
+`, "unknown match pattern Missing"},
+		{"direct recursion", `pattern Shared = Shared()
+
+@R
+rewrite _ = 0
+`, "recursive pattern"},
+		{"indirect recursion", `pattern Shared = Other()
+
+pattern Other = Shared()
+
+@R
+rewrite _ = 0
+`, "recursive pattern"},
+		{"hook alias collision", `pattern Pair = _
+
+@R
+rewrite _ = 0
+`, "collides with Go hook Pair"},
+		{"hook function collision", `host
+  Alias? = Pair
+
+pattern Pair = _
+
+@R
+rewrite _ = 0
+`, "collides with Go hook Pair"},
+		{"arity", `pattern Shared x = Pair x _
+
+@R
+rewrite Shared() = 0
+`, "reusable pattern arity mismatch"},
+		{"named actual", `pattern Shared x = Pair x _
+
+@R
+rewrite (Shared (x: x)) = 0
+`, "arguments are positional"},
+		{"build use", `pattern Shared = _
+
+@R
+rewrite _ = Shared()
+`, "expected build binding"},
+		{"guard use", `pattern Shared = _
+
+@R
+rewrite _
+  | Shared()
+  =
+  0
+`, "expected guard binding"},
+		{"whole input actual", `pattern Shared x = x@(Pair _ _)
+
+@R
+rewrite (Shared 1) = 0
+`, "requires a capture or wildcard"},
+		{"typed actual", `pattern Shared x = Pair x _
+
+@R
+rewrite (Shared "wrong") = 0
+`, "mismatched types"},
+		{"capture join", `pattern Shared x = (Pair x _ | Pair _ _)
+
+@R
+rewrite (Shared x) = 0
+`, "identical capture names and types"},
+		{"repeated capture", `pattern Shared x = Pair x x
+
+@R
+rewrite (Shared x) = x
+`, ""},
+		{"wildcard actual", `pattern Shared x = x@(Pair _ _)
+
+@R
+rewrite (Shared _) = 0
+`, ""},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
-			write(t, root, "input.rules", "match Pair = Pair;\n"+test.rules)
+			write(t, root, "input.rules", `host
+  Pair? = Pair
+`+test.rules)
 			config, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 			if err != nil {
 				t.Fatal(err)
@@ -107,20 +204,27 @@ func TestReusablePatternDiagnostics(t *testing.T) {
 
 func TestReusablePatternExpansionLimits(t *testing.T) {
 	var doubling strings.Builder
-	doubling.WriteString("pattern Level0($x) = $x;\n")
+	doubling.WriteString(`pattern Level0 x = x
+`)
 	for level := 1; level <= 14; level++ {
-		fmt.Fprintf(&doubling, "pattern Level%d($x) = (Pair (Level%d $x) (Level%d $x));\n", level, level-1, level-1)
+		fmt.Fprintf(&doubling, "pattern Level%d x = Pair (Level%d x) (Level%d x)\n", level, level-1, level-1)
 	}
-	doubling.WriteString("rule R: _ => 0;") // oversized unused declaration rejects too
+	doubling.WriteString(`@R
+rewrite _ = 0
+`) // oversized unused declaration rejects too
 	var chain strings.Builder
-	chain.WriteString("pattern Level0() = _;\n")
+	chain.WriteString(`pattern Level0 = _
+`)
 	for level := 1; level <= 35; level++ {
-		fmt.Fprintf(&chain, "pattern Level%d() = (Level%d);\n", level, level-1)
+		fmt.Fprintf(&chain, "pattern Level%d = Level%d()\n", level, level-1)
 	}
-	chain.WriteString("rule R: " + strings.Repeat("(Pair ", 35) + "(Level35)" + strings.Repeat(" _)", 35) + " => 0;")
+	chain.WriteString("@R\nrewrite " + strings.Repeat("(Pair ", 35) + "Level35()" + strings.Repeat(" _)", 35) + " = 0\n")
 	var alternatives strings.Builder
-	alternatives.WriteString("pattern Choice() = (or 1 2 3 4 5 6 7 8 9);\n")
-	alternatives.WriteString("rule R: (Pair (Choice) (Choice)) => 0;")
+	alternatives.WriteString(`pattern Choice = (1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9)
+`)
+	alternatives.WriteString(`@R
+rewrite (Pair Choice() Choice()) = 0
+`)
 	for _, test := range []struct{ name, rules, want string }{
 		{"non OR growth", doubling.String(), "exceeds 10000 nodes"},
 		{"composed depth", chain.String(), "nesting exceeds 64"},
@@ -128,7 +232,9 @@ func TestReusablePatternExpansionLimits(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
-			write(t, root, "input.rules", "match Pair = Pair;\n"+test.rules)
+			write(t, root, "input.rules", `host
+  Pair? = Pair
+`+test.rules)
 			config, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 			if err != nil {
 				t.Fatal(err)
@@ -143,9 +249,11 @@ func TestReusablePatternExpansionLimits(t *testing.T) {
 
 func TestReusablePatternFormatting(t *testing.T) {
 	original := []byte(`// Explicit captures are part of the reusable contract.
- pattern Entry($request,$present)=(Pair left:$request right:$present);
- pattern Ready()=(or true false);
- rule R:(Entry $x (Ready))=>$x;`)
+pattern Entry request present = Pair (left: request, right: present)
+pattern Ready = (true | false)
+@R
+rewrite (Entry x Ready()) = x
+`)
 	formatted, err := hyrule.Format("reuse.rules", original)
 	if err != nil {
 		t.Fatal(err)
@@ -154,7 +262,7 @@ func TestReusablePatternFormatting(t *testing.T) {
 	if err != nil || string(again) != string(formatted) {
 		t.Fatalf("format not idempotent: %v\n%s", err, again)
 	}
-	if !strings.Contains(string(formatted), "pattern Entry($request, $present)") {
+	if !strings.Contains(string(formatted), "pattern Entry request present") {
 		t.Fatalf("lost explicit parameter contract: %s", formatted)
 	}
 }

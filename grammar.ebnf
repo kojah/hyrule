@@ -1,0 +1,54 @@
+(* Hyrule equation syntax. Layout is specified in LAYOUT.md. NEWLINE separates
+   logical statements; INDENT/DEDENT describe block boundaries, not characters.
+   Names are resolved after parsing against all files belonging to a target. *)
+file = { declaration, NEWLINE }, EOF ;
+declaration = host | schema | pattern | signature | derivation | equation ;
+host = "host", INDENT, hostBinding, { NEWLINE, hostBinding }, DEDENT ;
+hostBinding = name, [ "?" | "!" ], { name }, [ "=", application ] ;
+schema = [ "exhaustive" ], ( "type" | "view" ), name, "=", hostType,
+         [ INDENT, schemaBody, DEDENT ] ;
+schemaBody = ( "tag", storage, NEWLINE, variant, { NEWLINE, variant } )
+           | ( field, { NEWLINE, field } ) ;
+hostType = storageType | "(", storageType, { ",", storageType }, ")" ;
+storageType = [ "*" ], path ;
+field = name, [ ":", storage ] ;
+storage = path | integer ;
+variant = name, [ "(", field, { ",", field }, ")" ], [ "=", path ] ;
+pattern = "pattern", name, { name }, "=", patternExpression ;
+signature = "signature", ( "partial" | "total", "=", expression ) ;
+derivation = "derive", name, INDENT, operation, { NEWLINE, operation }, DEDENT ;
+operation = name, name, ":", name, [ INDENT, policy, { NEWLINE, policy }, DEDENT ] ;
+policy = name, [ ":", ( path | "@", path ) ] ;
+equation = [ "@", name, NEWLINE ], name, patternExpression,
+           ( "=", expression | guarded, { guarded } ) ;
+guarded = "|", qualifier, { ",", qualifier }, "=", expression ;
+qualifier = "let", name, "=", comparison | comparison ;
+expression = strategy, { "<|>", strategy } ;
+strategy = "do", INDENT, { binding, NEWLINE }, expression, DEDENT
+         | "case", application, "of", INDENT, arm, { NEWLINE, arm }, DEDENT
+         | "decline" | comparison ;
+binding = patternExpression, "<-", application,
+          [ INDENT, "else", ( arm | expression | INDENT, arm, { NEWLINE, arm }, DEDENT ), DEDENT ] ;
+arm = patternExpression, "->", expression ;
+comparison = sum, [ ( "==" | "!=" | "<" | "<=" | ">" | ">=" ), sum ] ;
+sum = product, { ( "+" | "-" ), product } ;
+product = application, { ( "*" | "/" | "%" ), application } ;
+application = atom, { atom }, [ "with", namedArguments ] ;
+atom = path | "^", path | literal | "_" | name, "@", atom
+     | "(", expression, ")" | namedArguments | "(", ")"
+     | "[", [ expression, { ",", expression } ], "]" ;
+namedArguments = "(", name, ":", expression,
+                 { ",", name, ":", expression }, [ "," ], ")" ;
+patternExpression = patternApplication ;
+patternApplication = patternAtom, { patternAtom } ;
+patternAtom = path | "^", path | literal | "_" | name, "@", patternAtom
+            | "(", patternApplication, { "|", patternApplication }, ")"
+            | "(", name, ":", patternExpression,
+              { ",", name, ":", patternExpression }, [ "," ], ")"
+            | "(", ")" ;
+path = name, { ".", name } ;
+name = identifier | escapedIdentifier ;
+literal = [ "-" ], ( integer | float ) | string | "true" | "false" | "nil" ;
+(* Lexical terminals use Unicode identifier letters/digits, Go numeric and
+   quoted string literal spelling, and backtick-escaped identifiers. Negative
+   numeric literals are a '-' followed by a numeric token. No raw strings. *)

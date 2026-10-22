@@ -19,12 +19,16 @@ func TestArithmeticLocalsPreserveGoOverflow(t *testing.T) {
  type Number struct { Value %s }
  type Signature func(Number)(Number,bool)
 `, test.typ))
-			write(t, root, "input.rules", `record Number = Number {value: Value;};
-rule Increment:
- $number:(Number value:$value)
- let $one = 1
- let $next = (add $value 1)
- => (update $number value:$next);`)
+			write(t, root, "input.rules", `type Number = Number
+  value: Value
+
+@Increment
+rewrite number@(Number (value: value))
+  | let one = 1
+  , let next = value + 1
+  =
+  number with (value: next)
+`)
 			config, artifacts := compile(t, root)
 			if err := config.Publish(artifacts, false); err != nil {
 				t.Fatal(err)

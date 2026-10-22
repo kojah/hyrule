@@ -1,484 +1,264 @@
 # Hyrule
 
-Hyrule compiles ordered structural rules into ordinary typed Go calls. It lives
-under `tools/hyrule` and has no Lockdoc analyzer dependencies. Generated code
-has no Hyrule runtime dependency. The pipeline example demonstrates both lifting and lowering. Production rules
-live under `internal/lower/memory` and `internal/lower/scalarop`: shared loads/stores, field/index projections
-stay in that package; `mapop`, `interfaceop`, `channelop` and `sliceop` own their typed family operations and original-source projections.
-The slicetransfer family lowers append/copy operations into complete exact, empty or conservative transfer plans consumed by symbolic summaries and native graph emission. Its clear rules choose empty, exact-span or possible-zero state effects; native emission applies those typed element writes without changing the slice header.
-Interface assertion lowering also selects retained-tag, copied-payload, typed-zero, panic-only or unsupported outcomes, shared by native graph emitters and public reads.
-The sliceheader family selects correlated nil/make/view/retype and append reuse/growth transitions, preserving explicitly partial capacity and possible bounds panics. Geometry and graph evidence remain host-owned.
-The mapstate family selects finite map write, clear, delete and paired lookup state transitions. Generic Go applies immutable entry edits; equality, provenance, graph traversal and evidence admission remain host responsibilities.
-The scalarop family recognizes original scalar literals, arithmetic, conversions, loads and input/call/tuple-result/phi boundaries. The bounded integer evaluator and native constant-control evaluator consume these descriptors; arithmetic, actual argument admission, work bounds and memory interpretation remain host policy.
-Matchers expose SSA structure and static types. Container state, identity,
-temporal interpretation and execution selection remain with their consumers.
+Hyrule compiles ordered structural rules into typed Go functions with no Hyrule
+runtime dependency. The host supplies types and domain operations; Hyrule owns
+local matching, decisions and construction. Graph traversal, mutable storage,
+worklists, fixed points, budgets and applying effect plans remain host concerns.
+
+The frontend is a handwritten lexer and parser. The checked-in
+[EBNF grammar](grammar.ebnf) and [layout specification](LAYOUT.md) define its
+surface syntax. It uses equations, whitespace application and layout blocks;
+there are no braces or semicolons. This is Haskell-inspired syntax over strict
+local decisions, without currying, lazy values, unrestricted recursion or loops.
+
+## Equations and host bindings
+
+```text
+host
+  Extract? = MatchExtract
+  Lookup? = MatchLookup
+  ready = IsReady
+  payload = BuildPayload
+
+@LookupPayload
+rewrite (Extract lookup@(Lookup _ _ true) 0)
+  | ready lookup = payload lookup
+```
+
+`?` declares a matcher returning children followed by a success Boolean. `!`
+declares an ordered host query. Unmarked aliases bind pure functions or typed
+constants, distinguished by the host symbol. Same-name aliases can omit `= Name`.
+Names are exact and case-sensitive; a Boolean value builder is not a matcher.
+
+Each target has one equation family, inferred across its configured files. It is
+not a callable DSL function. Files sort lexically; equations and guarded branches
+retain written order. The first successful match and guard sequence commits the
+result. Failed matching or guards continue; an exhausted partial API returns
+zero/false. Unknown names are compilation errors, never a failed match.
+
+`@Label` is optional diagnostic metadata, unique per target. Unlabelled equations
+receive deterministic source identities. Multiple guarded right-hand sides are
+ordered alternatives with separate local scopes:
+
+```text
+append (Append header count)
+  | fits header count = reuseBacking header count
+  | otherwise = allocateBacking header count
+```
+
+Bare pattern names bind captures unless they name declared constructors or
+patterns. `whole@Pattern` captures an entire matched value; `_` ignores it.
+`^Limit` explicitly references a declared constant. Backticks escape a capture
+whose spelling conflicts with a constructor or keyword. Field paths such as
+`request.Header.Length` read established captures; they do not establish non-nil
+pointers. Nullary host calls use `Name()`.
+
+Repeated captures use checked Go equality on compatible comparable types.
+Interface-containing values are rejected because dynamic contents could panic.
+Use distinct captures and a typed equality guard when that contract is unsuitable.
+Capture equality does not establish aliasing, structural equality or solver facts.
+
+## Applications and patterns
+
+Calls are saturated whitespace applications: `sum left right`. Parenthesize
+nested calls: `sum (increment left) right`. Host arity never determines grouping.
+Negative call arguments need grouping: `outputs 0 (-1)`; `a - 1` is subtraction.
+See [applications](APPLICATIONS.md) for precedence and name resolution.
+
+Named groups use `Header (length: length, capacity: capacity)`. Matcher labels
+name Go result parameters excluding the match Boolean. Omitted named children
+are wildcards. Builder labels name input parameters; every parameter must be
+supplied exactly once. Missing, duplicate, unknown and mixed positional/named
+arguments are errors. Labels are case-sensitive; named host calls require usable
+Go parameter names. Written evaluation order is retained even when the Go
+parameter order differs. Guards use positional arguments.
+
+Pattern OR is parenthesized: `(Exact value | Conservative value)`. Each alternative
+must establish identical capture names and types. Its guards run before trying
+the next alternative. OR is match-only and expands to at most 64 alternatives.
+It is separate from result choice `<|>`.
+
+```text
+pattern FiniteWrite request resident =
+  Write (request: request, allocated: true, resident: resident,
+         evidence: ExactEvidence)
+```
+
+Reusable patterns have explicit capture parameters and exact arity. All captures
+must be parameters; unused parameters, unknown references, hidden captures and
+recursive definitions are errors, including unused definitions. Definitions can
+refer forward and across configured files. A whole-capture parameter accepts a
+capture or `_`. Expansion is bounded to 64 levels and 10,000 nodes before the OR
+limit is applied. Reuse introduces no runtime registry or traversal.
+
+## Records, unions and local values
+
+Schemas describe existing host storage; they do not generate data types:
+
+```text
+type Header = Header
+  backing: Backing
+  length: Length
+  capacity: Capacity
+
+exhaustive type Capacity = Capacity
+  tag Kind
+  Nil = NilCapacity
+  Finite (bound: Bound) = FiniteCapacity
+  Unknown = UnknownCapacity
+```
+
+A product names every direct nonblank field of a local non-generic Go struct.
+Matching can omit named fields; construction supplies all fields. A `tag` line
+instead declares a closed variant domain. Constructors expose only active fields
+and zero inactive storage on construction. Whole-value copies retain existing
+storage. Include provenance explicitly where constructors must preserve it.
+
+`exhaustive type` requires conservative input-variant coverage. An unguarded
+unrestricted constructor or whole-input fallback proves coverage; guards,
+refinements and repeated captures do not. Query decisions independently require
+all outcomes. Undeclared runtime tags fail conservatively, even before catchalls.
+See [union contracts](UNIONS.md) and [native views/tuple schemas](HOST_INTERFACES.md).
+
+Guard qualifiers are strict and ordered. Commas or `&&` separate requirements;
+`let` binds an immutable value at its exact position:
+
+```text
+@Fits
+append request@(Request (length: length, capacity: capacity, count: count))
+  | count >= 0
+  , let end = length + count
+  , end >= length
+  , end <= capacity
+  = request with (length: end)
+```
+
+Locals cannot shadow captures or earlier locals, and are visible only to later
+qualifiers and the result of that alternative. Failed earlier guards prevent
+local evaluation. Arithmetic uses typed unchecked integer `+ - * / %`; overflow
+and division follow Go behavior. Establish nonzero divisors and container bounds
+with explicit guards where required. Comparison operators are `== != < <= > >=`;
+types must be compatible and equality must be safely comparable. Boolean `||`
+is not part of the language.
+
+`request with (field: value)` copies a captured product and preserves unmentioned
+fields, including reference identity. It never mutates input. Duplicate/unknown
+fields and non-record bases are errors. Union updates use constructors instead.
+
+Lists such as `[Observe resource, Change resource]` construct typed slices in
+written order. Context comes from the result, record field or builder parameter;
+`[]` is non-nil empty. Declared value representations are checked before success.
+Dynamic collection transforms and list patterns are not supported. Nonempty lists
+and records can be local values; empty lists and nil need a known type context.
+
+## Ordered queries and result choice
+
+```text
+host
+  ready! = Ready
+  plan = BuildPlan
+  conservative = ConservativePlan
+
+resolve request =
+  do
+    true <- ready request
+      else false -> decline
+    plan request
+  <|> conservative request
+```
+
+Queries execute once when reached, after a rule commits. A pattern bind explicitly
+handles other outcomes in `else` arms; a whole-result bind needs no else. A `do`
+block ends in its result expression. `case query arguments of` handles complete
+outcomes directly. Invalid tags stop conservatively; they do not become fallback
+answers. `<|>` tries strategies lazily within the committed result. Only `decline`
+tries the next strategy, without undoing effects or retrying another equation.
+The final alternative is a pure total expression. See [transition semantics](TRANSITIONS.md).
+
+## Host and compiler contracts
+
+Declare a named function type directly in the configured binding file. The
+implicit API is `func(Input[, Host]) (Output, bool)`. Native `signature partial`
+or `signature total = outputs ...` supports multiple parameters/results; see
+[host interfaces](HOST_INTERFACES.md). Generic/variadic signatures and hooks are
+unsupported. Imported types need the binding file's actual import aliases;
+dot imports are unsupported. Queries may return Boolean, struct-union or tuple
+outcomes. Ordinary pure functions return one value.
+
+Matchers and guards must not mutate inputs, host state or externally observable
+state. Equal arguments against the same stable snapshot give equal answers.
+Hyrule may skip, repeat or share pure matching work; call counts are not guaranteed.
+Guard prerequisites remain ordered. Builders likewise leave existing state
+unchanged, may allocate fresh results, and run only on reached construction paths;
+their results are not cached. Hyrule cannot prove callback purity. Ordered queries
+have a separate effect contract and are never shared or hoisted as predicates.
+
+```text
+source → syntax AST → owned semantic model → declaration collection
+       → Go hook/storage resolution → matching DAG + typed value/helper plans
+       → bottom-up matching-DAG hash-consing
+       → Go emission → complete-package validation → publication
+```
+
+`syntax` owns parsing/layout/formatting. `frontend` resolves names/scopes into
+`semantic`; `compiler` owns ordering and bounded reusable/OR expansion.
+`goresolve` produces a `goplan.Program`, portable `matchir` and `valueir` plus Go
+binding tables. The portable IRs contain opaque IDs, not Go types or syntax.
+`gogen` and `valuegen` emit resolved plans without parsing or name resolution.
+`recordresolve` checks derivations; `recordgen` emits helper plans.
+
+The matching DAG shares adjacent identical pure prefixes while retaining failure
+and guard fallthrough. A bottom-up hash-consing pass then shares identical pure subgraphs without
+mutating the input or merging construction/allocation nodes. Union schemas allow
+checked exclusive dispatch. Generated
+functions use typed locals and direct branches, without runtime graphs, capture
+maps, boxing or reflection. Go is the only implemented backend. See
+[decision-graph measurements](DECISION_GRAPH.md) for the original benchmark scope.
+
+## Commands, configuration and migration
 
 ```sh
 go run ./tools/hyrule/cmd/hyrule check
 go run ./tools/hyrule/cmd/hyrule generate
 go run ./tools/hyrule/cmd/hyrule generate --check
-go run ./tools/hyrule/cmd/hyrule fmt --write tools/hyrule/examples/pipeline/lift.rules
+go run ./tools/hyrule/cmd/hyrule fmt --write path/to/pass.rules
+go run ./tools/hyrule/cmd/hyrule migrate --config hyrule.yaml
+go run ./tools/hyrule/cmd/hyrule migrate --config hyrule.yaml --write
+scripts/migrate-hyrule.sh /path/to/lockdoc /path/to/gohawk
 ```
 
-`check` validates syntax, captures, hooks and generated Go types without writing.
-`generate` performs the same validation and publishes outputs. `generate --check`
-compares outputs and ownership metadata without modifying them. Both accept
-`--config PATH`, `--target NAME`, and `--format text|json`. JSON reports `ok`,
-`error` and the number of compiled `targets`; errors return a nonzero exit status.
-
-`fmt FILE` writes canonical rules to stdout. `fmt --write FILES...` replaces files;
-`fmt --check FILES...` rejects noncanonical files without writing. Comments remain,
-but comments inside expressions move ahead of their declaration. Formatting
-checks syntax; it does not load Go packages.
-
-## Rules
-
-```text
-match Extract = MatchExtract;
-match Lookup = MatchLookup;
-guard Ready = IsReady;
-build Payload = BuildPayload;
-
-rule LookupPayload:
-  (Extract $lookup:(Lookup _ _ true) 0)
-  && (Ready $lookup)
-  => (Payload $lookup);
-```
-
-Declarations bind DSL operation names to Go functions or methods on the optional
-host argument. Rule names are stable diagnostic identities, unique per target.
-When the DSL and Go names are identical, omit the alias: `match lockCall;`
-means `match lockCall = lockCall;`. The same shorthand works for `build`,
-`guard`, `query`, and `const`. Names are exact and case-sensitive; no naming
-conversion is inferred. Several exact-name bindings of the same kind can share
-a declaration: `match lockCall, unlockCall, readLockCall;`. This also works for
-`build`, `guard`, `query`, and `const`. Explicit aliases use separate declarations.
-Formatting preserves groups and either spelling; each name receives the same
-Go type validation and duplicate-name checks as a separate declaration.
-`$name` binds a pattern value and references it on the right; `$name:(Op ...)`
-binds the entire input to that subpattern. `_` ignores a pattern value.
-Parenthesized calls nest. Literals use Go spelling for numbers, strings, raw
-strings, `true`, `false`, and `nil`; negative numeric literals are supported.
-A rule may have multiple guard calls, each introduced by `&&`. Their preconditions and short-circuit meaning are preserved: a false guard falls through without constructing that rule's result. Matcher and guard invocation counts are not a language guarantee.
-Declarations and rules end with `;`. Line and block comments are accepted.
-
-Matcher children can be selected by the names of the Go matcher's result
-parameters (excluding its final success Boolean):
-
-```text
-(Write request:$request allocated:true unknownMembership:false resident:true)
-```
-
-Names are case-sensitive. Omitted named children act as wildcards. Named and
-positional children cannot be mixed in one call; unknown and duplicate names
-are errors. Positional patterns keep their existing arity contract. Named
-children are matched in written order, independent of the Go return order.
-
-Builder arguments can also use the names of the Go builder's input parameters:
-
-```text
-=> (SliceHeader backing:$backing offset:$start length:$len capacity:$cap)
-```
-
-Names are exact and case-sensitive. Every parameter must be supplied once;
-missing, duplicate, unknown names and mixed named/positional arguments are
-errors. Named calls require usable Go parameter names (neither unnamed nor `_`).
-Positional calls remain supported. Nested builders execute once in written
-order, even when arguments are rearranged into Go parameter order; typed
-assignment checks still apply. The optional host receiver is implicit and is
-not a builder argument. Guards continue to use positional arguments.
-
-Use `(or PATTERN PATTERN ...)` for ordered alternatives in match patterns:
-
-```text
-(Delete request:$request allocated:false
-  evidence:(or (ExactEvidence) (SafeUnknownEvidence)))
-```
-
-OR-patterns may nest. Every alternative must bind the same new capture names
-with identical Go types; captures from the surrounding pattern remain available.
-Each expanded alternative tries its match and the rule's ordered guards before
-the next alternative. A false guard can therefore fall through to another
-alternative of that rule. Builders run only for a successful alternative.
-Expansion is bounded to 64 variants per rule; oversized patterns are rejected
-before constructing their expansion. OR-patterns are not build expressions.
-Reusable match patterns give repeated shapes a name with explicit parameters:
-
-```text
-pattern FiniteWrite($request, $resident, $originKnown) =
-  (Write request:$request allocated:true unknownMembership:false
-    resident:$resident newOriginKnown:$originKnown evidence:(ExactEvidence));
-pattern SafeKey() = (or (ExactEvidence) (SafeUnknownEvidence));
-
-rule ReplaceKnown:
-  (FiniteWrite $request true true)
-  && (WithinBound $request)
-  => (ReplaceKnown $request);
-```
-
-Every capture in a definition must be a declared parameter; expansion cannot
-introduce hidden captures. Arguments are match expressions, including captures,
-literals, wildcards and nested patterns. A parameter used as a whole-input capture
-(`$value:(...)`) accepts a capture or `_`. Repeated arguments preserve ordinary
-capture equality checks. Named matcher fields, nested destructuring and OR
-patterns keep their existing contracts after expansion.
-
-Definitions are scoped to a target, may reference later declarations or other
-configured rule files, and do not affect rule precedence. Names cannot collide
-with hook names. Definitions have exact arity and are match-only; free captures,
-unknown references, duplicate or unused parameters and recursive definitions
-are rejected, including unused definitions. Expansion is bounded to depth 64 and 10,000 match nodes per rule before OR
-expansion; the 64-variant OR bound still applies. Reuse introduces no runtime
-registry, graph traversal or fixed-point evaluation.
-
-Files are sorted lexically; rules retain source order within each file. The first
-successful rule wins. Unknown operations, failed matchers and false guards fall
-through; exhausting the rules returns the zero output and `false`. There is no
-implicit traversal or fixed-point iteration.
-
-Repeated captures compare concrete comparable values using Go equality. Types
-containing interfaces are rejected because their dynamic values could make `==`
-panic. Use distinct captures and a typed equality guard for those cases. Matching
-does not infer structural equality, aliasing, pointer-analysis facts or semantics.
-
-## Queries and effect lists
-
-A selected rule can run an explicitly effectful `query` and exhaustively
-`decide` its tagged outcome. Queries run exactly once when reached, after pure
-matching succeeds; they never fall through to another rule. Outcome branches
-can issue further queries without evaluating unselected branches. Pure matchers
-and guards retain their existing optimization contract.
-
-For dependent queries, `do { Pattern <- query Hook ... else { ... }; pure result; }`
-flattens nested decisions while retaining exhaustive outcome handling. Boolean
-steps also accept `false <- query Hook ... else result;` (or `true`), which
-handles the opposite literal without a one-arm block. Tagged outcomes retain
-explicit arms. An early
-result ends the block; explicit `decline` inside an enclosing ordered alternative
-tries its next strategy. See [sequential queries](TRANSITIONS.md#sequential-queries-with-do).
-
-For first-answer selection, use lazy ordered alternatives:
-`query ... select Pattern => answer <|> ... <|> pure fallback`. Other valid
-outcomes continue within the selected rule; the first answer skips the remaining
-queries. Invalid outcomes terminate conservatively. Ordinary query decisions
-remain exhaustive. See [ordered alternatives](TRANSITIONS.md#lazy-ordered-alternatives).
-
-`effects [...]` constructs a typed slice in written order, either as the target
-result or a builder argument. The host applies the resulting plan afterward.
-See [queries and transition plans](TRANSITIONS.md) for syntax, execution and
-exhaustiveness rules, and `examples/transitions` for a runnable lock-state plan.
-
-## Reducing host adapters
-
-[Native host interfaces](HOST_INTERFACES.md) support Boolean and tuple query
-outcomes, checked field projections, argument forwarding, native generated
-parameter/result lists, and read-only views of existing Go types. Existing
-signatures and binding syntax remain compatible.
-
-## Tagged unions
-
-A schema declares exclusive constructors over existing Go struct storage:
-
-```text
-exhaustive union Value = Value tag Kind {
-  Number = NumberKind { value: Number; };
-  Empty = EmptyKind {};
-};
-
-rule Number: (Number value:$number) => (Number value:$number);
-rule Empty: (Empty) => (Empty);
-```
-
-Constructors support named-field and nested patterns, OR alternatives and reusable
-patterns. They also build tagged values directly; no matcher or builder hook is
-required for a declared constructor. A zero-argument constructor pattern tests
-its variant and ignores its fields; construction still requires every field.
-
-A variant may omit a same-name Go tag alias: `Lock { resource: Resource; };`
-means `Lock = Lock { resource: Resource; };`. Names are exact and case-sensitive.
-Each variant remains a separate declaration; explicit aliases can be mixed with
-shorthand variants, and formatting preserves both forms.
-
-Record and union fields may likewise omit a same-name storage mapping:
-`start;` means `start: start;`. Explicit mappings such as `resource: Resource;`
-remain available. Field names are exact and case-sensitive, and each field still
-ends with `;`. This shorthand changes schema declarations only, not named
-arguments in patterns, constructors, or record updates.
-
-Ordinary `union` declarations allow partial recognizers. `exhaustive union`
-requests a conservative coverage check for the target input: guarded or refined
-patterns do not discharge a variant, while an unguarded whole-input fallback
-covers all declared variants. Missing coverage is a compilation diagnostic.
-
-The initial binding uses a local Go struct, a direct integer/string/Boolean tag
-field, distinct same-typed Go constants, and direct active fields. Undeclared
-input or output tags return `false`, including before a catchall; this is a
-checked closed-domain API, not an assertion that Go prevents invalid enum values.
-The root discriminator is read once for variant dispatch. Go still owns storage.
-See [union contracts and limitations](UNIONS.md) and the
-[union example](examples/unions/rewrite.rules).
-
-## Go host contract
-
-Declare a named function type directly in the configured binding file:
-
-```go
-type LiftSignature func(Source, *Host) (Operation, bool)
-type LowerSignature func(Operation) (Plan, bool)
-```
-
-For the legacy API, the first parameter is the input; an optional second
-parameter provides context. Input and output types can differ. Results are
-`(Output, bool)`. [Native APIs](HOST_INTERFACES.md) accept multiple parameters and
-results with explicit partial or total failure contracts. Signature
-imports whose package name differs from the import path's last component need an
-explicit alias. Dot imports are unsupported in binding files.
-
-Hook contracts:
-
-| Binding | Go signature |
-| --- | --- |
-| `match Op = MatchOp;` | `func(Input) (Child1, Child2, ..., bool)` |
-| `guard Fact = HasFact;` | `func(Capture1, ...) bool` |
-| `build Result = BuildResult;` | `func(Argument1, ...) Output` |
-| `query Ask;` | `func(Argument1, ...) bool`, a declared struct union, or a declared tuple outcome |
-
-Hooks may be package functions or methods of the host. Ambiguous names are errors.
-Generic and variadic hook functions are unsupported. Builders return one value;
-use a struct or slice for a builder's multiple effects or provenance. Native APIs
-and query tuple outcomes avoid wrappers at their own boundaries.
-A guard decides whether a rule applies; a builder must produce its result once
-that guard succeeds. Nested replacement calls use `build` bindings.
-
-Matchers and guards **must be pure**: they must not mutate inputs, the host or
-externally observable state, and identical arguments against the same host
-snapshot must produce identical results. Analysis facts must remain stable for
-the whole matching invocation. Hyrule may skip, repeat or share these calls;
-call counts and evaluation order are not guaranteed. This is a language contract,
-not a property Hyrule can prove about arbitrary Go callbacks. Guard preconditions
-still apply: the compiler preserves ordered guard fallthrough and does not hoist
-partial guards before their required evidence.
-
-Builders construct complete results and may allocate fresh objects. Their
-callbacks must likewise leave inputs, host state and externally observable state
-unchanged. Results are never cached or shared; replacement builders stay on the winning
-rule's execution path. The caller applies returned effects after matching.
-Host code owns memory identity, soundness, unknown-value policy, lifecycle,
-control flow, budgets and scheduling.
-
-The pipeline has explicit boundaries:
-
-```text
-source → syntax AST → owned semantic model → declaration collection
-       → Go hook/storage resolution → matching DAG + typed value/helper plans
-       → Go emission → complete-package validation → publication
-```
-
-The parser retains formatting and source spelling for round-trip formatting.
-`frontend.Lower` copies it into an owned `semantic` model, resolves outer-call
-shorthand across all input files, and removes comments and formatting flags.
-Declaration collection runs on this model before host-package loading. Compiler,
-record generation and Go planning do not import the parser representation.
-
-The shared compiler expands reusable patterns and OR alternatives while retaining
-source priority. The matching IR uses opaque compiler-owned hook, type, value,
-literal and expression IDs; its optimizer and decision edges contain no Go
-syntax or `go/types` objects. The Go adapter discovers signatures, checks typed
-captures, maps IDs to Go types/functions, emits branches and formats imports.
-Go is the only implemented backend. A future backend can consume the matching
-IR with its own hook/type tables; a universal bindings language is not provided.
-
-Typed Go resolution lives in `goresolve`. It produces a `goplan.Program` with
-resolved Go storage tables, a matching DAG, and `valueir` values/continuations.
-The value IR retains field positions, assignment types, written evaluation order,
-query outcomes, lexical choice and decline. Neither IR retains semantic expression
-nodes or capture-name maps. `gogen` and `valuegen` emit from those plans without
-resolving source names or interpreting rule syntax. Schema-derived maintenance
-helpers follow the same boundary: `recordresolve` validates signatures and field
-policies into typed helper plans; `recordgen` emits those plans. After emission,
-the complete Go package is type-checked before artifacts can be published. This
-last check validates target-language literals, assignments and package integration;
-it does not resolve Hyrule names or decide rule control flow.
-
-The compiler folds adjacent identical pure matcher/test prefixes into an ordered
-decision DAG. Match failure and exhausted guard alternatives rejoin explicit
-fallback edges; builders remain separate leaves. It does not reorder unrelated
-rules or infer exclusivity for opaque hooks. Declared unions add exclusive
-variant/field knowledge to the portable IR and permit checked variant switches.
-Generated functions use typed locals and direct branches, with no runtime graph,
-term boxing, reflection or runtime capture maps. Unreachable declared rules
-remain type-checked. See [decision-graph measurements](DECISION_GRAPH.md) for
-reproduction commands, baseline scope and limitations.
-
-## Configuration and ownership
-
-See the repository's `hyrule.yaml`. Version 1 requires explicit rules paths,
-package directory, bindings file, signature, generated function name and output
-path. All paths stay inside the configuration directory; no globs or includes.
-`targets: []` retires all previously owned outputs. Each output must be a `.go` file directly inside its target package. The Go toolchain
-and module dependencies must be available to type-check the host.
-
-Hyrule loads hosts with in-memory signature stubs, then checks the rendered output.
-This supports a host that calls its generated function before first generation,
-and regeneration after changing a signature. Stubs are never written to disk.
-All configured hosts load even when selecting one target. Rule syntax for every
-target is parsed to recover generated derivation signatures; semantic compilation
-and output emission remain limited to selected targets. Checks do not run host code or tests.
-
-`.hyrule-manifest.json` records generated paths and hashes. Commit it with rules,
-bindings and generated outputs. Renamed/removed target outputs are deleted only
-if their content still matches the recorded hash. Edited obsolete files are an
-error. Hyrule refuses to overwrite handwritten files or output symlinks. Current
-outputs bearing the Hyrule header may be regenerated. Keep one configuration per
-directory and do not publish concurrently. Each file is replaced atomically;
-multi-file publication is not transactional. Validation precedes all writes.
-
-Rule inputs are bounded to 4 MiB, 100,000 tokens and nesting depth 64. Generated
-files are limited to 500 lines; split larger targets into separately called passes.
-Rule comments and output bytes contain no timestamps or machine-specific paths.
-
-## Workflow and extraction
-
-`make hyrule-check`, `make hyrule-generate`, and `make hyrule-generated-check`
-use the repository's resource-bounded launcher. `make generate` runs Hyrule before
-API references and diagrams. `make generated-check` includes its freshness check,
-after CI prepares local outputs with `make generate-go`. Generated Go and
-ownership manifests are ignored build artifacts. `make build` and canonical
-validation targets regenerate them; run `make generate-go` before raw Go commands
-in a fresh checkout. Hyrule generation also prepares the standalone example and
-benchmark configurations.
-
-The public library surface is `Load`, `Config.Compile`, `Config.Publish`, and
-`Format`. The CLI is a small adapter. Syntax and Go emission are private packages.
-To extract Hyrule later, move this directory into its own module, change internal
-import prefixes, and retain the public contract tests. The only external library
-dependencies are YAML configuration decoding and Go package loading.
-
-## Local semantic plans
-
-One invocation computes a result from an immutable snapshot. The host decides
-when to invoke it and applies the returned plan. Mutable storage, graph traversal,
-worklists, fixed points, I/O and concurrency stay in the host. Pure host functions
-remain appropriate for domain operations; unrestricted
-loops and recursion are not part of the rule language.
-
-Typed constants bind local Go constants directly, without builder callbacks:
-
-```text
-const Reference = Reference;
-const ValueCopy = ValueCopy;
-const NilZero = NilZero;
-record Plan = Plan {
-  kind: Kind;
-  copy: Copy;
-  zero: Zero;
-};
-```
-
-A construction can then use `(Plan kind:Reference copy:ValueCopy zero:NilZero)`.
-Bare names resolve only through declared constant bindings; variables, functions
-and host methods cannot be bound as constants. Named enum types retain their Go
-assignment and comparison rules. Literal range and assignment checks still run
-before generated output is published.
-
-Records bind a local, non-generic Go struct and explicitly name every direct
-nonblank storage field. Duplicate fields, omitted storage fields, inaccessible
-fields and duplicate record/union storage bindings are errors. Patterns use the
-same named and positional field contracts as union constructors; omitted named
-fields are wildcards. Construction requires every declared field exactly once.
-No pointer dereference or graph traversal is implied by record destructuring.
-Nested declared value unions remain checked closed domains, including through
-records and whole-input fallbacks.
-
-Comparisons can appear as guards, with `when` or the existing `&&` introducer:
-
-```text
-rule Bounded:
-  (Input index:$index length:$length)
-  when $index >= 0
-  && $index < $length
-  => (Located offset:$index);
-```
-
-Operands are captures, literals or declared constants. Supported relations are
-`==`, `!=`, `<`, `<=`, `>` and `>=`. Ordered relations require compatible ordered
-scalar types. Equality refuses unsafe interface-containing comparisons. Guards
-retain their order and fall through on failure; comparison nodes participate in
-pure-prefix sharing. Native Boolean disjunction is not implemented yet.
-
-Immutable local bindings and integer arithmetic can express derived values:
-
-```text
-rule Fits:
-  $request:(Request length:$length capacity:$capacity count:$count)
-  let $end = (add $length $count)
-  && $end >= $length
-  && $end <= $capacity
-  => (update $request length:$end);
-```
-
-`add`, `sub`, `mul`, `div` and `rem` take two positional integer operands.
-Operations use ordinary Go integer semantics, including overflow wraparound.
-No automatic overflow checks or overflow fallthrough branches are generated.
-Division and remainder retain Go's zero-divisor behavior; rules must establish
-valid divisors when their inputs may be zero. Container bounds and valid-state
-conditions remain explicit domain guards, independent of arithmetic semantics.
-
-A `let $name = expression` binding is immutable, inferred from its expression,
-and visible only in later clauses and the result of that alternative. Names
-cannot shadow captures or earlier locals. Bind domain function results before
-using them as arithmetic operands. Local expressions may construct records,
-updates and nonempty lists; an empty list or untyped nil needs a typed context.
-Local construction occurs where the binding is written, so later guard failure
-can discard a freshly allocated local. Builders still must not mutate host or
-input state. Unrestricted loops and recursive evaluation are unsupported.
-
-Explicit record updates copy a captured record before changing named fields:
-
-```text
-=> (update $request outcome:Located offset:$physical)
-```
-
-The base must have a declared record schema. Unmentioned fields are preserved;
-duplicate or unknown updates are errors. Updates evaluate in written order and
-never mutate the matched input. This is a value copy, so preserved references
-continue to point to the same objects. Union updates require an explicit
-constructor instead of a record update.
-
-Lists construct ordered effect bundles in a known slice context:
-
-```text
-=> [(Observe domain:Contents), (Observe domain:Iterator), (Change domain:Iterator)]
-```
-
-The context comes from the generated result, a record field or a builder
-parameter. The `effects [...]` spelling also retains this context inside record
-construction and record updates. Elements are evaluated once in written order and checked against the
-element type; declared value schemas are validated before publication. `[]`
-constructs a non-nil empty slice. List matching and dynamic collection
-transformations are not implemented. List size is statically bounded by the
-rule source; host helpers must retain explicit bounds for dynamic collections.
-
-The neutral matching and value IRs retain typed constant identities, record
-schemas and extractions, comparison operators, ordered list construction and
-explicit preserved-base updates. Go names, selectors, concrete types and syntax remain in
-the Go adapter. See [the local append-plan example](examples/localplans/append.rules)
-for nested updates that preserve backing and source provenance while producing a
-copy-effect list. Its sum uses ordinary integer arithmetic; explicit guards admit
-only the geometry that the example can establish.
-
-## Schema-derived maintenance
-
-Complete record schemas can generate immutable copying, typed keys/equality,
-child visitors/transformers, bounded diagnostics and bounded exact snapshot
-storage. Each operation explicitly accounts for every field; custom domain
-operations remain typed host hooks. `schema: true` targets generate these APIs
-without a rewrite dispatcher. See [derivation contracts](DERIVATIONS.md) and
-[the complete example](examples/derived/snapshot.rules). Copied aggregate storage
-in `internal/lower/identity/value` uses derived traversal and transformation.
-
-## Frontend design proposal
-
-[The Haskell-inspired frontend proposal](FRONTEND_PROPOSAL.md) uses pattern
-equations, whitespace application and guards while keeping layout-based `do` and
-`<|>`. It maps the existing feature set to proposed syntax. It is a design document; the syntax described there is not implemented.
+On Xenia prefix direct Go workloads with `agent-test`; Make targets already use
+it. `check` validates without publication. `generate --check` checks freshness.
+Both accept `--config`, `--target`, `--format text|json`. `fmt FILE` prints one file;
+`--write FILES...` replaces files and `--check FILES...` checks canonical spelling.
+Formatting retains comments, moving internal comments to declaration boundaries.
+
+Migration imports the retired syntax into an AST and prints equation syntax.
+Configured migration uses each target's complete declarations, checks every
+converted file before writing, and rejects conflicting conversions of a shared
+file. The old parser exists only in `internal/legacy`, never as a production
+fallback. Already-converted sources are canonicalized. Conversion is not proof
+of behavioral equivalence; retain relevant public compiler and host regressions.
+
+Version 1 YAML declares explicit rule paths, package, binding file, signature,
+function and output. Paths remain inside the config directory; no globs/includes.
+Outputs must be `.go` files in their package. Hosts load with in-memory signature
+stubs, permitting handwritten callers before first generation. Stubs are never
+published. Generated packages are type-checked before any output writes.
+
+`.hyrule-manifest.json` records output ownership and hashes. Generated Go and
+manifests are ignored artifacts in this repository. Renamed/removed outputs are
+deleted only if unchanged; handwritten files and output symlinks are protected.
+Publication is atomic per file, not per batch. Do not publish concurrently for
+the same config. `targets: []` retires previously owned outputs.
+
+Inputs are bounded to 4 MiB, 100,000 tokens and 64 nesting levels. Generated files
+are limited to 500 lines. `make hyrule-check`, `make hyrule-generate` and
+`make hyrule-generated-check` include the production/example configurations.
+Run `make generate-go` before raw Go commands in a fresh checkout.
+
+Complete record schemas can also derive freezing, keys/equality, visitors,
+transforms, bounded diagnostics and exact snapshot storage. `schema: true`
+targets need no rewrite dispatcher. See [derivation contracts](DERIVATIONS.md).
+The public library provides `Load`, `Compile`, `Publish`, `Format`, `Migrate` and
+configured `MigrateRules`; the CLI is an adapter over those APIs.

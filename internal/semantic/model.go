@@ -78,6 +78,7 @@ type Binding struct {
 type Rule struct {
 	Position
 	Name    string
+	Family  string
 	Match   *Expr
 	Clauses []Clause
 	Build   *Expr

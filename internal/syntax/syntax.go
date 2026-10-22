@@ -53,8 +53,12 @@ const (
 type Expr struct {
 	Position
 	Kind Kind
-	Name string
-	Bind string
+	// Bare marks a name whose capture/constructor meaning needs target declarations.
+	Bare bool
+	// Quoted distinguishes an escaped capture from a declared constructor.
+	Quoted bool
+	Name   string
+	Bind   string
 	// Field selects a named matcher result when this expression is a child.
 	Field string
 	Args  []*Expr
@@ -84,6 +88,7 @@ type Binding struct {
 type Rule struct {
 	Position
 	Name     string
+	Family   string
 	Match    *Expr
 	Clauses  []Clause
 	Build    *Expr
@@ -173,4 +178,26 @@ type API struct {
 	Mode     string
 	Fallback *Expr
 	Comments []string
+}
+
+// Derivation requests explicit operations over one complete record schema.
+// Field policies are language-level names or host hooks resolved by a backend.
+type Derivation struct {
+	Position
+	Record     string
+	Operations []*DerivedOperation
+	Comments   []string
+}
+
+// DerivedOperation names a generated function and its explicit host signature.
+type DerivedOperation struct {
+	Position
+	Kind, Function, Signature string
+	Fields                    []DerivedField
+}
+
+// DerivedField assigns a policy to one logical schema field, including omission.
+type DerivedField struct {
+	Position
+	Name, Policy string
 }

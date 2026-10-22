@@ -194,8 +194,10 @@ func (e *resolver) valueParameters(expression *semantic.Expr, expected types.Typ
 		signature = e.recordSignature(record)
 	} else if variant := e.constructors[expression.Name]; variant != nil {
 		signature = e.constructorSignature(variant)
-	} else if binding := e.bindings[expression.Name]; binding != nil && (binding.Kind == "build" || binding.Kind == "guard") {
-		kind = binding.Kind
+	} else if binding := e.bindings[expression.Name]; binding != nil && (binding.Kind == "build" || binding.Kind == "guard" || binding.Kind == "value") {
+		if binding.Kind != "value" {
+			kind = binding.Kind
+		}
 		_, candidate, err := e.host.Hook(binding.HostName)
 		if err != nil {
 			return nil, err

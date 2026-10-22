@@ -1,9 +1,11 @@
-match Lookup = MatchLookup;
-guard Ready = IsReady;
-build Read = BuildRead;
+host
+  Lookup? = MatchLookup
+  Ready = IsReady
+  Read = BuildRead
 
 // The host supplies facts; matching does not mutate the source IR.
-rule MapLookup:
-  (Lookup $origin $map $key $tuple)
-  && (Ready)
-  => (Read $origin $map $key $tuple);
+@MapLookup
+rewrite (Lookup origin map key tuple)
+  | Ready()
+  =
+  Read origin map key tuple

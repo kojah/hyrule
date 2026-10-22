@@ -1,8 +1,6 @@
-package syntax
+package legacy
 
 import (
-	"fmt"
-	"strings"
 	"text/scanner"
 )
 
@@ -23,20 +21,6 @@ func (p *parser) recordDeclaration(position Position, comments []string) *Record
 	return record
 }
 
-func formatRecord(record *Record) string {
-	var output strings.Builder
-	kind := "record"
-	if record.View {
-		kind = "view"
-	}
-	fmt.Fprintf(&output, "%s %s = %s {\n", kind, record.Name, record.GoType)
-	for _, field := range record.Fields {
-		output.WriteString("  " + formatStorageField(field))
-	}
-	output.WriteString("};\n")
-	return output.String()
-}
-
 func (p *parser) storageField() UnionField {
 	field := UnionField{Position: p.position, Name: p.identifier()}
 	field.GoName = field.Name
@@ -47,11 +31,4 @@ func (p *parser) storageField() UnionField {
 	}
 	p.expect(";")
 	return field
-}
-
-func formatStorageField(field UnionField) string {
-	if field.Implicit {
-		return field.Name + ";\n"
-	}
-	return field.Name + ": " + field.GoName + ";\n"
 }

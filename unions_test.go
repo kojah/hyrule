@@ -20,26 +20,42 @@ const unionHost = `package fixture
  func Positive(number int)bool{return number>0}
  func Increment(number int)int{return number+1}
  `
-const unionSchema = `union Atom = Atom tag Kind {
- AtomNumber = NumberTag { value: Number; };
- AtomEmpty = EmptyTag {};
- };
- exhaustive union Value = Value tag Kind {
- Number = NumberTag { value: Number; };
- Empty = EmptyTag {};
- Wrapped = WrapTag { atom: Atom; };
- };
- `
+const unionSchema = `type Atom = Atom
+  tag Kind
+  AtomNumber (value: Number) = NumberTag
+  AtomEmpty = EmptyTag
+
+exhaustive type Value = Value
+  tag Kind
+  Number (value: Number) = NumberTag
+  Empty = EmptyTag
+  Wrapped (atom: Atom) = WrapTag
+`
 
 func TestTaggedUnionMatchingConstructionAndGuardFallback(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", unionHost)
-	write(t, root, "input.rules", unionSchema+`guard Positive = Positive; build Increment = Increment;
- pattern Numeric($number) = (or (Number value:$number) (Wrapped atom:(AtomNumber value:$number)));
- rule Positive: (Numeric $number) && (Positive $number) => (Number value:(Increment $number));
- rule Number: (Number value:$number) => (Number value:$number);
- rule Wrapped: (Wrapped atom:$atom) => (Wrapped atom:$atom);
- rule Empty: (Empty) => (Empty);`)
+	write(t, root, "input.rules", unionSchema+`host
+  Positive = Positive
+  Increment = Increment
+
+pattern Numeric number = (Number (value: number) | Wrapped (atom: AtomNumber (value: number)))
+
+@Positive
+rewrite (Numeric number)
+  | Positive number
+  =
+  Number (value: Increment number)
+
+@Number
+rewrite (Number (value: number)) = Number (value: number)
+
+@Wrapped
+rewrite (Wrapped (atom: atom)) = Wrapped (atom: atom)
+
+@Empty
+rewrite Empty() = Empty()
+`)
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {
 		t.Fatal(err)
@@ -70,7 +86,9 @@ func TestTaggedUnionMatchingConstructionAndGuardFallback(t *testing.T) {
 func TestTaggedUnionFallbackKeepsClosedDomain(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", unionHost)
-	write(t, root, "input.rules", unionSchema+`rule Keep: $whole => $whole;`)
+	write(t, root, "input.rules", unionSchema+`@Keep
+rewrite whole = whole
+`)
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {
 		t.Fatal(err)
@@ -86,15 +104,42 @@ func TestTaggedUnionFallbackKeepsClosedDomain(t *testing.T) {
 
 func TestTaggedUnionPartialRecognizerAndCoverage(t *testing.T) {
 	for _, test := range []struct{ name, schema, rules, want string }{
-		{"partial allowed", strings.Replace(unionSchema, "exhaustive union Value", "union Value", 1), `rule One: (Number) => (Empty);`, ""},
-		{"missing variant", unionSchema, `rule One: (Number) => (Empty);`, "missing unconditional variants Empty, Wrapped"},
-		{"guard is not coverage", unionSchema, `guard Positive = Positive;
- rule One: (Number value:$n) && (Positive $n) => (Empty);
- rule Rest: (or (Empty) (Wrapped)) => (Empty);`, "missing unconditional variants Number"},
-		{"literal is not coverage", unionSchema, `rule One: (Number value:1) => (Empty);
- rule Rest: (or (Empty) (Wrapped)) => (Empty);`, "missing unconditional variants Number"},
-		{"unconditional fallback", unionSchema, `rule Any: _ => (Empty);`, ""},
-		{"guarded fallback", unionSchema, `guard Positive = Positive; rule Any: _ && (Positive 1) => (Empty);`, "missing unconditional variants"},
+		{"partial allowed", replaceFixture(t, unionSchema, "exhaustive type Value", "type Value"), `@One
+rewrite Number() = Empty()
+`, ""},
+		{"missing variant", unionSchema, `@One
+rewrite Number() = Empty()
+`, "missing unconditional variants Empty, Wrapped"},
+		{"guard is not coverage", unionSchema, `host
+  Positive = Positive
+
+@One
+rewrite (Number (value: n))
+  | Positive n
+  =
+  Empty()
+
+@Rest
+rewrite (Empty() | Wrapped()) = Empty()
+`, "missing unconditional variants Number"},
+		{"literal is not coverage", unionSchema, `@One
+rewrite (Number (value: 1)) = Empty()
+
+@Rest
+rewrite (Empty() | Wrapped()) = Empty()
+`, "missing unconditional variants Number"},
+		{"unconditional fallback", unionSchema, `@Any
+rewrite _ = Empty()
+`, ""},
+		{"guarded fallback", unionSchema, `host
+  Positive = Positive
+
+@Any
+rewrite _
+  | Positive 1
+  =
+  Empty()
+`, "missing unconditional variants"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
@@ -107,30 +152,69 @@ func TestTaggedUnionPartialRecognizerAndCoverage(t *testing.T) {
 
 func TestTaggedUnionRepresentationDiagnostics(t *testing.T) {
 	for _, test := range []struct{ name, schema, rule, want string }{
-		{"duplicate tag", `union V = Value tag Kind { A = NumberTag {}; B = NumberTag {}; };`, `_`, "duplicate variant tag value"},
-		{"unknown tag", `union V = Value tag Kind { A = Missing {}; };`, `_`, "variant tag requires"},
-		{"missing selector", `union V = Value tag Missing { A = NumberTag {}; };`, `_`, "missing direct union tag"},
-		{"missing storage", `union V = Value tag Kind { A = NumberTag { value: Missing; }; };`, `_`, "invalid direct variant field"},
-		{"tag is not payload", `union V = Value tag Kind { A = NumberTag { value: Kind; }; };`, `_`, "invalid direct variant field"},
-		{"duplicate logical field", `union V = Value tag Kind { A = NumberTag { value: Number; value: Atom; }; };`, `_`, "duplicate union field"},
-		{"duplicate storage field", `union V = Value tag Kind { A = NumberTag { first: Number; second: Number; }; };`,
+		{"duplicate tag", `type V = Value
+  tag Kind
+  A = NumberTag
+  B = NumberTag
+`, `_`, "duplicate variant tag value"},
+		{"unknown tag", `type V = Value
+  tag Kind
+  A = Missing
+`, `_`, "variant tag requires"},
+		{"missing selector", `type V = Value
+  tag Missing
+  A = NumberTag
+`, `_`, "missing direct union tag"},
+		{"missing storage", `type V = Value
+  tag Kind
+  A (value: Missing) = NumberTag
+`, `_`, "invalid direct variant field"},
+		{"tag is not payload", `type V = Value
+  tag Kind
+  A (value: Kind) = NumberTag
+`, `_`, "invalid direct variant field"},
+		{"duplicate logical field", `type V = Value
+  tag Kind
+  A (value: Number, value: Atom) = NumberTag
+`, `_`, "duplicate union field"},
+		{"duplicate storage field", `type V = Value
+  tag Kind
+  A (first: Number, second: Number) = NumberTag
+`,
 			`_`, "duplicate union storage field"},
-		{"constructor collision", `match A = Positive; union V = Value tag Kind { A = NumberTag {}; };`, `_`, "colliding constructor"},
-		{"empty union", `union V = Value tag Kind {};`, `_`, "at least one variant"},
-		{"duplicate union", `union V = Value tag Kind { A = NumberTag {}; }; union V = Atom tag Kind { B = EmptyTag {}; };`, `_`, "duplicate union"},
-		{"wrong child type", unionSchema, `(Wrapped atom:(Number))`, "matcher input type mismatch"},
+		{"constructor collision", `host
+  A? = Positive
+
+type V = Value
+  tag Kind
+  A = NumberTag
+`, `_`, "colliding constructor"},
+		{"empty union", `type V = Value
+  tag Kind
+`, `_`, "at least one variant"},
+		{"duplicate union", `type V = Value
+  tag Kind
+  A = NumberTag
+
+type V = Atom
+  tag Kind
+  B = EmptyTag
+`, `_`, "duplicate union"},
+		{"wrong child type", unionSchema, `(Wrapped (atom: Number()))`, "matcher input type mismatch"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
 			write(t, root, "bindings.go", unionHost)
-			write(t, root, "input.rules", test.schema+`rule Any: `+test.rule+` => (Empty);`)
+			write(t, root, "input.rules", test.schema+"@Any\nrewrite "+test.rule+" = Empty()\n")
 			expectUnionCompile(t, root, test.want)
 		})
 	}
 }
 
 func TestTaggedUnionFormat(t *testing.T) {
-	original := []byte(unionSchema + `rule Any:_=>(Empty);`)
+	original := []byte(unionSchema + `@Any
+rewrite _ = Empty()
+`)
 	formatted, err := hyrule.Format("union.rules", original)
 	if err != nil {
 		t.Fatal(err)
@@ -139,7 +223,7 @@ func TestTaggedUnionFormat(t *testing.T) {
 	if err != nil || string(again) != string(formatted) {
 		t.Fatalf("format not idempotent: %v\n%s", err, again)
 	}
-	if !strings.Contains(string(formatted), "exhaustive union Value = Value tag Kind") {
+	if !strings.Contains(string(formatted), "exhaustive type Value = Value\n  tag Kind") {
 		t.Fatal("lost checked schema contract")
 	}
 }
@@ -172,21 +256,26 @@ func runUnionFixture(t *testing.T, root, name string) {
 	}
 }
 
-func TestEmptyVariantBracesOptional(t *testing.T) {
+func TestEmptyVariantAliasOptional(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", unionHost)
-	schema := strings.Replace(unionSchema, "\n Empty = EmptyTag {};", "\n EmptyTag = EmptyTag {};", 1)
-	rules := `rule Number: Number value:$n => Number value:$n;
- rule Empty: EmptyTag => EmptyTag;
- rule Wrapped: Wrapped atom:$atom => Wrapped atom:$atom;`
+	schema := replaceFixture(t, unionSchema, "\n  Empty = EmptyTag", "\n  EmptyTag = EmptyTag")
+	rules := `@Number
+rewrite (Number (value: n)) = Number (value: n)
+
+@Empty
+rewrite EmptyTag = EmptyTag
+
+@Wrapped
+rewrite (Wrapped (atom: atom)) = Wrapped (atom: atom)
+`
 	write(t, root, "input.rules", schema+rules)
 	_, expected := compile(t, root)
-	shorthand := strings.ReplaceAll(schema, " = EmptyTag {};", " = EmptyTag;")
-	shorthand = strings.Replace(shorthand, "EmptyTag = EmptyTag;", "EmptyTag;", 1)
+	shorthand := replaceFixture(t, schema, "EmptyTag = EmptyTag", "EmptyTag")
 	write(t, root, "input.rules", shorthand+rules)
 	_, actual := compile(t, root)
 	if string(actual[0].Data) != string(expected[0].Data) {
-		t.Fatal("omitting empty variant braces changed generated Go")
+		t.Fatal("omitting same-name variant alias changed generated Go")
 	}
 	for _, input := range []string{schema + rules, shorthand + rules} {
 		formatted, err := hyrule.Format("union.rules", []byte(input))
@@ -197,21 +286,21 @@ func TestEmptyVariantBracesOptional(t *testing.T) {
 		if err != nil || string(again) != string(formatted) {
 			t.Fatalf("format not idempotent: %v", err)
 		}
-		want := "EmptyTag = EmptyTag {};"
+		want := "EmptyTag = EmptyTag"
 		if input == shorthand+rules {
-			want = "  EmptyTag;"
+			want = "  EmptyTag\n"
 		}
 		if !strings.Contains(string(formatted), want) {
 			t.Fatalf("formatter changed variant spelling:\n%s", formatted)
 		}
-		if !strings.Contains(string(formatted), "Number = NumberTag {") {
-			t.Fatal("formatter removed nonempty field braces")
+		if !strings.Contains(string(formatted), "Number (value: Number) = NumberTag") {
+			t.Fatal("formatter removed nonempty variant fields")
 		}
 	}
 	for _, input := range []string{
-		"union Value = Value tag Kind { EmptyTag };",
-		"union Value = Value tag Kind { EmptyTag Wrapped {}; };",
-		"union Value = Value tag Kind { Number = NumberTag value: Number; };",
+		"type Value = Value\n  tag Kind\n  EmptyTag;\n",
+		"type Value = Value\n  tag Kind\n  EmptyTag Wrapped\n",
+		"type Value = Value\n  tag Kind\n  Number = NumberTag value: Number\n",
 	} {
 		if _, err := hyrule.Format("union.rules", []byte(input)); err == nil {
 			t.Fatalf("accepted malformed declaration %q", input)

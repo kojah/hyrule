@@ -134,7 +134,7 @@ func (e *resolver) resolveCall(x *semantic.Expr, kind string) (*valueir.Value, e
 		}
 		result.Arguments = append(result.Arguments, valueir.Argument{Value: value, Type: e.tables.typeID(typ),
 			Position:    positions[i],
-			Materialize: ordered && (arg.Kind == semantic.Call || arg.Kind == semantic.Effects)})
+			Materialize: ordered && (arg.Kind == semantic.Call || arg.Kind == semantic.Effects || arg.Kind == semantic.List)})
 	}
 	return result, nil
 }

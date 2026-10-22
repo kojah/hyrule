@@ -1,4 +1,4 @@
-package syntax
+package legacy
 
 import "text/scanner"
 

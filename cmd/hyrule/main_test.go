@@ -11,7 +11,7 @@ import (
 
 func TestCLIFormattingAndErrors(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "input.rules")
-	input := []byte("rule R:_=>0;")
+	input := []byte("@R\nrewrite _=0")
 	if err := os.WriteFile(path, input, 0644); err != nil {
 		t.Fatal(err)
 	}

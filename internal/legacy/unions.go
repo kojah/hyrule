@@ -1,8 +1,6 @@
-package syntax
+package legacy
 
 import (
-	"fmt"
-	"strings"
 	"text/scanner"
 )
 
@@ -51,39 +49,4 @@ func (p *parser) unionDeclaration(position Position, comments []string) *Union {
 	p.comments = nil
 	p.rule = ""
 	return union
-}
-
-func formatUnion(union *Union) string {
-	var output strings.Builder
-	if union.Exhaustive {
-		output.WriteString("exhaustive ")
-	}
-	storage := union.GoType
-	if len(union.Types) > 0 {
-		storage = "(" + strings.Join(union.Types, ", ") + ")"
-	}
-	fmt.Fprintf(&output, "union %s = %s tag %s {\n", union.Name, storage, union.Tag)
-	for _, variant := range union.Variants {
-		fmt.Fprintf(&output, "  %s", variant.Name)
-		if !variant.Implicit {
-			fmt.Fprintf(&output, " = %s", variant.GoTag)
-		}
-		if variant.OmitFields {
-			output.WriteString(";\n")
-			continue
-		}
-		output.WriteString(" {")
-		if len(variant.Fields) > 0 {
-			output.WriteByte('\n')
-		}
-		for _, field := range variant.Fields {
-			output.WriteString("    " + formatStorageField(field))
-		}
-		if len(variant.Fields) > 0 {
-			output.WriteString("  ")
-		}
-		output.WriteString("};\n")
-	}
-	output.WriteString("};\n")
-	return output.String()
 }

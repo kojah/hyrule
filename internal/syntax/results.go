@@ -1,101 +1,125 @@
 package syntax
 
-import (
-	"strings"
-	"text/scanner"
-)
-
-// Result expressions execute only after a rule commits. Queries own an explicit
-// exhaustive decision, so an unanswered proof cannot silently retry another rule.
-func (p *parser) effects(depth int) *Expr {
-	position := p.position
-	p.expect("effects")
-	return p.effectsBody(position, depth)
-}
-
-func (p *parser) effectsBody(position Position, depth int) *Expr {
-	result := &Expr{Position: position, Kind: Effects}
-	p.expect("[")
-	for p.text != "]" && p.token != scanner.EOF && p.failure == nil {
-		result.Args = append(result.Args, p.expression(depth+1))
-		if p.text != "]" {
-			p.expect(",")
-		}
-	}
-	p.expect("]")
+func (p *parser) caseExpression(start token, base int) *Expr {
+	call := p.expression(base, false, 2)
+	p.expect("of")
+	outerGroup := p.grouped
+	p.grouped = 0
+	defer func() { p.grouped = outerGroup }()
+	level := p.block(start.indent)
+	result := &Expr{Position: start.Position, Kind: Query, Args: []*Expr{call}}
+	result.Arms = p.arms(level)
 	return result
 }
 
-func (p *parser) query(depth int) *Expr {
-	position := p.position
-	p.expect("query")
-	return p.queryBody(position, depth)
-}
-
-func (p *parser) queryBody(position Position, depth int) *Expr {
-	result := &Expr{Position: position, Kind: Query}
-	if p.text == "$" {
-		p.next()
-		result.Name = p.identifier()
-		p.expect("=")
-	}
-	result.Args = []*Expr{p.outerExpression(depth + 1)}
-	if result.Name != "" && p.text != "select" {
-		p.expect("decide")
-		p.expect("$")
-		if name := p.identifier(); name != result.Name {
-			p.fail(result.Position, "decide must handle the immediately preceding query capture")
+func (p *parser) arms(level int) []DecisionArm {
+	var result []DecisionArm
+	for !p.end() && p.peek().indent == level {
+		pattern := p.expression(level, true, 0)
+		p.expect("->")
+		answer := p.expression(level, false, 0)
+		result = append(result, DecisionArm{Pattern: pattern, Result: answer})
+		if !p.at("\n") {
+			break
+		}
+		before := p.index
+		comments := len(p.comments)
+		p.skipLines()
+		if p.peek().indent != level {
+			p.index = before
+			p.comments = p.comments[:comments]
+			break
 		}
 	}
-	if p.text == "select" {
-		p.next()
-		result.Kind = Selection
-		pattern := p.outerExpression(depth + 1)
-		p.expect("=")
-		p.expect(">")
-		result.Arms = []DecisionArm{{Pattern: pattern, Result: p.outerExpression(depth + 1)}}
-		return result
+	if len(result) == 0 {
+		p.fail("expected at least one outcome arm")
 	}
-	p.expect("{")
-	for p.text != "}" && p.token != scanner.EOF && p.failure == nil {
-		pattern := p.outerExpression(depth + 1)
-		p.expect("=")
-		p.expect(">")
-		value := p.resultExpression(depth + 1)
-		p.expect(";")
-		result.Arms = append(result.Arms, DecisionArm{Pattern: pattern, Result: value})
-	}
-	p.expect("}")
 	return result
 }
 
-func renderResult(expression *Expr, indent int) string {
-	if expression.Kind == Do {
-		return renderDo(expression, indent)
-	}
-	if expression.Kind == Decline {
-		return "decline"
-	}
-	if expression.Kind == OrderedAlternatives || expression.Kind == Selection || expression.Kind == Pure {
-		return renderAlternatives(expression, indent)
-	}
-	if expression.Kind == Effects {
-		parts := make([]string, len(expression.Args))
-		for i, arg := range expression.Args {
-			parts[i] = renderLayout(arg, indent+2)
+func (p *parser) doBlock(start token) *Expr {
+	result := &Expr{Position: start.Position, Kind: Do}
+	outerGroup := p.grouped
+	p.grouped = 0
+	defer func() { p.grouped = outerGroup }()
+	level := p.block(start.indent)
+	var steps []*Expr
+	var terminal *Expr
+	for !p.end() && p.peek().indent == level {
+		// Both bind patterns and terminal values share application syntax. A '|'
+		// inside parentheses is parsed as a pattern only when the line binds.
+		bind := p.hasOnLine("<-")
+		value := p.expression(level, bind, 0)
+		if !p.take("<-") {
+			terminal = value
+			break
 		}
-		return "effects [" + strings.Join(parts, ", ") + "]"
+		if len(steps)+p.depth >= maxDepth {
+			p.fail("do sequencing exceeds nesting limit")
+			break
+		}
+		call := p.expression(level, false, 2)
+		step := &Expr{Position: value.Position, Kind: Query, Sequential: true, Args: []*Expr{call}, Arms: []DecisionArm{{Pattern: value}}}
+		p.skipLines()
+		if !p.end() && p.peek().indent > level && p.take("else") {
+			elseIndent := p.tokens[p.index-1].indent
+			if p.at("\n") {
+				armLevel := p.block(elseIndent)
+				step.Arms = append(step.Arms, p.arms(armLevel)...)
+			} else {
+				var other *Expr
+				if p.hasOnLine("->") {
+					other = p.expression(elseIndent, true, 0)
+					p.expect("->")
+				} else {
+					if value.Kind != Literal || (value.Name != "true" && value.Name != "false") {
+						p.fail("single-expression else requires a true or false do binding")
+					}
+					name := "true"
+					if value.Name == "true" {
+						name = "false"
+					}
+					other = &Expr{Position: value.Position, Kind: Literal, Name: name}
+				}
+				answer := p.expression(elseIndent, false, 0)
+				step.Arms = append(step.Arms, DecisionArm{Pattern: other, Result: answer})
+				p.skipLines()
+			}
+		}
+		p.skipLines()
+		steps = append(steps, step)
 	}
-	pad := strings.Repeat(" ", indent)
-	var out strings.Builder
-	if expression.Name == "" {
-		out.WriteString("query " + renderLayout(expression.Args[0], indent) + " {")
-	} else {
-		out.WriteString("query $" + expression.Name + " = " + renderLayout(expression.Args[0], indent) + "\n" + pad + "decide $" + expression.Name + " {")
+	if terminal == nil {
+		p.fail("do requires a final result")
+		terminal = &Expr{Position: start.Position}
 	}
-	for _, arm := range expression.Arms {
-		out.WriteString("\n" + pad + "  " + render(arm.Pattern) + " => " + renderLayout(arm.Result, indent+2) + ";")
+	if terminal.Kind != Do && terminal.Kind != Query && terminal.Kind != OrderedAlternatives && terminal.Kind != Decline {
+		terminal = &Expr{Position: terminal.Position, Kind: Pure, Args: []*Expr{terminal}}
 	}
-	out.WriteString("\n" + pad + "}")
-	return out.String()
+	for i := len(steps) - 1; i >= 0; i-- {
+		steps[i].Arms[0].Result = terminal
+		terminal = steps[i]
+	}
+	result.Args = []*Expr{terminal}
+	return result
+}
+func (p *parser) hasOnLine(operator string) bool {
+	nesting := 0
+	for i := p.index; i < len(p.tokens); i++ {
+		switch p.tokens[i].text {
+		case "(", "[":
+			nesting++
+		case ")", "]":
+			nesting--
+		case operator:
+			if nesting == 0 {
+				return true
+			}
+		case "\n":
+			if nesting == 0 {
+				return false
+			}
+		}
+	}
+	return false
 }

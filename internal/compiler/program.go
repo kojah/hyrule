@@ -22,6 +22,7 @@ type Program struct {
 	patterns     map[string]*semantic.Pattern
 	rules        []*semantic.Rule
 	rule         string
+	family       string
 }
 
 // Collect validates names independently of any target-language hook discovery.
@@ -111,6 +112,12 @@ func (program *Program) collectItem(item semantic.Item, names map[string]bool) e
 		}
 		program.patterns[pattern.Name] = pattern
 	} else {
+		if item.Rule.Family != "" {
+			if program.family != "" && program.family != item.Rule.Family {
+				return &semantic.Diagnostic{Position: item.Rule.Position, Message: "target mixes equation families " + program.family + " and " + item.Rule.Family}
+			}
+			program.family = item.Rule.Family
+		}
 		if names[item.Rule.Name] {
 			return &semantic.Diagnostic{Position: item.Rule.Position, Message: "duplicate rule " + item.Rule.Name}
 		}

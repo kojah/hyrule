@@ -62,7 +62,12 @@ func Resolve(h Host, program *compiler.Program) (*goplan.Program, error) {
 		e.bindNativeRecords(native)
 	}
 	for _, binding := range program.BindingOrder {
-		if binding.Kind == "const" {
+		object := e.host.Package.Scope().Lookup(binding.HostName)
+		if _, variable := object.(*types.Var); binding.Kind == "value" && variable {
+			return nil, &semantic.Diagnostic{Position: binding.Position, Message: "host value binding requires a function or constant"}
+		}
+		_, isConstant := object.(*types.Const)
+		if binding.Kind == "const" || binding.Kind == "value" && isConstant {
 			if err := e.bindConstant(binding); err != nil {
 				return nil, err
 			}
@@ -97,7 +102,7 @@ func (e *resolver) fail(x *semantic.Expr, message string) error {
 }
 func (e *resolver) binding(x *semantic.Expr, kind string) (string, *types.Signature, error) {
 	b := e.bindings[x.Name]
-	if b == nil || b.Kind != kind {
+	if b == nil || !bindingKindMatches(b.Kind, kind) {
 		return "", nil, e.fail(x, "expected "+kind+" binding for "+x.Name)
 	}
 	name, sig, err := e.host.Hook(b.HostName)
@@ -105,4 +110,11 @@ func (e *resolver) binding(x *semantic.Expr, kind string) (string, *types.Signat
 		return "", nil, e.fail(x, err.Error())
 	}
 	return name, sig, nil
+}
+
+func bindingKindMatches(declared, required string) bool {
+	if declared == required {
+		return true
+	}
+	return declared == "value" && (required == "build" || required == "guard")
 }

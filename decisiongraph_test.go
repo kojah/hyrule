@@ -25,12 +25,25 @@ func TestDecisionGraphPreservesOrderedContainerChoices(t *testing.T) {
  func(h *Host) Fits(length int)bool{return length<=h.Limit}
  func Result(value int)int{Builds++;return value}
  `)
-	write(t, root, "input.rules", `match Slice=Slice;match Header=Decode;match Other=Other;
- guard Fits=Fits;build Result=Result;
- rule Empty: (Slice header:(Header length:0)) => (Result 0);
- rule Reuse: (Slice header:(Header length:$length)) && (Fits $length) => (Result 1);
- rule Grow: (Slice header:(Header length:_)) => (Result 2);
- `)
+	write(t, root, "input.rules", `host
+  Slice? = Slice
+  Header? = Decode
+  Other? = Other
+  Fits = Fits
+  Result = Result
+
+@Empty
+rewrite (Slice (header: Header (length: 0))) = Result 0
+
+@Reuse
+rewrite (Slice (header: Header (length: length)))
+  | Fits length
+  =
+  Result 1
+
+@Grow
+rewrite (Slice (header: Header (length: _))) = Result 2
+`)
 	c, a := compile(t, root)
 	if err := c.Publish(a, false); err != nil {
 		t.Fatal(err)
@@ -53,11 +66,22 @@ func TestDecisionGraphPreservesOrderedContainerChoices(t *testing.T) {
 	runDecisionBehavior(t, root)
 	// A failed guard on the first OR alternative must try the second, using its
 	// own extracted value. The fallback must not reuse a different input's field.
-	write(t, root, "input.rules", `match Slice=Slice;match Header=Decode;match Other=Other;
- guard Fits=Fits;build Result=Result;
- rule Alternative: (or (Slice header:(Header length:$length)) (Other header:(Header length:$length)))
-  && (Fits $length) => (Result $length);
- rule Fallback: _ => (Result -1);`)
+	write(t, root, "input.rules", `host
+  Slice? = Slice
+  Header? = Decode
+  Other? = Other
+  Fits = Fits
+  Result = Result
+
+@Alternative
+rewrite (Slice (header: Header (length: length)) | Other (header: Header (length: length)))
+  | Fits length
+  =
+  Result length
+
+@Fallback
+rewrite _ = Result (-1)
+`)
 	c, a = compile(t, root)
 	if err := c.Publish(a, false); err != nil {
 		t.Fatal(err)
@@ -90,9 +114,15 @@ func runDecisionBehavior(t *testing.T, root string) {
 
 func TestDecisionGraphChecksUnreachableRules(t *testing.T) {
 	root := fixture(t)
-	write(t, root, "input.rules", `build Sum=Sum;
- rule First: _ => (Sum 1 2);
- rule Invalid: _ => (Sum "wrong" 2);`)
+	write(t, root, "input.rules", `host
+  Sum = Sum
+
+@First
+rewrite _ = Sum 1 2
+
+@Invalid
+rewrite _ = Sum "wrong" 2
+`)
 	config, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 	if err != nil {
 		t.Fatal(err)

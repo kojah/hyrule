@@ -68,8 +68,8 @@ func (e *resolver) resolveResult(x *semantic.Expr, expected types.Type, inChoice
 			if !last && alternative.Kind == semantic.Pure {
 				return nil, e.fail(alternative, "pure must be the final ordered alternative")
 			}
-			if alternative.Kind != semantic.Pure && alternative.Kind != semantic.Selection && alternative.Kind != semantic.Do {
-				return nil, e.fail(alternative, "ordered alternative requires query ... select, do, or a final pure fallback")
+			if alternative.Kind != semantic.Pure && alternative.Kind != semantic.Selection && alternative.Kind != semantic.Do && alternative.Kind != semantic.Query {
+				return nil, e.fail(alternative, "ordered alternative requires case, do, or a final pure fallback")
 			}
 			var branch *valueir.Result
 			var err error

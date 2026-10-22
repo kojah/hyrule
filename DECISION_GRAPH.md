@@ -3,15 +3,17 @@
 Hyrule compiles resolved patterns into `internal/matchir` before emitting Go.
 `internal/compiler` owns source priority, reusable-pattern expansion and OR
 alternatives. The Go adapter resolves hook signatures and capture types, then
-supplies opaque hook/type/literal/expression IDs to the graph. The graph owns
-canonical extraction value IDs, shared prefixes and explicit success/fallback
-edges. Go syntax and `go/types` stay in the adapter. Go is the only implemented
+supplies opaque hook/type/literal/expression IDs to the graph. The graph builder owns canonical extraction value IDs, shared prefixes and
+explicit success/fallback edges. The hash-consing pass consumes that completed
+IR and returns a new graph of the same type, without mutating its input. Go syntax and `go/types` stay in the adapter. Go is the only implemented
 backend; another backend needs its own hook/type resolution and source emitter.
 
 Matchers and guards are pure by language contract, without annotations. Their
 inputs and host snapshot must remain stable during matching. Hyrule cannot
 verify arbitrary callback purity. Builders may allocate and are never shared.
-The current optimizer folds adjacent identical matcher/test prefixes. It does
+Graph construction folds adjacent identical matcher/test prefixes. A separate
+bottom-up `matchir.HashCons` pass then canonicalizes structurally identical pure
+decisions before emission. It does
 not search past intervening predicates, reorder partial guards, infer operation
 kind exclusivity for opaque callbacks. Declared union schemas do permit
 structural switch dispatch. Guard expression IDs
@@ -27,6 +29,36 @@ builders execute only on the winning path. A terminal builder retains an
 unreachable suffix for static validation; the Go backend emits that suffix in
 an `if false` block before the return so invalid unreachable rules still fail
 Go type checking. There is no runtime graph interpreter.
+
+## Bottom-up hash-consing
+
+The pass visits successors before parents and interns pure decisions using their
+kind, operands, hook/expression IDs, capture IDs, schema identity, and canonical
+success/fallback/case edges. Ordered dispatch cases remain ordered. Value IDs
+must belong to one identity namespace; the Go adapter runs the pass separately
+for each graph, before any variant dispatch combines separately numbered graphs.
+
+Construction terminals and evaluations stay distinct, retaining rule diagnostics
+and fresh allocation identity. Query continuations remain behind those terminals
+and are not inspected or memoized. Shared pure nodes retain the first visited
+origin, consistent with prefix sharing. The input graph is immutable; the pass
+clones retained nodes and rejects cycles with an iterative traversal.
+
+This is structural canonicalization, not globally optimal decision-tree search.
+The current Go backend emits structured branches and common fallbacks; it does
+not introduce join labels for every shared suffix. Distinct guard expression IDs
+and construction leaves also limit opportunities in current production graphs.
+No generated-program speedup is claimed from hash-consing alone.
+
+`BenchmarkHashConsRepeatedSuffix` is a synthetic 64-branch, eight-test-suffix
+workload. On the development EPYC 9645 it measured approximately 151 microseconds,
+43.7 KB and 54 allocations per pass (100 ms sample). This measures compiler work,
+not generated runtime behavior. Reproduce with:
+
+```sh
+agent-test go test ./tools/hyrule/internal/matchir -run '^TestHashCons' \
+  -bench BenchmarkHashConsRepeatedSuffix -benchtime=100ms
+```
 
 ## Measurements
 

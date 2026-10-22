@@ -111,7 +111,6 @@ func (e *resolver) checkSelectionCaptures(x *semantic.Expr, union *boundUnion) e
 }
 
 func (e *resolver) resolveQuery(x *semantic.Expr, expected types.Type, inChoice bool) (*valueir.Result, error) {
-	x = selectionOutcomes(x)
 	outer := e.captures
 	e.captures = cloneCaptures(outer)
 	defer func() { e.captures = outer }()
@@ -128,10 +127,17 @@ func (e *resolver) resolveQuery(x *semantic.Expr, expected types.Type, inChoice 
 	}
 	result := &valueir.Result{Kind: valueir.Query, Type: e.tables.typeID(expected), Query: q}
 	if x.BindResult {
+		if len(x.Arms) != 1 {
+			return nil, e.fail(x, "whole-result query binding cannot have else")
+		}
 		return e.resolveWholeQuery(x, expected, inChoice, result, typ)
 	}
 
 	boolean := q.TupleSize == 1 && types.Identical(typ.Underlying(), types.Typ[types.Bool])
+	x, err = e.expandOutcomePatterns(x, union, boolean)
+	if err != nil {
+		return nil, err
+	}
 	if boolean {
 		if err = e.checkBooleanDecision(x); err != nil {
 			return nil, err
@@ -147,33 +153,8 @@ func (e *resolver) resolveQuery(x *semantic.Expr, expected types.Type, inChoice 
 	if x.Name != "" {
 		e.captures[x.Name] = capture{q.Capture, typ}
 	}
-	base := e.captures
-	for _, arm := range x.Arms {
-		e.captures = cloneCaptures(base)
-		outcome := valueir.Outcome{Boolean: arm.Pattern.Name == "true"}
-		if !boolean {
-			variant := e.constructors[arm.Pattern.Name]
-			outcome.Variant = variant.id
-			_, _, indices, err := e.matcher(arm.Pattern, typ)
-			if err != nil {
-				return nil, err
-			}
-			for i, arg := range arm.Pattern.Args {
-				if arg.Kind == semantic.Wildcard {
-					continue
-				}
-				e.serial++
-				id := matchir.ValueID(e.serial)
-				field := variant.fields[indices[i]]
-				e.captures[arg.Name] = capture{id, field.Type()}
-				outcome.Captures = append(outcome.Captures, valueir.FieldCapture{Field: matchir.FieldID(indices[i]), Value: id})
-			}
-		}
-		outcome.Result, err = e.resolveResult(arm.Result, expected, inChoice)
-		if err != nil {
-			return nil, err
-		}
-		q.Cases = append(q.Cases, outcome)
+	if err := e.resolveOutcomes(x, q, typ, expected, inChoice, boolean); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
@@ -251,4 +232,71 @@ func (e *resolver) resolveWholeQuery(x *semantic.Expr, expected types.Type, inCh
 	e.captures[pattern.Name] = capture{q.Capture, typ}
 	q.Next, err = e.resolveResult(x.Arms[0].Result, expected, inChoice)
 	return result, err
+}
+
+// OR arms share one continuation, so every alternative must establish the same
+// typed scope. Validate the group before expanding it into ordinary cases.
+func (e *resolver) expandOutcomePatterns(x *semantic.Expr, union *boundUnion, boolean bool) (*semantic.Expr, error) {
+	copy := *x
+	copy.Arms = nil
+	for _, arm := range x.Arms {
+		if arm.Pattern.Kind != semantic.Alternation {
+			copy.Arms = append(copy.Arms, arm)
+			continue
+		}
+		group := *x
+		group.Kind = semantic.Selection
+		group.Arms = []semantic.DecisionArm{arm}
+		expanded := selectionOutcomes(&group)
+		var err error
+		if boolean {
+			err = e.checkBooleanDecision(expanded)
+		} else if union != nil {
+			err = e.checkDecision(expanded, union)
+		} else {
+			return nil, e.fail(arm.Pattern, "query result must have a declared union")
+		}
+		if err != nil {
+			return nil, err
+		}
+		copy.Arms = append(copy.Arms, expanded.Arms...)
+	}
+	return &copy, nil
+}
+
+func (e *resolver) resolveOutcomes(x *semantic.Expr, q *valueir.QueryPlan, typ, expected types.Type, inChoice, boolean bool) error {
+	var err error
+	base := e.captures
+	for _, arm := range x.Arms {
+		e.captures = cloneCaptures(base)
+		outcome := valueir.Outcome{Boolean: arm.Pattern.Name == "true"}
+		if !boolean {
+			variant := e.constructors[arm.Pattern.Name]
+			outcome.Variant = variant.id
+			_, _, indices, err := e.matcher(arm.Pattern, typ)
+			if err != nil {
+				return err
+			}
+			for i, arg := range arm.Pattern.Args {
+				if arg.Kind == semantic.Wildcard {
+					continue
+				}
+				e.serial++
+				id := matchir.ValueID(e.serial)
+				field := variant.fields[indices[i]]
+				e.captures[arg.Name] = capture{id, field.Type()}
+				outcome.Captures = append(outcome.Captures, valueir.FieldCapture{Field: matchir.FieldID(indices[i]), Value: id})
+			}
+		}
+		outcome.Result, err = e.resolveResult(arm.Result, expected, inChoice)
+		if err != nil {
+			return err
+		}
+		// A declining outcome leaves the choice unanswered and the output zero.
+		// The query tag has already been validated, so no switch arm is needed.
+		if outcome.Result.Kind != valueir.Decline {
+			q.Cases = append(q.Cases, outcome)
+		}
+	}
+	return nil
 }

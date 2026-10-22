@@ -14,31 +14,44 @@ import (
 func TestOptionalApplicationParentheses(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", queryHost+"\nconst Count = 7\nfunc Zero() Plan { return Plan{7} }\n")
-	explicit := queryDeclarations + `const Count; build Zero;
- pattern Both($x, $y) = (Pair $x $y);
- rule Zero: (Pair 99 _) => (Zero);
- rule Skip: (Pair -1 _) => effects [];
- rule Main: (Both $x $y) when (Positive $y)
- => query $proof = (Ask $x) decide $proof {
-  (Proven) => (Wrap effects [(Mark Count)]);
-  (Disproven) => (Wrap effects [Count]);
-  (Unavailable reason:$why) => query $next = (Ask $y) decide $next {
-   (Proven) => effects [1];
-   (Disproven) => effects [2];
-   (Unavailable reason:$nextWhy) => (Wrap effects [$nextWhy]);
-  };
- };
- rule Fallback: _ => effects [Count];
- `
+	explicit := queryDeclarations + `host
+  Count
+  Zero
+
+pattern Both x y = Pair x y
+
+@Zero
+rewrite (Pair 99 _) = Zero()
+
+@Skip
+rewrite (Pair (-1) _) = []
+
+@Main
+rewrite (Both x y)
+  | Positive y
+  =
+  do
+    proof <- Ask x
+    case proof of
+      Proven() -> Wrap [Mark ^Count]
+      Disproven() -> Wrap [^Count]
+      Unavailable (reason: why) -> do
+        next <- Ask y
+        case next of
+          Proven() -> [1]
+          Disproven() -> [2]
+          Unavailable (reason: nextWhy) -> Wrap [nextWhy]
+
+@Fallback
+rewrite _ = [^Count]
+`
 	write(t, root, "input.rules", explicit)
 	_, want := compile(t, root)
 	shorthand := strings.NewReplacer(
-		"(Pair $x $y)", "Pair $x $y", "(Pair 99 _)", "Pair 99 _", "(Zero)", "Zero",
-		"(Pair -1 _)", "Pair -1 _", "(Both $x $y)", "Both $x $y", "(Positive $y)", "Positive $y",
-		"(Ask $x)", "Ask $x", "(Ask $y)", "Ask $y", "(Proven)", "Proven", "(Disproven)", "Disproven",
-		"(Unavailable reason:$why)", "Unavailable reason:$why", "(Unavailable reason:$nextWhy)", "Unavailable reason:$nextWhy",
-		"(Wrap effects [(Mark Count)])", "Wrap effects [(Mark Count)]",
-		"(Wrap effects [Count])", "Wrap effects [Count]", "(Wrap effects [$nextWhy])", "Wrap effects [$nextWhy]",
+		"rewrite (Pair 99 _)", "rewrite Pair 99 _",
+		"rewrite (Pair (-1) _)", "rewrite Pair (-1) _",
+		"rewrite (Both x y)", "rewrite Both x y",
+		"Proven()", "Proven", "Disproven()", "Disproven",
 	).Replace(explicit)
 	write(t, root, "input.rules", shorthand)
 	_, got := compile(t, root)
@@ -54,25 +67,31 @@ func TestOptionalApplicationParentheses(t *testing.T) {
 		if err != nil || !bytes.Equal(formatted, again) {
 			t.Fatalf("format not idempotent: %v", err)
 		}
-		if !bytes.Contains(formatted, []byte("(Mark Count)")) {
-			t.Fatal("formatter removed nested grouping")
-		}
-		if source == shorthand && !bytes.Contains(formatted, []byte("query $proof = Ask $x")) {
-			t.Fatal("formatter restored optional parentheses")
-		}
-		if source == explicit && !bytes.Contains(formatted, []byte("query $proof = (Ask $x)")) {
-			t.Fatal("formatter removed explicit parentheses")
+		if !bytes.Contains(formatted, []byte("[Mark ^Count]")) {
+			t.Fatal("formatter changed nested construction")
 		}
 	}
 }
 
 func TestOptionalApplicationKeepsNestedGrouping(t *testing.T) {
 	root := fixture(t)
-	write(t, root, "input.rules", `match Pair; build Sum; rule Nested: Pair $a $b => Sum (Sum $a 1) $b;`)
+	write(t, root, "input.rules", `host
+  Pair?
+  Sum
+
+@Nested
+rewrite (Pair a b) = Sum (Sum a 1) b
+`)
 	compile(t, root)
 	// An unparenthesized nested name is an argument, not an inferred call. The
 	// compiler must not guess grouping from a Go hook's arity.
-	write(t, root, "input.rules", `match Pair; build Sum; rule Nested: Pair $a $b => Sum Sum $a 1 $b;`)
+	write(t, root, "input.rules", `host
+  Pair?
+  Sum
+
+@Nested
+rewrite (Pair a b) = Sum ^Sum a 1 b
+`)
 	config, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -89,15 +108,23 @@ func TestBareCallsResolveAcrossFilesAndPreserveConstants(t *testing.T) {
  const Zero = 0
  func One() int { return 1 }
  `)
-	write(t, root, "input.rules", `rule Zero: Zero => One; rule Other: _ => Zero;`)
-	write(t, root, "schema.rules", `const Zero; build One;`)
+	write(t, root, "input.rules", `@Zero
+rewrite ^Zero = One()
+
+@Other
+rewrite _ = ^Zero
+`)
+	write(t, root, "schema.rules", `host
+  Zero
+  One
+`)
 	config(t, root, "rewrite_gen.go")
 	path := filepath.Join(root, "hyrule.yaml")
 	contents, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	write(t, root, "hyrule.yaml", strings.Replace(string(contents), "[input.rules]", "[input.rules, schema.rules]", 1))
+	write(t, root, "hyrule.yaml", replaceFixture(t, string(contents), "[input.rules]", "[input.rules, schema.rules]"))
 	c, artifacts := compile(t, root)
 	if err := c.Publish(artifacts, false); err != nil {
 		t.Fatal(err)

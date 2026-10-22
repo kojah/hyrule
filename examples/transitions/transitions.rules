@@ -1,48 +1,35 @@
-match Event = MatchEvent;
-query Exclusive = Exclusive;
-union Proof = Proof tag Kind {
-  Proven = Proven {};
-  Disproven = Disproven {};
-  Unknown = Unknown {
-    reason: Reason;
-  };
-};
-union Effect = Effect tag Kind {
-  Acquire = Acquire {
-    lock: Lock;
-  };
-  Release = ReleaseNow {
-    lock: Lock;
-  };
-  DeferRelease = DeferRelease {
-    lock: Lock;
-  };
-  Order = Order {
-    lock: Lock;
-  };
-  Uncertain = Uncertain {
-    lock: Lock;
-    reason: Reason;
-  };
-};
+host
+  Event? = MatchEvent
+  Exclusive! = Exclusive
 
-rule DeferredRelease:
-  (Event lock:$lock release:true deferred:true)
-  => effects [(DeferRelease lock:$lock)];
+type Proof = Proof
+  tag Kind
+  Proven = Proven
+  Disproven = Disproven
+  Unknown (reason: Reason) = Unknown
 
-rule ImmediateRelease:
-  (Event lock:$lock release:true deferred:false)
-  => effects [(Release lock:$lock)];
+type Effect = Effect
+  tag Kind
+  Acquire (lock: Lock) = Acquire
+  Release (lock: Lock) = ReleaseNow
+  DeferRelease (lock: Lock) = DeferRelease
+  Order (lock: Lock) = Order
+  Uncertain (lock: Lock, reason: Reason) = Uncertain
 
-rule DeferredAcquisition:
-  (Event release:false deferred:true)
-  => effects [];
+@DeferredRelease
+rewrite (Event (lock: lock, release: true, deferred: true)) = [DeferRelease (lock: lock)]
 
-rule Acquisition:
-  (Event lock:$lock release:false deferred:false)
-  => query $proof = (Exclusive $lock)
-     decide $proof {
-       (Proven) => effects [(Acquire lock:$lock)];
-       (Disproven) => effects [(Acquire lock:$lock), (Order lock:$lock)];
-       (Unknown reason:$reason) => effects [(Acquire lock:$lock), (Uncertain lock:$lock reason:$reason)];
-     };
+@ImmediateRelease
+rewrite (Event (lock: lock, release: true, deferred: false)) = [Release (lock: lock)]
+
+@DeferredAcquisition
+rewrite (Event (release: false, deferred: true)) = []
+
+@Acquisition
+rewrite (Event (lock: lock, release: false, deferred: false)) =
+  do
+    proof <- Exclusive lock
+    case proof of
+      Proven() -> [Acquire (lock: lock)]
+      Disproven() -> [Acquire (lock: lock), Order (lock: lock)]
+      Unknown (reason: reason) -> [Acquire (lock: lock), Uncertain (lock: lock, reason: reason)]

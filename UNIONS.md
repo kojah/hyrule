@@ -17,10 +17,10 @@ type Value struct {
 ```
 
 ```text
-union Value = Value tag Kind {
-  Number = NumberKind { value: Number; };
-  Empty = EmptyKind {};
-};
+type Value = Value
+  tag Kind
+  Number (value: Number) = NumberKind
+  Empty = EmptyKind
 ```
 
 `Value` on the left names the schema. The type, tag, constants and storage field
@@ -28,7 +28,7 @@ names on the right resolve in the configured Go package. Field types come from
 that storage. Tags must be constants with exactly the tag field's Go type;
 duplicate tag values are rejected even when their constant names differ. Schema,
 constructor and field duplicates, inaccessible fields and constructor collisions
-with declared match/build/guard aliases or reusable patterns are rejected.
+with declared host aliases or reusable patterns are rejected.
 
 A value has exactly one active variant. Other Go fields are inactive and carry
 no schema meaning. Constructors set the tag, populate every declared active
@@ -39,21 +39,21 @@ active fields wherever they must survive construction.
 ## Matching and construction
 
 ```text
-pattern NumberValue($number) = (Number value:$number);
-rule Positive:
-  (NumberValue $number)
-  && (Positive $number)
-  => (Number value:(Increment $number));
-rule OtherNumber:
-  (Number value:$number)
-  => (Number value:$number);
-rule Empty:
-  (Empty)
-  => (Empty);
+pattern NumberValue number = Number (value: number)
+
+@Positive
+rewrite (NumberValue number)
+  | positive number = Number (value: increment number)
+
+@OtherNumber
+rewrite (Number (value: number)) = Number (value: number)
+
+@Empty
+rewrite Empty = Empty
 ```
 
 Constructor patterns use the existing positional/named child contracts. Named
-children may be omitted, and `(Number)` tests the variant without inspecting any
+children may be omitted, and `Number` tests the variant without inspecting any
 field. Nested constructor patterns destructure fields whose Go type has another
 declared schema. OR alternatives and reusable patterns retain their existing
 capture-type and priority contracts. Builders accept positional fields or every
@@ -90,7 +90,7 @@ semantics follow from declaring a union.
 
 ## Exhaustiveness
 
-Use `exhaustive union` instead of `union` to require input coverage. This is an
+Use `exhaustive type` instead of `type` to require input coverage. This is an
 explicit requirement because partial recognizers are useful. It applies to the
 target's input schema, not to every nested payload schema.
 
@@ -118,21 +118,18 @@ The example has its own configuration. From `tools/hyrule`, compile/generate it
 with `go run ./cmd/hyrule generate --config examples/unions/hyrule.yaml` (under
 `agent-test` on Xenia). This does not alter the repository's root target list.
 
-## Empty variant shorthand
-
-A variant without payload fields may omit its empty braces:
+## Same-name aliases and empty variants
 
 ```text
-union Outcome = Outcome tag Kind {
-  Success;
-  Failure = FailureKind;
-  Unknown { reason; };
-};
+type Outcome = Outcome
+  tag Kind
+  Success
+  Failure = FailureKind
+  Unknown (reason)
 ```
 
-`Success;` means `Success = Success {};`, and `Failure = FailureKind;`
-means `Failure = FailureKind {};`. The terminating semicolon remains required.
-Braces are still required around the union and around nonempty field lists.
-Explicit empty braces remain valid, and formatting preserves either spelling.
-Tag identity, active fields, runtime validation and exhaustive matching are
-unchanged.
+`Success` uses the host tag `Success`; `Unknown (reason)` maps logical field
+`reason` to the host field of the same name. Empty variants need no payload group.
+Explicit aliases can be mixed with shorthand without changing tag identity,
+runtime validation or exhaustiveness. Colons and commas delimit payload mappings;
+there are no braces or semicolons.

@@ -1,22 +1,22 @@
-exhaustive union Value = Value tag Kind {
-  Number = NumberKind {
-    value: Number;
-  };
-  Empty = EmptyKind {};
-};
-guard Positive = Positive;
-build Increment = Increment;
-pattern NumberValue($number) = (Number value:$number);
+exhaustive type Value = Value
+  tag Kind
+  Number (value: Number) = NumberKind
+  Empty = EmptyKind
 
-rule PositiveNumber:
-  (NumberValue $number)
-  && (Positive $number)
-  => (Number value:(Increment $number));
+host
+  Positive = Positive
+  Increment = Increment
 
-rule OtherNumber:
-  (Number value:$number)
-  => (Number value:$number);
+pattern NumberValue number = Number (value: number)
 
-rule EmptyValue:
-  (Empty)
-  => (Empty);
+@PositiveNumber
+rewrite (NumberValue number)
+  | Positive number
+  =
+  Number (value: Increment number)
+
+@OtherNumber
+rewrite (Number (value: number)) = Number (value: number)
+
+@EmptyValue
+rewrite Empty() = Empty()

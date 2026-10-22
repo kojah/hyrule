@@ -23,21 +23,25 @@ func TestNamedFieldsAndOrderedAlternatives(t *testing.T) {
  func Second(input int)bool{Events=append(Events,"second");return input>3}
  func Result(offset,length int)int{Events=append(Events,"build");return offset*10+length}
  `)
-	write(t, root, "input.rules", `match Header = Header;
- match Integer = Integer;
- guard First = First;
- guard Second = Second;
- build Result = Result;
- // Each OR arm has the same two captures. The inner named capture destructures
- // a certified header component without changing its enclosing correlation.
- rule Choose:
-   (or (Header length:(Integer value:$length) offset:$offset)
-       (Header offset:$length length:$offset))
-   && (First $length)
-   && (Second $length)
-   => (Result $offset $length);
- rule Fallback: (Header length:$length) => (Result 0 $length);
- `)
+	write(t, root, "input.rules", `host
+  Header? = Header
+  Integer? = Integer
+  First = First
+  Second = Second
+  Result = Result
+
+// Each OR arm has the same two captures. The inner named capture destructures
+// a certified header component without changing its enclosing correlation.
+@Choose
+rewrite (Header (length: Integer (value: length), offset: offset) | Header (offset: length, length: offset))
+  | First length
+  , Second length
+  =
+  Result offset length
+
+@Fallback
+rewrite (Header (length: length)) = Result 0 length
+`)
 	c, artifacts := compile(t, root)
 	if err := c.Publish(artifacts, false); err != nil {
 		t.Fatal(err)
@@ -66,20 +70,20 @@ func TestNamedFieldsAndOrderedAlternatives(t *testing.T) {
 
 func TestPatternContractDiagnostics(t *testing.T) {
 	cases := []struct{ name, pattern, build, want string }{
-		{"unknown field", `(Pair missing:$x)`, `0`, "unknown matcher field missing"},
-		{"success is not child", `(Pair matched:_)`, `0`, "unknown matcher field matched"},
-		{"duplicate field", `(Pair left:$x left:$y)`, `0`, "duplicate matcher field left"},
-		{"mixed children", `(Pair left:$x _)`, `0`, "cannot mix named and positional"},
-		{"unnamed result", `(Unnamed left:$x)`, `0`, "unknown matcher field left"},
-		{"or missing capture", `(or (Pair left:$x) (Pair right:$y))`, `0`, "identical capture names and types"},
-		{"or capture type", `(or (Pair left:$x) (Text value:$x))`, `0`, "identical capture names and types"},
-		{"local join", `(Pair left:(or $x _) right:$x)`, `0`, "identical capture names and types"},
-		{"or arity", `(or _)`, `0`, "at least two alternatives"},
-		{"or labels", `(or left:_ _)`, `0`, "cannot have field names"},
-		{"or build", `_`, `(or 1 2)`, "only allowed in matcher patterns"},
-		{"named build", `_`, `(Sum left:1 2)`, "cannot mix named and positional builder arguments"},
-		{"interface equality", `(Any left:$x right:$x)`, `0`, "may contain an interface"},
-		{"expansion bound", `(Pair left:(or 1 2 3 4 5 6 7 8 9) right:(or 1 2 3 4 5 6 7 8))`, `0`, "exceeds 64 alternatives"},
+		{"unknown field", `(Pair (missing: x))`, `0`, "unknown matcher field missing"},
+		{"success is not child", `(Pair (matched: _))`, `0`, "unknown matcher field matched"},
+		{"duplicate field", `(Pair (left: x, left: y))`, `0`, "duplicate matcher field left"},
+		{"mixed children", `(Pair (left: x) _)`, `0`, "cannot mix named and positional"},
+		{"unnamed result", `(Unnamed (left: x))`, `0`, "unknown matcher field left"},
+		{"or missing capture", `(Pair (left: x) | Pair (right: y))`, `0`, "identical capture names and types"},
+		{"or capture type", `(Pair (left: x) | Text (value: x))`, `0`, "identical capture names and types"},
+		{"local join", `(Pair (left: (x | _), right: x))`, `0`, "identical capture names and types"},
+		{"or arity", `(_ |)`, `0`, "expected expression"},
+		{"or labels", `(left: _ | _)`, `0`, "expected"},
+		{"or build", `_`, `(1 | 2)`, "expected"},
+		{"named build", `_`, `Sum (left: 1) 2`, "cannot mix named and positional builder arguments"},
+		{"interface equality", `(Any (left: x, right: x))`, `0`, "may contain an interface"},
+		{"expansion bound", `(Pair (left: (1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9), right: (1 | 2 | 3 | 4 | 5 | 6 | 7 | 8)))`, `0`, "exceeds 64 alternatives"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -93,8 +97,14 @@ func TestPatternContractDiagnostics(t *testing.T) {
  func Any(input Node)(left,right any,matched bool){return input.A,input.B,true}
  func Sum(left,right int)int{return left+right}
  `)
-			write(t, root, "input.rules", `match Pair = Pair; match Unnamed = Unnamed; match Text = Text; match Any = Any; build Sum = Sum;
- rule Contract: `+test.pattern+` => `+test.build+`;`)
+			write(t, root, "input.rules", `host
+  Pair?
+  Unnamed?
+  Text?
+  Any?
+  Sum
+@Contract
+rewrite `+test.pattern+` = `+test.build+"\n")
 			config, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 			if err != nil {
 				t.Fatal(err)
@@ -109,8 +119,11 @@ func TestPatternContractDiagnostics(t *testing.T) {
 
 func TestNamedAlternativeFormatting(t *testing.T) {
 	original := []byte(`// field ordering is intentional
- match Header=Header;
- rule Nested:$whole:(or (Header length:$n offset:(or 0 1)) (Header offset:2 length:$n)) => $n;`)
+host
+  Header?
+@Nested
+rewrite whole@(Header (length: n, offset: (0 | 1)) | Header (offset: 2, length: n)) = n
+`)
 	formatted, err := hyrule.Format("named.rules", original)
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +132,7 @@ func TestNamedAlternativeFormatting(t *testing.T) {
 	if err != nil || string(again) != string(formatted) {
 		t.Fatalf("format not idempotent: %v\n%s", err, again)
 	}
-	if !strings.Contains(string(formatted), "length:$n offset:(or 0 1)") {
+	if !strings.Contains(string(formatted), "length: n, offset: (0 | 1)") {
 		t.Fatalf("lost named order: %s", formatted)
 	}
 }

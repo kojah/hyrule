@@ -4,35 +4,39 @@
 package frontend
 
 import (
+	"maps"
 	"slices"
+	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
 )
 
-// Lower resolves surface application shorthand across all input declarations
+// Lower resolves names and lexical scopes across all input declarations
 // and copies every semantic value. The input remains usable by the formatter.
 func Lower(files []*syntax.File) []*semantic.File {
-	operations := map[string]bool{}
+	constructors := map[string]bool{}
+	names := map[string]bool{}
 	for _, file := range files {
 		for _, item := range file.Items {
 			switch {
 			case item.Binding != nil:
-				operations[item.Binding.Name] = item.Binding.Kind != "const"
+				names[item.Binding.Name] = true
+				constructors[item.Binding.Name] = item.Binding.Kind == "match"
 			case item.Pattern != nil:
-				operations[item.Pattern.Name] = true
+				constructors[item.Pattern.Name] = true
 			case item.Record != nil:
-				operations[item.Record.Name] = true
+				constructors[item.Record.Name] = true
 			case item.Union != nil:
 				for _, variant := range item.Union.Variants {
-					operations[variant.Name] = true
+					constructors[variant.Name] = true
 				}
 			case item.API != nil:
-				operations["inputs"], operations["outputs"] = true, true
+				constructors["inputs"], constructors["outputs"] = true, true
 			}
 		}
 	}
-	lower := lowering{operations: operations}
+	lower := lowering{constructors: constructors, names: names, captures: map[string]bool{}}
 	result := make([]*semantic.File, len(files))
 	for i, file := range files {
 		result[i] = &semantic.File{}
@@ -43,7 +47,7 @@ func Lower(files []*syntax.File) []*semantic.File {
 	return result
 }
 
-type lowering struct{ operations map[string]bool }
+type lowering struct{ constructors, names, captures map[string]bool }
 
 func position(p syntax.Position) semantic.Position {
 	return semantic.Position{File: p.File, Line: p.Line, Column: p.Column}
@@ -53,16 +57,59 @@ func (l lowering) expression(x *syntax.Expr) *semantic.Expr {
 	if x == nil {
 		return nil
 	}
+	// A named case consumes the preceding query result rather than invoking it again.
+	if x.Kind == syntax.Do && len(x.Args) == 1 {
+		step := x.Args[0]
+		if step.Kind == syntax.Query && step.Sequential && len(step.Arms) == 1 {
+			capture := step.Arms[0].Pattern
+			decision := step.Arms[0].Result
+			wholeCapture := capture.Kind == syntax.Variable || capture.Bare && !l.constructors[capture.Name]
+			if wholeCapture && decision.Kind == syntax.Query && !decision.Sequential && len(decision.Args) == 1 &&
+				decision.Args[0].Name == capture.Name && len(decision.Args[0].Args) == 0 {
+				merged := *decision
+				merged.Name = capture.Name
+				merged.Args = step.Args
+				scoped := l
+				scoped.captures = maps.Clone(l.captures)
+				scoped.captures[capture.Name] = true
+				return scoped.expression(&merged)
+			}
+		}
+	}
 	result := &semantic.Expr{Position: position(x.Position), Kind: expressionKind(x.Kind), Name: x.Name, Bind: x.Bind, Field: x.Field,
 		BindResult: x.Sequential && len(x.Arms) > 0 && x.Arms[0].Pattern.Kind == syntax.Variable}
-	if x.Unparenthesized && x.Kind == syntax.Symbol && l.operations[x.Name] {
-		result.Kind = semantic.Call
+	if x.Bare {
+		base, _, _ := strings.Cut(x.Name, ".")
+		switch {
+		case l.captures[base]:
+			result.Kind = semantic.Variable
+		case l.constructors[x.Name]:
+			result.Kind = semantic.Call
+		case l.names[x.Name]:
+			result.Kind = semantic.Symbol
+		default:
+			result.Kind = semantic.Variable
+		}
 	}
 	for _, arg := range x.Args {
 		result.Args = append(result.Args, l.expression(arg))
 	}
 	for _, arm := range x.Arms {
-		result.Arms = append(result.Arms, semantic.DecisionArm{Pattern: l.expression(arm.Pattern), Result: l.expression(arm.Result)})
+		branch := l
+		branch.captures = maps.Clone(l.captures)
+		branch.capture(arm.Pattern)
+		result.Arms = append(result.Arms, semantic.DecisionArm{Pattern: branch.expression(arm.Pattern), Result: branch.expression(arm.Result)})
+	}
+	if x.Sequential && len(result.Arms) > 0 {
+		result.BindResult = result.Arms[0].Pattern.Kind == semantic.Variable
+	}
+	if result.Kind == semantic.OrderedAlternatives && len(result.Args) > 0 {
+		last := len(result.Args) - 1
+		value := result.Args[last]
+		if value.Kind != semantic.Pure && value.Kind != semantic.Query && value.Kind != semantic.Do &&
+			value.Kind != semantic.Decline && value.Kind != semantic.OrderedAlternatives {
+			result.Args[last] = &semantic.Expr{Position: value.Position, Kind: semantic.Pure, Args: []*semantic.Expr{value}}
+		}
 	}
 	return result
 }
@@ -113,13 +160,23 @@ func (l lowering) item(item syntax.Item) semantic.Item {
 			Parameters: slices.Clone(x.Parameters), Body: l.expression(x.Body)}
 	}
 	if x := item.Pattern; x != nil {
+		l.captures = map[string]bool{}
+		for _, name := range x.Parameters {
+			l.captures[name] = true
+		}
 		out.Pattern = &semantic.Pattern{Position: position(x.Position), Name: x.Name, Parameters: slices.Clone(x.Parameters), Body: l.expression(x.Body)}
 	}
 	if x := item.Rule; x != nil {
-		out.Rule = &semantic.Rule{Position: position(x.Position), Name: x.Name, Match: l.expression(x.Match), Build: l.expression(x.Build)}
+		l.captures = map[string]bool{}
+		l.capture(x.Match)
+		out.Rule = &semantic.Rule{Position: position(x.Position), Name: x.Name, Family: x.Family, Match: l.expression(x.Match)}
 		for _, clause := range x.Clauses {
 			out.Rule.Clauses = append(out.Rule.Clauses, semantic.Clause{Name: clause.Name, Value: l.expression(clause.Value)})
+			if clause.Name != "" {
+				l.captures[clause.Name] = true
+			}
 		}
+		out.Rule.Build = l.expression(x.Build)
 	}
 	if x := item.Record; x != nil {
 		out.Record = &semantic.Record{Position: position(x.Position), Name: x.Name, HostType: x.GoType, View: x.View, Fields: fields(x.Fields)}
@@ -153,4 +210,19 @@ func fields(input []syntax.UnionField) []semantic.UnionField {
 		result[i] = semantic.UnionField{Position: position(f.Position), Name: f.Name, HostName: f.GoName}
 	}
 	return result
+}
+
+func (l lowering) capture(x *syntax.Expr) {
+	if x == nil {
+		return
+	}
+	if x.Bind != "" {
+		l.captures[x.Bind] = true
+	}
+	if x.Kind == syntax.Variable || x.Bare && !l.constructors[x.Name] {
+		l.captures[x.Name] = true
+	}
+	for _, arg := range x.Args {
+		l.capture(arg)
+	}
 }

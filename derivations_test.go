@@ -23,17 +23,49 @@ type DisplaySignature func(Snapshot,int)string
 func Capture(v Snapshot) Snapshot { return FreezeSnapshot(v) }
 `
 
-const deriveSchema = `record Snapshot = Snapshot { backing: Backing; cells: Cells; guard: Guard; label: Label; };
-record Key = Key { backing: Backing; };
-derive Snapshot {
- freeze FreezeSnapshot = FreezeSignature { backing; cells:clone; guard; label; };
- key SnapshotKey = KeySignature { backing; cells:omit; guard:omit; label:omit; };
- equal EqualSnapshot = EqualSignature { backing; cells:omit; guard:omit; label:omit; };
- visit VisitSnapshot = VisitSignature { backing:apply; cells:each; guard; label; };
- transform TransformSnapshot = TransformSignature { backing:apply; cells:each; guard; label; };
- display DisplaySnapshot = DisplaySignature { backing; cells:omit; guard; label; };
-};
-rule Preserve: $value => $value;
+const deriveSchema = `type Snapshot = Snapshot
+  backing: Backing
+  cells: Cells
+  guard: Guard
+  label: Label
+
+type Key = Key
+  backing: Backing
+
+derive Snapshot
+  freeze FreezeSnapshot: FreezeSignature
+    backing: keep
+    cells: clone
+    guard: keep
+    label: keep
+  key SnapshotKey: KeySignature
+    backing: keep
+    cells: omit
+    guard: omit
+    label: omit
+  equal EqualSnapshot: EqualSignature
+    backing: keep
+    cells: omit
+    guard: omit
+    label: omit
+  visit VisitSnapshot: VisitSignature
+    backing: apply
+    cells: each
+    guard: keep
+    label: keep
+  transform TransformSnapshot: TransformSignature
+    backing: apply
+    cells: each
+    guard: keep
+    label: keep
+  display DisplaySnapshot: DisplaySignature
+    backing: keep
+    cells: omit
+    guard: keep
+    label: keep
+
+@Preserve
+rewrite value = value
 `
 
 func TestDerivedRecordsOwnStoragePreserveEvidenceAndVisitChildren(t *testing.T) {
@@ -75,17 +107,17 @@ t.Fatal("nil/empty distinction lost")}
 
 func TestDerivationDiagnosticsAndFormatting(t *testing.T) {
 	for _, test := range []struct{ name, replace, with, want string }{
-		{"new field needs policy", "guard; label; };", "guard; };", "omits field policy"},
-		{"duplicate field", "backing; cells:clone;", "backing; backing; cells:clone;", "duplicate derived field"},
-		{"slice ownership", "cells:clone;", "cells;", "requires borrow, clone"},
-		{"unsafe key", "cells:omit;", "cells;", "safe comparable"},
+		{"new field needs policy", "    guard: keep\n    label: keep", "    guard: keep", "omits field policy"},
+		{"duplicate field", "    backing: keep\n    cells: clone", "    backing: keep\n    backing: keep\n    cells: clone", "duplicate derived field"},
+		{"slice ownership", "cells: clone", "cells: keep", "requires borrow, clone"},
+		{"unsafe key", "cells: omit", "cells: keep", "safe comparable"},
 		{"unknown operation", "freeze FreezeSnapshot", "mystery FreezeSnapshot", "unknown derivation operation"},
-		{"wrong callback", "backing:apply;", "label:apply; backing;", "duplicate derived field"},
+		{"wrong callback", "backing: apply", "label: apply\n    backing: keep", "duplicate derived field"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
 			write(t, root, "bindings.go", deriveHost)
-			write(t, root, "input.rules", strings.Replace(deriveSchema, test.replace, test.with, 1))
+			write(t, root, "input.rules", replaceFixture(t, deriveSchema, test.replace, test.with))
 			config, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 			if err != nil {
 				t.Fatal(err)
@@ -108,7 +140,7 @@ func TestDerivationDiagnosticsAndFormatting(t *testing.T) {
 
 func TestDerivedExactStorageIsOwnedBoundedAndRetainsEvidence(t *testing.T) {
 	root := fixture(t)
-	host := strings.Replace(deriveHost, "package fixture", "package fixture\nimport \"fmt\"", 1) + `
+	host := replaceFixture(t, deriveHost, "package fixture", "package fixture\nimport \"fmt\"") + `
 type ID uint8
 type ExactKey struct { Backing int; Cells string; Guard int; Label string }
 type Table struct { Index map[ExactKey]ID; Values []Snapshot }
@@ -116,12 +148,20 @@ type StoreSignature func(Snapshot,*Table,int)(ID,bool)
 type LoadSignature func(ID,*Table)(Snapshot,bool)
 func cellsKey(values []int) string { return fmt.Sprint(values==nil,values) }
 `
-	schema := deriveSchema + `
-record ExactKey = ExactKey { backing:Backing; cells:Cells; guard:Guard; label:Label; };
-derive Snapshot {
- store StoreSnapshot = StoreSignature { backing; cells:cellsKey; guard; label; };
- load LoadSnapshot = LoadSignature {};
-};`
+	schema := deriveSchema + `type ExactKey = ExactKey
+  backing: Backing
+  cells: Cells
+  guard: Guard
+  label: Label
+
+derive Snapshot
+  store StoreSnapshot: StoreSignature
+    backing: keep
+    cells: cellsKey
+    guard: keep
+    label: keep
+  load LoadSnapshot: LoadSignature
+`
 	write(t, root, "bindings.go", host)
 	write(t, root, "input.rules", schema)
 	config, artifacts := compile(t, root)
@@ -162,8 +202,8 @@ func TestExactStorage(t *testing.T) {
 // keeps derived key projection pure, without invoking a mutable host interner.
 func TestDerivedKeyConsumesTypedNormalizedParameters(t *testing.T) {
 	root := fixture(t)
-	host := strings.Replace(deriveHost, "type KeySignature func(Snapshot)Key", "type KeySignature func(value Snapshot, backingID int)Key", 1)
-	schema := strings.Replace(deriveSchema, "key SnapshotKey = KeySignature { backing;", "key SnapshotKey = KeySignature { backing:$backingID;", 1)
+	host := replaceFixture(t, deriveHost, "type KeySignature func(Snapshot)Key", "type KeySignature func(value Snapshot, backingID int)Key")
+	schema := replaceFixture(t, deriveSchema, "key SnapshotKey: KeySignature\n    backing: keep", "key SnapshotKey: KeySignature\n    backing: @backingID")
 	write(t, root, "bindings.go", host)
 	write(t, root, "input.rules", schema)
 	config, artifacts := compile(t, root)
@@ -176,8 +216,8 @@ func TestNormalizedKey(t *testing.T) {
  if key:=SnapshotKey(Snapshot{Backing:2,Guard:9,Label:"source"},17);key.Backing!=17 {t.Fatal(key)}
 }`)
 	runUnionFixture(t, root, "TestNormalizedKey")
-	for _, bad := range []string{"$missing", "keep"} {
-		write(t, root, "input.rules", strings.Replace(schema, "$backingID", bad, 1))
+	for _, bad := range []string{"@missing", "keep"} {
+		write(t, root, "input.rules", replaceFixture(t, schema, "@backingID", bad))
 		_, err := config.Compile(context.Background(), "")
 		if err == nil {
 			t.Fatal("accepted missing or unused normalization parameter")

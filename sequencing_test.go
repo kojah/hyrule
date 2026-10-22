@@ -9,48 +9,54 @@ import (
 	"github.com/kojah/lockdoc/tools/hyrule"
 )
 
-const doRules = `signature total fallback outputs 0 -1;
-query ask = Ask;
-query ready = Ready;
-build mark;
-union Proof = (Kind, int) tag 0 {
- Proven = Yes { reason:1; };
- Disproven = No;
- Unavailable = Unknown { reason:1; };
-};
-rule Main:
- inputs $input $n $host
- => do {
-   Proven reason:$first <- query ask $host $n 0
-     else {
-       Disproven => decline;
-       Unavailable reason:$why => outputs $why 3;
-     };
-   Proven reason:$second <- query ask $host $host.Offset.Value $first
-     else {
-       Disproven => decline;
-       Unavailable reason:$why => outputs $why 4;
-     };
-   pure outputs (mark $host $second) 1;
- }
- <|> do {
-   true <- query ready $host "ok" else { false => decline; };
-   pure outputs (mark $host 20) 2;
- }
- <|> pure outputs (mark $host 99) 5;
-rule Later: inputs $input $n $host => outputs (mark $host 100) 6;
+const doRules = `signature total = outputs 0 (-1)
+
+host
+  ask! = Ask
+  ready! = Ready
+  mark
+
+type Proof = (Kind, int)
+  tag 0
+  Proven (reason: 1) = Yes
+  Disproven = No
+  Unavailable (reason: 1) = Unknown
+
+@Main
+rewrite (inputs input n host) =
+  do
+    Proven (reason: first) <- ask host n 0
+      else
+        Disproven() -> decline
+        Unavailable (reason: why) -> outputs why 3
+    Proven (reason: second) <- ask host host.Offset.Value first
+      else
+        Disproven() -> decline
+        Unavailable (reason: why) -> outputs why 4
+    outputs (mark host second) 1
+  <|> do
+    true <- ready host "ok"
+      else
+        false -> decline
+    outputs (mark host 20) 2
+  <|> outputs (mark host 99) 5
+
+@Later
+rewrite (inputs input n host) = outputs (mark host 100) 6
 `
 
 func TestDoSequencingAndAlternatives(t *testing.T) {
 	for _, mode := range []string{"total", "partial"} {
 		t.Run(mode, func(t *testing.T) {
 			root := fixture(t)
-			host := strings.Replace(nativeHost, `return name!="skip"`, `return name!="skip" && h.Offset.Value != -1`, 1)
+			host := replaceFixture(t, nativeHost, `return name!="skip"`, `return name!="skip" && h.Offset.Value != -1`)
 			host += `func mark(h *Host,n int)int{h.Calls=append(h.Calls,"mark");return n}`
 			rules := doRules
 			if mode == "partial" {
-				host = strings.Replace(host, "(int, int)", "(int, int, bool)", 1)
-				rules = strings.Replace(rules, "signature total fallback outputs 0 -1;", "signature partial;", 1)
+				host = replaceFixture(t, host, "(int, int)", "(int, int, bool)")
+				rules = replaceFixture(t, rules, `signature total = outputs 0 (-1)
+`, `signature partial
+`)
 			}
 			formatted, err := hyrule.Format("input.rules", []byte(rules))
 			if err != nil {
@@ -97,23 +103,22 @@ func TestBehavior(t *testing.T){
 
 func TestDoDiagnostics(t *testing.T) {
 	for _, tc := range []struct{ name, old, replacement, want string }{
-		{"missing outcome", "Disproven => decline;", "", "missing Disproven"},
-		{"duplicate outcome", "Disproven => decline;", "Proven => decline; Disproven => decline;", "duplicate decision variant"},
-		{"refinement", "Proven reason:$first", "Proven reason:7", "fresh captures"},
-		{"shadow", "Proven reason:$second", "Proven reason:$first", "fresh captures"},
-		{"later use", "$n 0", "$second 0", "unbound capture"},
-		{"else scope", "outputs $why 3", "outputs $first 3", "unbound capture"},
-		{"alternative scope", "mark $host 20", "mark $host $first", "unbound capture"},
-		{"wrong result type", "(mark $host $second)", "true", "cannot use"},
-		{"missing final result", "pure outputs (mark $host $second) 1;", "", "final pure result"},
-		{"pure cannot query", "pure outputs (mark $host $second) 1;",
-			`pure query ready $host "ok" {true => outputs 1 1; false => outputs 2 2;};`, "pure cannot execute a query"},
-		{"boolean exhaustive", "else { false => decline; }", "", "require true and false"},
+		{"missing outcome", "        Disproven() -> decline\n", "", "missing Disproven"},
+		{"duplicate outcome", "Disproven() -> decline", "Proven -> decline\n        Disproven() -> decline", "duplicate decision variant"},
+		{"refinement", "Proven (reason: first)", "Proven (reason: 7)", "fresh captures"},
+		{"shadow", "Proven (reason: second)", "Proven (reason: first)", "fresh captures"},
+		{"later use", "n 0", "second 0", "unbound capture"},
+		{"else scope", "outputs why 3", "outputs first 3", "unbound capture"},
+		{"alternative scope", "mark host 20", "mark host first", "unbound capture"},
+		{"wrong result type", "(mark host second)", "true", "cannot use"},
+		{"missing final result", "    outputs (mark host second) 1\n", "", "final result"},
+		{"query fallback", "outputs (mark host 99) 5", "case ready host \"ok\" of\n    true -> outputs 1 1\n    false -> outputs 2 2", "final pure fallback"},
+		{"boolean exhaustive", "      else\n        false -> decline\n", "", "require true and false"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := fixture(t)
 			write(t, root, "bindings.go", nativeHost+`func mark(h *Host,n int)int{return n}`)
-			write(t, root, "input.rules", strings.Replace(doRules, tc.old, tc.replacement, 1))
+			write(t, root, "input.rules", replaceFixture(t, doRules, tc.old, tc.replacement))
 			c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 			if err != nil {
 				t.Fatal(err)
@@ -129,19 +134,19 @@ func TestDoDiagnostics(t *testing.T) {
 func TestStandaloneDo(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", queryHost)
-	write(t, root, "input.rules", queryDeclarations+`
- rule Main: Pair $x $y => do {
-   Proven <- query Ask $x else {
-     Disproven => effects [1];
-     Unavailable reason:$why => effects [$why];
-   };
-   Proven <- query Ask $y else {
-     Disproven => effects [2];
-     Unavailable reason:$why => effects [$why];
-   };
-   pure effects [3];
- };
- `)
+	write(t, root, "input.rules", queryDeclarations+`@Main
+rewrite (Pair x y) =
+  do
+    Proven <- Ask x
+      else
+        Disproven -> [1]
+        Unavailable (reason: why) -> [why]
+    Proven <- Ask y
+      else
+        Disproven -> [2]
+        Unavailable (reason: why) -> [why]
+    [3]
+`)
 	c, a := compile(t, root)
 	if err := c.Publish(a, false); err != nil {
 		t.Fatal(err)
@@ -153,8 +158,15 @@ func TestBehavior(t *testing.T){for _,tt:=range []struct{n Node;want int;calls [
 }{h:=&Host{};p,ok:=Rewrite(tt.n,h);if !ok||len(p)!=1||p[0]!=tt.want||!reflect.DeepEqual(h.Calls,tt.calls){t.Fatalf("%+v: %v %v %v",tt,p,ok,h.Calls)}}}`)
 	runGeneratedTransitionTest(t, root)
 	// A decline without a surrounding choice has no implicit matching fallback.
-	write(t, root, "input.rules", queryDeclarations+`rule Main: Pair $x $y => do {
- Proven <- query Ask $x else {Disproven => decline; Unavailable => effects [];}; pure effects []; };`)
+	write(t, root, "input.rules", queryDeclarations+`@Main
+rewrite (Pair x y) =
+  do
+    Proven <- Ask x
+      else
+        Disproven() -> decline
+        Unavailable -> []
+    []
+`)
 	_, err := c.Compile(context.Background(), "")
 	if err == nil || !strings.Contains(err.Error(), "decline requires") {
 		t.Fatalf("want explicit decline context error: %v", err)
@@ -164,11 +176,12 @@ func TestBehavior(t *testing.T){for _,tt:=range []struct{n Node;want int;calls [
 func TestDoNestedChoiceDeclinesLocally(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", nativeHost+`func mark(h *Host,n int)int{return n}`)
-	replacement := `Disproven => do {
-   true <- query ready $host "skip" else { false => decline; };
-   pure outputs 11 1;
- } <|> pure outputs 77 7;`
-	write(t, root, "input.rules", strings.Replace(doRules, "Disproven => decline;", replacement, 1))
+	replacement := `Disproven() -> do
+          true <- ready host "skip"
+            else false -> decline
+          outputs 11 1
+        <|> outputs 77 7`
+	write(t, root, "input.rules", replaceFixture(t, doRules, "Disproven() -> decline", replacement))
 	c, a := compile(t, root)
 	if err := c.Publish(a, false); err != nil {
 		t.Fatal(err)
@@ -184,18 +197,32 @@ func TestDoNestedChoiceDeclinesLocally(t *testing.T) {
 
 func TestDoRejectsUnboundedSyntaxAndImpurePlacement(t *testing.T) {
 	for _, source := range []string{
-		`rule X: _ => do {};`,
-		`rule X: _ => do { pure 1; pure 2; };`,
-		`rule X: _ => do {` + strings.Repeat(`true <- query Ready else { false => decline; };`, 70) + `pure 0;};`,
+		"rewrite _ = do\n",
+		"rewrite _ = do\n  1\n  2\n",
+		"rewrite _ = do\n" + strings.Repeat("  true <- Ready()\n    else false -> decline\n", 70) + "  0\n",
 	} {
 		if _, err := hyrule.Format("input.rules", []byte(source)); err == nil {
 			t.Fatalf("accepted invalid block: %s", source)
 		}
 	}
 	for _, source := range []string{
-		`rule X: Pair $x $y let $z = do { pure 1; } => effects [];`,
-		`rule X: Pair $x $y => pure do { pure effects []; };`,
-		`rule X: Pair $x $y => decline;`,
+		`@X
+rewrite (Pair x y)
+  | let z = do
+    1
+  =
+  []
+`,
+		`@X
+rewrite (Pair x y) =
+  do
+    []
+  <|> do
+    []
+`,
+		`@X
+rewrite (Pair x y) = decline
+`,
 	} {
 		root := fixture(t)
 		write(t, root, "bindings.go", queryHost)
@@ -218,21 +245,28 @@ func Gate(h *Host,n,stage int)Flag {
  h.Calls=append(h.Calls,[]string{"first","second","last"}[stage])
  return Flag(n & (1<<stage) != 0)
 }`
-	rules := `signature total fallback outputs 0 -1;
-query gate = Gate;
-query ready = Ready;
-rule Main:
- inputs _ $n $host
- => do {
-   true <- query gate $host $n 0 else outputs 10 1;
-   false <- query gate $host $n 1 else decline;
-   true <- query gate $host $n 2
-     else query ready $host "ok" {
-       true => outputs 50 5;
-       false => outputs 60 6;
-     };
-   pure outputs 30 3;
- } <|> pure outputs 40 4;
+	rules := `signature total = outputs 0 (-1)
+
+host
+  gate! = Gate
+  ready! = Ready
+
+@Main
+rewrite (inputs _ n host) =
+  do
+    true <- gate host n 0
+      else
+        false -> outputs 10 1
+    false <- gate host n 1
+      else
+        true -> decline
+    true <- gate host n 2
+      else
+        false -> case ready host "ok" of
+          true -> outputs 50 5
+          false -> outputs 60 6
+    outputs 30 3
+  <|> outputs 40 4
 `
 	formatted, err := hyrule.Format("input.rules", []byte(rules))
 	if err != nil {
@@ -242,7 +276,7 @@ rule Main:
 	if err != nil || string(again) != string(formatted) {
 		t.Fatalf("unstable expression else formatting: %v\n%s", err, formatted)
 	}
-	if !strings.Contains(string(formatted), "else outputs 10 1;") || !strings.Contains(string(formatted), "else decline;") {
+	if !strings.Contains(string(formatted), "false -> outputs 10 1") || !strings.Contains(string(formatted), "true -> decline") {
 		t.Fatalf("formatter lost expression else shorthand:\n%s", formatted)
 	}
 	write(t, root, "bindings.go", host)
@@ -268,12 +302,13 @@ func TestBehavior(t *testing.T){
 }
 
 func TestDoExpressionElseRequiresBooleanPattern(t *testing.T) {
-	for _, pattern := range []string{"Proven reason:$why", "_", "0", "(or true false)"} {
+	for _, pattern := range []string{"Proven (reason: why)", "_", "0", "(true | false)"} {
 		t.Run(pattern, func(t *testing.T) {
-			_, err := hyrule.Format("input.rules", []byte(`rule Main: $input => do {
- `+pattern+` <- query Ask $input else outputs 0;
- pure outputs 1;
-};`))
+			_, err := hyrule.Format("input.rules", []byte(`rewrite input = do
+  `+pattern+` <- Ask input
+    else outputs 0
+  outputs 1
+`))
 			if err == nil || !strings.Contains(err.Error(), "single-expression else requires a true or false do binding") {
 				t.Fatalf("want Boolean-only expression else error, got %v", err)
 			}

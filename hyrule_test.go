@@ -34,12 +34,20 @@ func fixture(t *testing.T) string {
  // The host can refer to the generated API before its first generation.
  func Use(n Node)(int,bool){return Rewrite(n)}
  `)
-	write(t, root, "input.rules", `match Pair = Pair;
- build Sum = Sum;
- guard Positive = Positive;
- rule Equal: (Pair $x $x) && (Positive $x) => (Sum $x 10);
- rule Fallback: (Pair $a $b) => (Sum $a $b);
- `)
+	write(t, root, "input.rules", `host
+  Pair? = Pair
+  Sum = Sum
+  Positive = Positive
+
+@Equal
+rewrite (Pair x x)
+  | Positive x
+  =
+  Sum x 10
+
+@Fallback
+rewrite (Pair a b) = Sum a b
+`)
 	config(t, root, "rewrite_gen.go")
 	return root
 }
@@ -115,12 +123,31 @@ if n.A==n.B && n.A>0{want=n.A+10};if !ok||got!=want{t.Fatalf("%v => %d,%v",n,got
 
 func TestRuleDiagnostics(t *testing.T) {
 	cases := []struct{ name, rules, want string }{
-		{"unbound", `rule Bad: _ => $missing;`, "unbound capture"},
-		{"arity", `match Pair = Pair; rule Bad: (Pair $a) => 0;`, "matcher requires"},
-		{"literal type", `match Pair = Pair; rule Bad: (Pair "bad" _) => 0;`, "mismatched types"},
-		{"overflow", `rule Bad: _ => 999999999999999999999999999999999999;`, "overflows"},
-		{"duplicate", `rule Bad: _ => 0; rule Bad: _ => 1;`, "duplicate rule"},
-		{"syntax", `rule Bad: (Pair $a => 0;`, "input.rules:1:"},
+		{"unbound", `@Bad
+rewrite _ = missing
+`, "unbound capture"},
+		{"arity", `host
+  Pair? = Pair
+
+@Bad
+rewrite (Pair a) = 0
+`, "matcher requires"},
+		{"literal type", `host
+  Pair? = Pair
+
+@Bad
+rewrite (Pair "bad" _) = 0
+`, "mismatched types"},
+		{"overflow", `@Bad
+rewrite _ = 999999999999999999999999999999999999
+`, "overflows"},
+		{"duplicate", `@Bad
+rewrite _ = 0
+
+@Bad
+rewrite _ = 1
+`, "duplicate rule"},
+		{"syntax", `rewrite (Pair a = 0`, "input.rules:1:"},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
@@ -139,7 +166,7 @@ func TestRuleDiagnostics(t *testing.T) {
 }
 
 func TestFormatContract(t *testing.T) {
-	input := []byte("// description\nmatch Pair=Pair;\nrule R:(Pair $a /* preserve me */ $b)=>(Sum $a $b);\n// tail\n")
+	input := []byte("// description\nhost\n  Pair? = Pair\n@R\nrewrite (Pair a /* preserve me */ b) = Sum a b\n// tail\n")
 	formatted, err := hyrule.Format("test.rules", input)
 	if err != nil {
 		t.Fatal(err)
@@ -168,12 +195,18 @@ func TestNestedPatternsAndLiteralFidelity(t *testing.T) {
  func Named(x ast.Expr)bool{_,ok:=x.(*ast.Ident);return ok}
  func Text(s string)string{return s}
  `)
-	write(t, root, "input.rules", `match Binary = Binary;
- match Ident = Ident;
- guard Named = Named;
- build Text = Text;
- rule Nested: (Binary $lhs:(Ident "x") _) && (Named $lhs) => (Text "line\nquoted\"\\end");
- `)
+	write(t, root, "input.rules", `host
+  Binary? = Binary
+  Ident? = Ident
+  Named = Named
+  Text = Text
+
+@Nested
+rewrite (Binary lhs@(Ident "x") _)
+  | Named lhs
+  =
+  Text "line\nquoted\"\\end"
+`)
 	c, a := compile(t, root)
 	if err := c.Publish(a, false); err != nil {
 		t.Fatal(err)
@@ -223,7 +256,12 @@ func TestUnsafeEqualityAndEditedObsoleteOutput(t *testing.T) {
  type Signature func(any) (int,bool)
  func Pair(x any)(any,any,bool){return x,x,true}
  `)
-	write(t, root, "input.rules", `match Pair = Pair; rule Unsafe: (Pair $x $x) => 1;`)
+	write(t, root, "input.rules", `host
+  Pair? = Pair
+
+@Unsafe
+rewrite (Pair x x) = 1
+`)
 	c, err = hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -267,14 +305,23 @@ func TestMultipleGuardsShortCircuitAndFallThrough(t *testing.T) {
  func Make(n int)int{Events=append(Events,"build");return n}
  func Fallback(n int)int{Events=append(Events,"fallback");return n+10}
  `)
-	input := []byte(`match Pair = Pair;
- guard First = First;
- guard Second = Second;
- build Make = Make;
- build Fallback = Fallback;
- rule Both: (Pair $a _) && (First $a) && (Second $a) => (Make $a);
- rule Other: (Pair $a _) => (Fallback $a);
- `)
+	input := []byte(`host
+  Pair? = Pair
+  First = First
+  Second = Second
+  Make = Make
+  Fallback = Fallback
+
+@Both
+rewrite (Pair a _)
+  | First a
+  , Second a
+  =
+  Make a
+
+@Other
+rewrite (Pair a _) = Fallback a
+`)
 	formatted, err := hyrule.Format("input.rules", input)
 	if err != nil {
 		t.Fatal(err)
@@ -320,4 +367,15 @@ func TestGeneratedMarkerIsNotPackageDocumentation(t *testing.T) {
 	if !ast.IsGenerated(file) || file.Doc != nil {
 		t.Fatal("generated marker is missing or attached as package documentation")
 	}
+}
+
+// replaceFixture makes mutation-based regressions fail when their source fixture
+// changes, rather than silently testing the unmodified happy path.
+func replaceFixture(t *testing.T, source, old, replacement string) string {
+	t.Helper()
+	found := strings.Count(source, old)
+	if found == 0 {
+		t.Fatalf("fixture mutation missing %q", old)
+	}
+	return strings.Replace(source, old, replacement, 1)
 }

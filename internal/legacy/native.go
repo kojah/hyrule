@@ -1,7 +1,6 @@
-package syntax
+package legacy
 
 import (
-	"strings"
 	"text/scanner"
 )
 
@@ -47,14 +46,6 @@ func (p *parser) apiDeclaration(pos Position, comments []string) *API {
 	}
 	p.expect(";")
 	return api
-}
-
-func formatAPI(api *API) string {
-	value := "signature " + api.Mode
-	if api.Fallback != nil {
-		value += " fallback " + render(api.Fallback)
-	}
-	return strings.TrimSpace(value) + ";\n"
 }
 
 func (p *parser) hookName() string {

@@ -26,17 +26,19 @@ const queryHost = `package fixture
  func Wrap(items []int)[]int{return items}
  func Wrong(n int)bool{return true}
  `
-const queryDeclarations = `match Pair = Pair;
- guard Positive = Positive;
- query Ask = Ask;
- build Mark = Mark;
- build Wrap = Wrap;
- union Proof = Proof tag Kind {
-  Proven = Yes {};
-  Disproven = No {};
-  Unavailable = Unknown { reason:Reason; };
- };
- `
+const queryDeclarations = `host
+  Pair? = Pair
+  Positive = Positive
+  Ask! = Ask
+  Mark = Mark
+  Wrap = Wrap
+
+type Proof = Proof
+  tag Kind
+  Proven = Yes
+  Disproven = No
+  Unavailable (reason: Reason) = Unknown
+`
 
 func TestOrderedQueryOutcomesAndEffects(t *testing.T) {
 	t.Run("named", func(t *testing.T) { testOrderedQueryOutcomesAndEffects(t, false) })
@@ -46,24 +48,32 @@ func TestOrderedQueryOutcomesAndEffects(t *testing.T) {
 func testOrderedQueryOutcomesAndEffects(t *testing.T, anonymous bool) {
 	root := fixture(t)
 	write(t, root, "bindings.go", queryHost)
-	rules := queryDeclarations + `
- rule Skip: (Pair -1 _) => effects [];
- rule Main: (or (Pair $x $y) (Pair $x $y)) && (Positive $y)
-  => query $proof = (Ask $x) decide $proof {
-   (Proven) => effects [(Mark 1), (Mark 2)];
-   (Disproven) => query $next = (Ask $y) decide $next {
-    (Proven) => effects [10];
-    (Disproven) => effects [11];
-    (Unavailable reason:$why) => (Wrap effects [(Mark $why), (Mark 3)]);
-   };
-   (Unavailable reason:$why) => effects [(Mark $why)];
-  };
- rule Fallback: _ => effects [(Mark 99)];
- `
+	rules := queryDeclarations + `@Skip
+rewrite (Pair (-1) _) = []
+
+@Main
+rewrite (Pair x y | Pair x y)
+  | Positive y
+  =
+  do
+    proof <- Ask x
+    case proof of
+      Proven() -> [Mark 1, Mark 2]
+      Disproven() -> do
+        next <- Ask y
+        case next of
+          Proven() -> [10]
+          Disproven() -> [11]
+          Unavailable (reason: why) -> Wrap [Mark why, Mark 3]
+      Unavailable (reason: why) -> [Mark why]
+
+@Fallback
+rewrite _ = [Mark 99]
+`
 	if anonymous {
 		rules = strings.NewReplacer(
-			"query $proof = (Ask $x) decide $proof", "query Ask $x",
-			"query $next = (Ask $y) decide $next", "query (Ask $y)",
+			"do\n    proof <- Ask x\n    case proof of", "case Ask x of",
+			"do\n        next <- Ask y\n        case next of", "case Ask y of",
 		).Replace(rules)
 	}
 	formatted, err := hyrule.Format("input.rules", []byte(rules))
@@ -115,33 +125,34 @@ func runGeneratedTransitionTest(t *testing.T, root string) {
 }
 
 func TestQueryDecisionDiagnostics(t *testing.T) {
-	complete := `(Proven) => effects []; (Disproven) => effects []; (Unavailable) => effects [];`
+	complete := "\n    Proven -> []\n    Disproven -> []\n    Unavailable -> []"
+	named := func(name, call, arms string) string {
+		return "do\n    " + name + " <- " + call + "\n    case " + name + " of" + strings.ReplaceAll(arms, "\n    ", "\n      ")
+	}
 	for _, tt := range []struct{ name, result, want string }{
-		{"anonymous missing", `query Ask 0 {Proven => effects [];}`, "missing Disproven, Unavailable"},
-		{"anonymous non-query", `query Mark 0 {` + complete + `}`, "expected query binding"},
-		{"anonymous unbound result", `query Ask 0 {Proven => effects [$proof]; Disproven => effects []; Unavailable => effects [];}`, "unbound capture"},
-		{"missing", `query $p = (Ask 0) decide $p {(Proven)=>effects [];}`, "missing Disproven, Unavailable"},
-		{"duplicate", `query $p = (Ask 0) decide $p {` + complete + `(Proven)=>effects [];}`, "duplicate decision variant"},
-		{"catchall", `query $p = (Ask 0) decide $p {_=>effects [];}`, "decision arm must name"},
-		{"refined", `query $p = (Ask 0) decide $p {(Proven)=>effects [];(Disproven)=>effects [];(Unavailable reason:42)=>effects [];}`,
-			"refinements are not exhaustive"},
-		{"wrong capture", `query $p = (Ask 0) decide $q {` + complete + `}`, "immediately preceding"},
-		{"not query", `query $p = (Mark 0) decide $p {` + complete + `}`, "expected query binding"},
-		{"wrong arity", `query $p = (Ask) decide $p {` + complete + `}`, "one parameter per argument"},
-		{"argument type", `query $p = (Ask "bad") decide $p {` + complete + `}`, "cannot use"},
-		{"builder argument", `query $p = (Ask (Mark 0)) decide $p {` + complete + `}`, "captures, constants or literals"},
-		{"escaped payload", `query $p = (Ask 0) decide $p {(Proven)=>effects [$why];(Disproven)=>effects [];(Unavailable reason:$why)=>effects [];}`,
-			"unbound capture"},
-		{"shadow query", `query $x = (Ask 0) decide $x {` + complete + `}`, "query capture shadows"},
-		{"shadow payload", `query $p = (Ask 0) decide $p {(Proven)=>effects [];(Disproven)=>effects [];(Unavailable reason:$x)=>effects [];}`, "fresh captures"},
-		{"effect type", `effects ["bad"]`, "cannot use"},
-		{"query as builder", `(Ask 0)`, "expected build binding"},
-		{"nested query", `(Wrap query $p = (Ask 0) decide $p {` + complete + `})`, "only allowed as a rule result"},
+		{"anonymous missing", "case Ask 0 of\n    Proven -> []", "missing Disproven, Unavailable"},
+		{"anonymous non-query", "case Mark 0 of" + complete, "expected query binding"},
+		{"anonymous unbound result", "case Ask 0 of\n    Proven -> [proof]\n    Disproven -> []\n    Unavailable -> []", "unbound capture"},
+		{"missing", named("p", "Ask 0", "\n    Proven -> []"), "missing Disproven, Unavailable"},
+		{"duplicate", named("p", "Ask 0", complete+"\n    Proven -> []"), "duplicate decision variant"},
+		{"catchall", named("p", "Ask 0", "\n    _ -> []"), "decision arm must name"},
+		{"refined", named("p", "Ask 0", "\n    Proven -> []\n    Disproven -> []\n    Unavailable (reason: 42) -> []"), "refinements are not exhaustive"},
+		{"wrong capture", "do\n    p <- Ask 0\n    case q of\n      Proven -> []", "query requires a query hook call"},
+		{"not query", named("p", "Mark 0", complete), "expected query binding"},
+		{"wrong arity", named("p", "Ask()", complete), "one parameter per argument"},
+		{"argument type", named("p", "Ask \"bad\"", complete), "cannot use"},
+		{"builder argument", named("p", "Ask (Mark 0)", complete), "captures, constants or literals"},
+		{"escaped payload", named("p", "Ask 0", "\n    Proven -> [why]\n    Disproven -> []\n    Unavailable (reason: why) -> []"), "unbound capture"},
+		{"shadow query", named("x", "Ask 0", complete), "query capture shadows"},
+		{"shadow payload", named("p", "Ask 0", "\n    Proven -> []\n    Disproven -> []\n    Unavailable (reason: x) -> []"), "fresh captures"},
+		{"effect type", `["bad"]`, "cannot use"},
+		{"query as builder", "Ask 0", "expected build binding"},
+		{"nested query", "Wrap (case Ask 0 of\n    Proven -> []\n    Disproven -> []\n    Unavailable -> [])", "only allowed as a rule result"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := fixture(t)
 			write(t, root, "bindings.go", queryHost)
-			write(t, root, "input.rules", queryDeclarations+`rule R: (Pair $x _) => `+tt.result+`;`)
+			write(t, root, "input.rules", queryDeclarations+"@R\nrewrite (Pair x _) =\n  "+tt.result+"\n")
 			c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 			if err != nil {
 				t.Fatal(err)
@@ -159,13 +170,15 @@ func TestQueryDecisionDiagnostics(t *testing.T) {
 
 func TestEffectsRequireSliceContext(t *testing.T) {
 	root := fixture(t)
-	write(t, root, "input.rules", `rule R: _ => effects [1];`)
+	write(t, root, "input.rules", `@R
+rewrite _ = [1]
+`)
 	c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = c.Compile(context.Background(), "")
-	if err == nil || !strings.Contains(err.Error(), "effects requires a slice") {
+	if err == nil || !strings.Contains(err.Error(), "list construction requires a slice") {
 		t.Fatalf("%v", err)
 	}
 }
@@ -180,8 +193,13 @@ func TestEffectsPreserveNamedArgumentOrderAndTypes(t *testing.T) {
  func(h *Host) Mark(n int)*int{h.Steps=append(h.Steps,n);return &n}
  func(h *Host) Pack(left *int,right []*int)Plan{h.Steps=append(h.Steps,9);return Plan{right,{left}}}
  `)
-	write(t, root, "input.rules", `build Mark = Mark; build Pack = Pack;
- rule R: _ => (Pack right:effects [(Mark 2), nil, (Mark 3)] left:(Mark 1));`)
+	write(t, root, "input.rules", `host
+  Mark = Mark
+  Pack = Pack
+
+@R
+rewrite _ = Pack (right: [Mark 2, nil, Mark 3], left: Mark 1)
+`)
 	c, a := compile(t, root)
 	if err := c.Publish(a, false); err != nil {
 		t.Fatal(err)
@@ -194,7 +212,12 @@ func TestEffectsPreserveNamedArgumentOrderAndTypes(t *testing.T) {
  if !reflect.DeepEqual(h.Steps,[]int{2,3,1,9}){t.Fatal(h.Steps)}
  }`)
 	runGeneratedTransitionTest(t, root)
-	write(t, root, "input.rules", `build Mark = Mark; rule R: _ => effects [effects [nil, (Mark 1)], effects []];`)
+	write(t, root, "input.rules", `host
+  Mark = Mark
+
+@R
+rewrite _ = [[nil, Mark 1], []]
+`)
 	_, nested := compile(t, root)
 	if err := c.Publish(nested, false); err != nil {
 		t.Fatal(err)
@@ -210,14 +233,17 @@ func TestEffectsPreserveNamedArgumentOrderAndTypes(t *testing.T) {
 
 func TestQueryRequiresUnionAndAllBranchesTypeCheck(t *testing.T) {
 	for _, tt := range []struct{ declarations, result, want string }{
-		{`query Wrong = Wrong;`, `query $p = (Wrong 1) decide $p {(Proven)=>effects [];}`, "Boolean decision arms require true and false"},
-		{``, `query $p = (Ask 0) decide $p {
-    (Proven)=>effects []; (Disproven)=>effects []; (Unavailable)=>effects ["bad"];
-   }`, "cannot use"},
+		{`host
+  Wrong! = Wrong
+`, "case Wrong 1 of\n    Proven -> []", "Boolean decision arms require true and false"},
+		{``, `case Ask 0 of
+    Proven -> []
+    Disproven -> []
+    Unavailable -> ["bad"]`, "cannot use"},
 	} {
 		root := fixture(t)
 		write(t, root, "bindings.go", queryHost)
-		write(t, root, "input.rules", queryDeclarations+tt.declarations+`rule R: _ => `+tt.result+`;`)
+		write(t, root, "input.rules", queryDeclarations+tt.declarations+"@R\nrewrite _ =\n  "+tt.result+"\n")
 		c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 		if err != nil {
 			t.Fatal(err)
@@ -251,8 +277,13 @@ func TestResultKeywordsRemainUsableAsFieldNames(t *testing.T) {
  func Match(n Node)(effects,query int,ok bool){return n.A,n.B,true}
  func Build(effects,query int)int{return effects+query}
  `)
-	write(t, root, "input.rules", `match M = Match; build B = Build;
- rule R: (M effects:$a query:$b) => (B effects:$a query:$b);`)
+	write(t, root, "input.rules", `host
+  M? = Match
+  B = Build
+
+@R
+rewrite (M (effects: a, query: b)) = B (effects: a, query: b)
+`)
 	compile(t, root)
 }
 
@@ -268,10 +299,20 @@ func TestInvalidEffectStopsBeforeLaterBuildersAndFallback(t *testing.T) {
  func(h *Host) Invalid()Effect{h.Calls++;return Effect{Kind:9}}
  func(h *Host) Later()Effect{h.Calls+=10;return Effect{Kind:Valid}}
  `)
-	write(t, root, "input.rules", `union Effect = Effect tag Kind {Valid = Valid {};};
- build Invalid = Invalid; build Later = Later;
- rule First: _ => effects [(Invalid), (Later)];
- rule Fallback: _ => effects [(Later)];`)
+	write(t, root, "input.rules", `type Effect = Effect
+  tag Kind
+  Valid = Valid
+
+host
+  Invalid = Invalid
+  Later = Later
+
+@First
+rewrite _ = [Invalid(), Later()]
+
+@Fallback
+rewrite _ = [Later()]
+`)
 	c, a := compile(t, root)
 	if err := c.Publish(a, false); err != nil {
 		t.Fatal(err)

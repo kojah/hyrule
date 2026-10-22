@@ -23,15 +23,22 @@ func TestNamedBuildersPreserveWrittenEvaluationOrder(t *testing.T) {
  func Compose(left,right int)int{Events=append(Events,8);return left*10+right}
  func Sum(left,right int)int{Events=append(Events,9);return left+right}
  `)
-	write(t, root, "input.rules", `match Pair = Pair;
- guard Positive = Positive;
- build Mark = Mark;
- build Compose = Compose;
- build Sum = Sum;
- rule Guarded: (Pair left:$x) && (Positive $x)
-  => (Compose right:(Mark $x) left:(Mark 4));
- rule Fallback: _ => (Sum (Mark 1) (Compose right:(Mark 2) left:(Mark 3)));
- `)
+	write(t, root, "input.rules", `host
+  Pair? = Pair
+  Positive = Positive
+  Mark = Mark
+  Compose = Compose
+  Sum = Sum
+
+@Guarded
+rewrite (Pair (left: x))
+  | Positive x
+  =
+  Compose (right: Mark x, left: Mark 4)
+
+@Fallback
+rewrite _ = Sum (Mark 1) (Compose (right: Mark 2, left: Mark 3))
+`)
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {
 		t.Fatal(err)
@@ -64,8 +71,12 @@ func TestNamedBuilderHostAndAssignmentContexts(t *testing.T) {
  type Host struct{}
  func(host *Host) Build(backing *Node,length uint8)int{if backing==nil{return int(length)};return -1}
  `)
-	write(t, root, "input.rules", `build Header = Build;
- rule Header: _ => (Header length:255 backing:nil);`)
+	write(t, root, "input.rules", `host
+  Header = Build
+
+@Header
+rewrite _ = Header (length: 255, backing: nil)
+`)
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {
 		t.Fatal(err)
@@ -83,16 +94,16 @@ func TestNamedBuilderHostAndAssignmentContexts(t *testing.T) {
 
 func TestNamedBuilderDiagnostics(t *testing.T) {
 	for _, test := range []struct{ name, expression, want string }{
-		{"missing", `(Sum left:1)`, "missing named builder arguments"},
-		{"duplicate", `(Sum left:1 left:2)`, "duplicate builder argument left"},
-		{"unknown", `(Sum left:1 absent:2)`, "unknown builder argument absent"},
-		{"case sensitive", `(Sum Left:1 right:2)`, "unknown builder argument Left"},
-		{"mixed named first", `(Sum left:1 2)`, "cannot mix named and positional builder arguments"},
-		{"mixed positional first", `(Sum 1 right:2)`, "cannot mix named and positional builder arguments"},
-		{"unnamed Go params", `(Unnamed left:1 right:2)`, "usable Go parameter names"},
-		{"blank Go param", `(Blank left:1 right:2)`, "usable Go parameter names"},
-		{"typed literal", `(Tiny value:256)`, "overflows"},
-		{"wrong type", `(Sum left:"wrong" right:2)`, "cannot use"},
+		{"missing", `Sum (left: 1)`, "missing named builder arguments"},
+		{"duplicate", `Sum (left: 1, left: 2)`, "duplicate builder argument left"},
+		{"unknown", `Sum (left: 1, absent: 2)`, "unknown builder argument absent"},
+		{"case sensitive", `Sum (Left: 1, right: 2)`, "unknown builder argument Left"},
+		{"mixed named first", `Sum (left: 1) 2`, "cannot mix named and positional builder arguments"},
+		{"mixed positional first", `Sum 1 (right: 2)`, "cannot mix named and positional builder arguments"},
+		{"unnamed Go params", `Unnamed (left: 1, right: 2)`, "usable Go parameter names"},
+		{"blank Go param", `Blank (left: 1, right: 2)`, "usable Go parameter names"},
+		{"typed literal", `Tiny (value: 256)`, "overflows"},
+		{"wrong type", `Sum (left: "wrong", right: 2)`, "cannot use"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
@@ -104,8 +115,13 @@ func TestNamedBuilderDiagnostics(t *testing.T) {
  func Blank(_ int,right int)int{return right}
  func Tiny(value uint8)int{return int(value)}
  `)
-			write(t, root, "input.rules", `build Sum = Sum; build Unnamed = Unnamed; build Blank = Blank; build Tiny = Tiny;
- rule Contract: _ => `+test.expression+`;`)
+			write(t, root, "input.rules", `host
+  Sum
+  Unnamed
+  Blank
+  Tiny
+@Contract
+rewrite _ = `+test.expression+"\n")
 			config, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 			if err != nil {
 				t.Fatal(err)
@@ -120,7 +136,15 @@ func TestNamedBuilderDiagnostics(t *testing.T) {
 
 func TestNamedGuardArgumentsRemainUnsupported(t *testing.T) {
 	root := fixture(t)
-	write(t, root, "input.rules", `guard Positive = Positive; rule Contract: _ && (Positive n:1) => 0;`)
+	write(t, root, "input.rules", `host
+  Positive = Positive
+
+@Contract
+rewrite _
+  | Positive (n: 1)
+  =
+  0
+`)
 	config, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +156,12 @@ func TestNamedGuardArgumentsRemainUnsupported(t *testing.T) {
 }
 
 func TestNamedBuilderFormatting(t *testing.T) {
-	input := []byte(`build SliceHeader=Build;rule Header:_=>(SliceHeader backing:$b offset:$s length:$n capacity:$c);`)
+	input := []byte(`host
+  SliceHeader = Build
+
+@Header
+rewrite _ = SliceHeader (backing: b, offset: s, length: n, capacity: c)
+`)
 	formatted, err := hyrule.Format("builders.rules", input)
 	if err != nil {
 		t.Fatal(err)
@@ -141,7 +170,7 @@ func TestNamedBuilderFormatting(t *testing.T) {
 	if err != nil || string(again) != string(formatted) {
 		t.Fatalf("format not idempotent: %v\n%s", err, again)
 	}
-	if !strings.Contains(string(formatted), "backing:$b offset:$s length:$n capacity:$c") {
+	if !strings.Contains(string(formatted), "backing: b, offset: s, length: n, capacity: c") {
 		t.Fatalf("builder fields lost: %s", formatted)
 	}
 }

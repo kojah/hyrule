@@ -9,22 +9,36 @@ import (
 	"github.com/kojah/lockdoc/tools/hyrule"
 )
 
-const alternativesRules = `signature total fallback outputs 0 -1;
-view Entry = *goast.Ident { name:Name; };
-query ready($name) = Ready $host $name;
-query ask($n) = Ask $host $n $host.Offset.Value;
-build mark;
-union Proof = (Kind, int) tag 0 {
- Proven = Yes { reason:1; };
- Disproven = No;
- Unavailable = Unknown { reason:1; };
-};
-rule Main:
- inputs (Entry name:$name) $n $host
- => query ask $n select Proven reason:$why => outputs (mark $host $why) 1
- <|> query ready $name select false => outputs (mark $host 10) 2
- <|> query ask $host.Offset.Value select Unavailable reason:$why => outputs (mark $host $why) 3
- <|> pure outputs (mark $host 20) 4;
+const alternativesRules = `signature total = outputs 0 (-1)
+
+view Entry = *goast.Ident
+  name: Name
+
+host
+  ready! name = Ready host name
+  ask! n = Ask host n host.Offset.Value
+  mark
+
+type Proof = (Kind, int)
+  tag 0
+  Proven (reason: 1) = Yes
+  Disproven = No
+  Unavailable (reason: 1) = Unknown
+
+@Main
+rewrite (inputs (Entry (name: name)) n host) =
+  case ask n of
+    Proven (reason: why) -> outputs (mark host why) 1
+    Disproven() -> decline
+    Unavailable() -> decline
+  <|> case ready name of
+    false -> outputs (mark host 10) 2
+    true -> decline
+  <|> case ask host.Offset.Value of
+    Unavailable (reason: why) -> outputs (mark host why) 3
+    Proven() -> decline
+    Disproven() -> decline
+  <|> outputs (mark host 20) 4
 `
 
 func TestOrderedAlternatives(t *testing.T) {
@@ -36,8 +50,10 @@ func mark(h *Host,n int)int{h.Calls=append(h.Calls,"mark");return n}
 `
 			rules := alternativesRules
 			if mode == "partial" {
-				host = strings.Replace(host, "(int, int)", "(int, int, bool)", 1)
-				rules = strings.Replace(rules, "signature total fallback outputs 0 -1;", "signature partial;", 1)
+				host = replaceFixture(t, host, "(int, int)", "(int, int, bool)")
+				rules = replaceFixture(t, rules, `signature total = outputs 0 (-1)
+`, `signature partial
+`)
 			}
 			formatted, err := hyrule.Format("input.rules", []byte(rules))
 			if err != nil {
@@ -79,22 +95,21 @@ func TestBehavior(t *testing.T){
 
 func TestOrderedAlternativeDiagnostics(t *testing.T) {
 	for _, tt := range []struct{ name, old, replacement, want string }{
-		{"fallback required", "<|> pure outputs (mark $host 20) 4", "", "final pure fallback"},
-		{"early pure", "query ready $name select false => outputs (mark $host 10) 2", "pure outputs 0 0", "pure must be the final"},
-		{"fresh payload", "Proven reason:$why", "Proven reason:$n", "fresh captures"},
-		{"no refinement", "Proven reason:$why", "Proven reason:7", "fresh captures"},
-		{"wrong variant", "select Proven", "select Missing", "decision arm must name a variant"},
-		{"bool selection", "select false", "select _", "Boolean decision arms"},
-		{"scope", "pure outputs (mark $host 20) 4", "pure outputs $why 4", "unbound capture"},
-		{"typed answers", "outputs (mark $host 10) 2", "outputs true 2", "cannot use"},
-		{"query in pure", "pure outputs (mark $host 20) 4", "pure query ready $name { true => outputs 1 1; false => outputs 2 2; }", "pure cannot execute a query"},
-		{"exhaustive remains", "query ready $name select false => outputs (mark $host 10) 2",
-			"query ready $name { false => outputs 1 1; }", "ordered alternative requires"},
+		{"fallback required", "  <|> outputs (mark host 20) 4", "", "final pure fallback"},
+		{"early answer", "case ready name of\n    false -> outputs (mark host 10) 2\n    true -> decline", "outputs 0 0", "ordered alternative requires"},
+		{"fresh payload", "Proven (reason: why)", "Proven (reason: n)", "fresh captures"},
+		{"no refinement", "Proven (reason: why)", "Proven (reason: 7)", "fresh captures"},
+		{"wrong variant", "Proven (reason: why)", "Missing (reason: why)", "decision arm must name a variant"},
+		{"bool selection", "false -> outputs (mark host 10) 2", "_ -> outputs (mark host 10) 2", "Boolean decision arms"},
+		{"scope", "outputs (mark host 20) 4", "outputs why 4", "unbound capture"},
+		{"typed answers", "outputs (mark host 10) 2", "outputs true 2", "cannot use"},
+		{"query fallback", "outputs (mark host 20) 4", "case ready name of\n    true -> outputs 1 1\n    false -> outputs 2 2", "final pure fallback"},
+		{"exhaustive remains", "    true -> decline\n", "", "require true and false"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := fixture(t)
 			write(t, root, "bindings.go", nativeHost+"\nfunc mark(h *Host,n int)int{return n}\n")
-			write(t, root, "input.rules", strings.Replace(alternativesRules, tt.old, tt.replacement, 1))
+			write(t, root, "input.rules", replaceFixture(t, alternativesRules, tt.old, tt.replacement))
 			c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 			if err != nil {
 				t.Fatal(err)
@@ -115,17 +130,23 @@ func(h *Host) Observe(kind,inner int)Observation{
  h.Calls=append(h.Calls,kind);return Observation{Kind:Kind(kind),Data:Proof{Kind:Kind(inner)}}
 }
 `)
-	write(t, root, "input.rules", queryDeclarations+`
-query Observe;
-union Observation = Observation tag Kind {
- Known = Yes { value:Data; };
- Skipped = No { value:Data; };
-};
-rule Main:
- Pair $x $y
- => query Observe $x $y select Known value:$proof => effects [(Mark 7)]
- <|> pure effects [(Mark 99)];
-rule OtherRule: _ => effects [(Mark 100)];
+	write(t, root, "input.rules", queryDeclarations+`host
+  Observe!
+
+type Observation = Observation
+  tag Kind
+  Known (value: Data) = Yes
+  Skipped (value: Data) = No
+
+@Main
+rewrite (Pair x y) =
+  case Observe x y of
+    Known (value: proof) -> [Mark 7]
+    Skipped() -> decline
+  <|> [Mark 99]
+
+@OtherRule
+rewrite _ = [Mark 100]
 `)
 	c, artifacts := compile(t, root)
 	if err := c.Publish(artifacts, false); err != nil {
@@ -151,14 +172,16 @@ func TestOrderedAlternativesInDecisionArms(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", queryHost)
 	write(t, root, "input.rules", queryDeclarations+`
-rule Main:
- Pair $x $y
- => query Ask $x {
-  Proven => query Ask $y select Unavailable reason:$why => effects [(Mark $why)]
-    <|> pure effects [(Mark 7)];
-  Disproven => effects [];
-  Unavailable => effects [];
- };
+@Main
+rewrite (Pair x y) =
+  case Ask x of
+    Proven() -> case Ask y of
+      Unavailable (reason: why) -> [Mark why]
+      Proven() -> decline
+      Disproven() -> decline
+    <|> [Mark 7]
+    Disproven() -> []
+    Unavailable() -> []
 `)
 	c, artifacts := compile(t, root)
 	if err := c.Publish(artifacts, false); err != nil {
@@ -186,12 +209,18 @@ type Host struct{ Calls int }
 func ask(h *Host,n int)bool{h.Calls++;return n==0}
 func fallback(h *Host)bool{h.Calls++;return true}
 `)
-	write(t, root, "input.rules", `signature total fallback outputs true;
-query ask;
-build fallback;
-rule Main: inputs $n $host
- => query ask $host $n select true => outputs false
- <|> pure outputs (fallback $host);
+	write(t, root, "input.rules", `signature total = outputs true
+
+host
+  ask!
+  fallback
+
+@Main
+rewrite (inputs n host) =
+  case ask host n of
+    true -> outputs false
+    false -> decline
+  <|> outputs (fallback host)
 `)
 	c, artifacts := compile(t, root)
 	if err := c.Publish(artifacts, false); err != nil {
@@ -211,7 +240,8 @@ func TestBehavior(t *testing.T){
 func TestOrderedSelectionAlternation(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", nativeHost+`func mark(h *Host,n int)int{h.Calls=append(h.Calls,"mark");return n}`)
-	rules := strings.Replace(alternativesRules, "select Proven reason:$why", "select (or (Proven reason:$why) (Unavailable reason:$why))", 1)
+	rules := replaceFixture(t, alternativesRules, "Proven (reason: why)", "(Proven (reason: why) | Unavailable (reason: why))")
+	rules = replaceFixture(t, rules, "    Unavailable() -> decline\n", "")
 	formatted, err := hyrule.Format("input.rules", []byte(rules))
 	if err != nil {
 		t.Fatal(err)
@@ -244,16 +274,16 @@ func TestBehavior(t *testing.T){
 
 func TestOrderedSelectionAlternationDiagnostics(t *testing.T) {
 	for _, tt := range []struct{ name, selection, want string }{
-		{"duplicate", "(or (Proven reason:$why) (Proven reason:$why))", "duplicate decision variant"},
-		{"capture names", "(or (Proven reason:$why) (Unavailable reason:$other))", "same captures with identical types"},
-		{"missing capture", "(or (Proven reason:$why) (Unavailable))", "same captures with identical types"},
-		{"refinement", "(or (Proven reason:$why) (Unavailable reason:7))", "fresh captures"},
-		{"nested", "(or (Proven reason:$why) (or (Unavailable reason:$why) (Disproven)))", "decision arm must name a variant"},
+		{"duplicate", "(Proven (reason: why) | Proven (reason: why))", "duplicate decision variant"},
+		{"capture names", "(Proven (reason: why) | Unavailable (reason: other))", "same captures with identical types"},
+		{"missing capture", "(Proven (reason: why) | Unavailable())", "same captures with identical types"},
+		{"refinement", "(Proven (reason: why) | Unavailable (reason: 7))", "fresh captures"},
+		{"nested", "(Proven (reason: why) | (Unavailable (reason: why) | Disproven()))", "decision arm must name a variant"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := fixture(t)
 			write(t, root, "bindings.go", nativeHost+"\nfunc mark(h *Host,n int)int{return n}\n")
-			write(t, root, "input.rules", strings.Replace(alternativesRules, "Proven reason:$why", tt.selection, 1))
+			write(t, root, "input.rules", replaceFixture(t, alternativesRules, "Proven (reason: why)", tt.selection))
 			c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 			if err != nil {
 				t.Fatal(err)
@@ -268,16 +298,30 @@ func TestOrderedSelectionAlternationDiagnostics(t *testing.T) {
 
 func TestNamedOrderedSelection(t *testing.T) {
 	root := fixture(t)
-	host := strings.Replace(nativeHost, "type Signature func(any, int, *Host) (int, int)", "type Signature func(int,*Host)(Kind,int)", 1)
+	host := replaceFixture(t, nativeHost, "type Signature func(any, int, *Host) (int, int)", "type Signature func(int,*Host)(Kind,int)")
 	write(t, root, "bindings.go", host)
-	rules := `signature total fallback outputs No -1;
- const No;
- query ask=Ask;
- union Proof=(Kind,int) tag 0 {Proven=Yes;Disproven=No;Unavailable=Unknown;};
- rule Main: inputs $n $host
- => query $answer=ask $host $n 0 select (or (Proven) (Unavailable)) => $answer
- <|> pure outputs No 0;
- `
+	rules := `signature total = outputs ^No (-1)
+
+host
+  No
+  ask! = Ask
+
+type Proof = (Kind, int)
+  tag 0
+  Proven = Yes
+  Disproven = No
+  Unavailable = Unknown
+
+@Main
+rewrite (inputs n host) =
+  do
+    answer <- ask host n 0
+    case answer of
+      Proven() -> answer
+      Unavailable() -> answer
+      Disproven() -> decline
+  <|> outputs ^No 0
+`
 	formatted, err := hyrule.Format("input.rules", []byte(rules))
 	if err != nil {
 		t.Fatal(err)
@@ -304,12 +348,12 @@ func TestNamedOrderedSelection(t *testing.T) {
 
 func TestOrderedSelectionCaptureTypes(t *testing.T) {
 	root := fixture(t)
-	host := strings.Replace(nativeHost, "func Ask(h *Host,n,offset int)(Kind,int)", "func Ask(h *Host,n,offset int)(Kind,int,string)", 1)
-	host = strings.Replace(host, "return Kind(n),offset+7", "return Kind(n),offset+7,\"\"", 1)
+	host := replaceFixture(t, nativeHost, "func Ask(h *Host,n,offset int)(Kind,int)", "func Ask(h *Host,n,offset int)(Kind,int,string)")
+	host = replaceFixture(t, host, "return Kind(n),offset+7", "return Kind(n),offset+7,\"\"")
 	write(t, root, "bindings.go", host+"\nfunc mark(h *Host,n int)int{return n}\n")
-	rules := strings.Replace(alternativesRules, "(Kind, int)", "(Kind, int, string)", 1)
-	rules = strings.Replace(rules, "Unavailable = Unknown { reason:1; }", "Unavailable = Unknown { reason:2; }", 1)
-	rules = strings.Replace(rules, "select Proven reason:$why", "select (or (Proven reason:$why) (Unavailable reason:$why))", 1)
+	rules := replaceFixture(t, alternativesRules, "(Kind, int)", "(Kind, int, string)")
+	rules = replaceFixture(t, rules, "Unavailable (reason: 1) = Unknown", "Unavailable (reason: 2) = Unknown")
+	rules = replaceFixture(t, rules, "Proven (reason: why)", "(Proven (reason: why) | Unavailable (reason: why))")
 	write(t, root, "input.rules", rules)
 	c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 	if err != nil {
@@ -329,12 +373,21 @@ type Host struct{Calls int}
 func ask(h *Host,value bool)bool{h.Calls++;return value}
 func fallback(h *Host)bool{h.Calls++;return true}
 `)
-	write(t, root, "input.rules", `signature total fallback outputs true;
- query ask;build fallback;
- rule Main:inputs $value $host
- =>query $answer=ask $host $value select (or true false) => outputs $answer
- <|>pure outputs (fallback $host);
- `)
+	write(t, root, "input.rules", `signature total = outputs true
+
+host
+  ask!
+  fallback
+
+@Main
+rewrite (inputs value host) =
+  do
+    answer <- ask host value
+    case answer of
+      true -> outputs answer
+      false -> outputs answer
+  <|> outputs (fallback host)
+`)
 	c, artifacts := compile(t, root)
 	if err := c.Publish(artifacts, false); err != nil {
 		t.Fatal(err)

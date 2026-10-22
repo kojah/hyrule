@@ -78,7 +78,7 @@ func (e *Program) validatePatternBody(x *semantic.Expr, parameters, used map[str
 		}
 	}
 	if x.Kind == semantic.Symbol {
-		if binding := e.Bindings[x.Name]; binding == nil || binding.Kind != "const" {
+		if binding := e.Bindings[x.Name]; binding == nil || binding.Kind != "const" && binding.Kind != "value" {
 			return e.fail(x, "unknown constant "+x.Name)
 		}
 	}

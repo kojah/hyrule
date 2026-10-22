@@ -1,6 +1,6 @@
 # Schema-derived representation operations
 
-A complete `record` describes storage once. A `derive` declaration requests
+A complete product `type` describes storage once. A `derive` declaration requests
 ordinary Go functions whose signatures are named function types in the bindings
 file. Derivations can accompany rules, or live in a `schema: true` target with
 no matching signature/function. The latter accepts records and derivations only;
@@ -9,25 +9,23 @@ it does not emit a dummy rewrite dispatcher. See
 [its host signatures](examples/derived/bindings.go).
 
 ```text
-record Snapshot = Snapshot {
-  backing: Backing;
-  cells: Cells;
-  guard: Guard;
-  label: Label;
-};
-derive Snapshot {
-  freeze FreezeSnapshot = FreezeSignature {
-    backing: keep;
-    cells: clone;
-    guard: keep;
-    label: keep;
-  };
-};
+type Snapshot = Snapshot
+  backing: Backing
+  cells: Cells
+  guard: Guard
+  label: Label
+
+derive Snapshot
+  freeze FreezeSnapshot: FreezeSignature
+    backing: keep
+    cells: clone
+    guard: keep
+    label: keep
 ```
 
 Here `FreezeSignature` is `func(Snapshot) Snapshot`. Every operation must account
-for every schema field exactly once, using its logical name. A bare `field;`
-means `field: keep;`. Unknown, duplicate and omitted policies are errors, including
+for every schema field exactly once, using its logical name. A bare `field`
+means `field: keep`. Unknown, duplicate and omitted policies are errors, including
 in unused derivations. Adding a storage field first requires updating the complete
 record and then every operation's policy. Read-only `view` schemas cannot derive
 representation operations. Function names must be unique within the target.
@@ -44,7 +42,7 @@ representation operations. Function names must be unique within the target.
 | `transform` | `func(Record, func(Child) Child) Record` | `keep`, `apply`, `each` |
 | `display` | `func(Record, int) string` | `keep`, `omit`, or a budget-aware display hook |
 | `store` | `func(Record, *Table, int) (ID, bool)` | Complete exact-key policies; omission is forbidden |
-| `load` | `func(ID, *Table) (Record, bool)` | Empty block; layout comes from the table type |
+| `load` | `func(ID, *Table) (Record, bool)` | No field block; layout comes from the table type |
 
 Construction, destructuring and explicit record updates already use the same
 record definitions. A derivation does not create a new host data type.
@@ -117,8 +115,8 @@ never published. Final generated packages are type-checked before publication;
 outputs retain the normal ownership checks and 500-line limit.
 
 The shared syntax/compiler own declaration structure, operation kinds, names and
-complete field policies. The Go-only `internal/recordgen` backend resolves Go
-storage, hook types and function bodies; no Go types enter the shared compiler.
+complete field policies. The Go-only `internal/recordresolve` adapter resolves Go
+storage and hook types; `internal/recordgen` emits resolved function plans; no Go types enter the shared compiler.
 There is no runtime reflection, descriptor registry or Hyrule runtime dependency.
 
 A key may also take explicit, already-normalized typed arguments:
@@ -128,12 +126,12 @@ type KeySignature func(value Component, valueID ValueID, tagID TypeID) Component
 ```
 
 ```text
-key ComponentKey = KeySignature {
-  value: $valueID;
-  dynamic: $tagID;
-  header: keep;
-  slice: keep;
-};
+derive Component
+  key ComponentKey: KeySignature
+    value: @valueID
+    dynamic: @tagID
+    header: keep
+    slice: keep
 ```
 
 Every additional parameter must be named and used; unknown parameters and unsafe

@@ -1,9 +1,8 @@
-package syntax
+package legacy
 
 import (
 	"fmt"
 	"io"
-	"strings"
 	"text/scanner"
 )
 
@@ -30,7 +29,7 @@ func Parse(name string, input io.Reader) (*File, error) {
 	p.scanner.Mode = scanner.ScanIdents | scanner.ScanInts | scanner.ScanFloats | scanner.ScanStrings | scanner.ScanRawStrings | scanner.ScanComments
 	p.scanner.Error = func(scan *scanner.Scanner, message string) {
 		if p.failure == nil {
-			p.failure = &Diagnostic{Position: Position{name, scan.Line, scan.Column}, Message: message}
+			p.failure = &Diagnostic{Position: Position{File: name, Line: scan.Line, Column: scan.Column}, Message: message}
 		}
 	}
 	p.next()
@@ -83,7 +82,7 @@ func (p *parser) next() {
 		p.token = p.scanner.Scan()
 		p.text = p.scanner.TokenText()
 		position := p.scanner.Position
-		p.position = Position{position.Filename, position.Line, position.Column}
+		p.position = Position{File: position.Filename, Line: position.Line, Column: position.Column}
 		p.count++
 		if p.count > maxTokens {
 			p.fail(p.position, "rule file exceeds token limit")
@@ -212,113 +211,6 @@ func (p *parser) argument(depth int) *Expr {
 		return &Expr{Position: position, Kind: Literal, Name: name}
 	}
 	return &Expr{Position: position, Kind: Symbol, Name: name}
-}
-
-// Format canonicalizes valid rules without resolving host bindings. Comments
-// are preserved; comments inside an expression move before their declaration.
-func Format(name string, input []byte) ([]byte, error) {
-	file, err := Parse(name, strings.NewReader(string(input)))
-	if err != nil {
-		return nil, err
-	}
-	var out strings.Builder
-	comments := func(values []string) {
-		for _, value := range values {
-			out.WriteString(value + "\n")
-		}
-	}
-	for index, item := range file.Items {
-		if item.Derivation != nil {
-			comments(item.Derivation.Comments)
-			out.WriteString(formatDerivation(item.Derivation))
-			continue
-		}
-		if item.API != nil {
-			comments(item.API.Comments)
-			out.WriteString(formatAPI(item.API))
-			continue
-		}
-		if item.Binding != nil {
-			binding := item.Binding
-			comments(binding.Comments)
-			out.WriteString(formatBinding(file.Items, index))
-			continue
-		}
-		if item.Union != nil {
-			comments(item.Union.Comments)
-			out.WriteString(formatUnion(item.Union))
-			continue
-		}
-		if item.Record != nil {
-			comments(item.Record.Comments)
-			out.WriteString(formatRecord(item.Record))
-			continue
-		}
-		if item.Pattern != nil {
-			pattern := item.Pattern
-			comments(pattern.Comments)
-			parameters := make([]string, len(pattern.Parameters))
-			for i, name := range pattern.Parameters {
-				parameters[i] = "$" + name
-			}
-			fmt.Fprintf(&out, "pattern %s(%s) =\n  %s;\n", pattern.Name, strings.Join(parameters, ", "), renderLayout(pattern.Body, 2))
-			continue
-		}
-		if index != 0 {
-			out.WriteByte('\n')
-		}
-		rule := item.Rule
-		comments(rule.Comments)
-		fmt.Fprintf(&out, "rule %s:\n  %s", rule.Name, renderLayout(rule.Match, 2))
-		for _, clause := range rule.Clauses {
-			if clause.Name != "" {
-				fmt.Fprintf(&out, "\n  let $%s = %s", clause.Name, renderLayout(clause.Value, 9+len(clause.Name)))
-			} else {
-				fmt.Fprintf(&out, "\n  && %s", renderLayout(clause.Value, 5))
-			}
-		}
-		fmt.Fprintf(&out, "\n  => %s;\n", renderLayout(rule.Build, 5))
-	}
-	comments(file.Trailing)
-	return []byte(out.String()), nil
-}
-
-func render(expression *Expr) string {
-	switch expression.Kind {
-	case Effects, Query, Selection, OrderedAlternatives, Pure, Do, Decline:
-		return renderResult(expression, 0)
-	case Wildcard:
-		return "_"
-	case Variable:
-		return "$" + expression.Name
-	case Literal, Symbol:
-		return expression.Name
-	case Comparison:
-		return render(expression.Args[0]) + " " + expression.Name + " " + render(expression.Args[1])
-	case List:
-		items := make([]string, len(expression.Args))
-		for index, item := range expression.Args {
-			items[index] = render(item)
-		}
-		return "[" + strings.Join(items, ", ") + "]"
-	default:
-		parts := []string{expression.Name}
-		for _, argument := range expression.Args {
-			child := render(argument)
-			if argument.Field != "" {
-				child = argument.Field + ":" + child
-			}
-			parts = append(parts, child)
-		}
-		prefix := ""
-		if expression.Bind != "" {
-			prefix = "$" + expression.Bind + ":"
-		}
-		if expression.Unparenthesized {
-			return prefix + strings.Join(parts, " ")
-		}
-		return prefix + "(" + strings.Join(parts, " ") + ")"
-	}
 }
 
 func (p *parser) ruleDeclaration(pos Position, comments []string) *Rule {

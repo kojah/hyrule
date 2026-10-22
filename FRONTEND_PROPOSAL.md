@@ -1,8 +1,10 @@
 # A Haskell-inspired Hyrule frontend
 
-Status: design proposal, not implemented. The current `.rules` syntax remains
-supported and unchanged. The compiler boundary cleanup is in `3db73297`,
-`fd742ebd` and `9560ec04`.
+Status: implementation and migration are in progress. The production parser now
+uses equations. This document records the design rationale; the maintained
+[grammar](grammar.ebnf), [layout specification](LAYOUT.md) and [README](README.md)
+define current syntax. Completion requires the compiler regressions and both
+repository integrations to pass.
 
 The direction is **compact pattern equations first, indentation for actual
 sequences and branches**. Keep `do` and `<|>`. Use whitespace application, guards
@@ -391,7 +393,7 @@ nil/empty distinctions, budgets, ID checks and completeness stay unchanged.
 | Every schema derivation and field policy | Layout `derive` operations and policy entries |
 | Formatting / bounded expansion / source diagnostics | Layout frontend and formatter; retained limits/metadata |
 
-This is a design-level mapping, not evidence of an implemented new parser.
+This is the design-level expressiveness mapping used to audit the migration.
 No existing capability is intentionally removed. The Hyrule-specific named
 groups, record updates, pattern OR, identifier escapes and bind-else syntax are
 explicit extensions;

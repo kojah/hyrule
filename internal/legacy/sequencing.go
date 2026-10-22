@@ -1,7 +1,6 @@
-package syntax
+package legacy
 
 import (
-	"strings"
 	"text/scanner"
 )
 
@@ -80,28 +79,4 @@ func (p *parser) doElse(step *Expr, depth int) {
 		step.Arms = append(step.Arms, DecisionArm{Pattern: other, Result: answer})
 	}
 	p.expect("}")
-}
-
-func renderDo(expression *Expr, indent int) string {
-	pad := strings.Repeat(" ", indent)
-	var out strings.Builder
-	out.WriteString("do {")
-	step := expression.Args[0]
-	for step.Kind == Query && step.Sequential {
-		prefix := renderLayout(step.Arms[0].Pattern, indent+2) + " <- query "
-		out.WriteString("\n" + pad + "  " + prefix + renderLayout(step.Args[0], indent+2+len(prefix)))
-		if step.ExpressionElse {
-			out.WriteString("\n" + pad + "    else " + renderLayout(step.Arms[1].Result, indent+9))
-		} else if len(step.Arms) > 1 {
-			out.WriteString("\n" + pad + "    else {")
-			for _, arm := range step.Arms[1:] {
-				out.WriteString("\n" + pad + "      " + render(arm.Pattern) + " => " + renderLayout(arm.Result, indent+6) + ";")
-			}
-			out.WriteString("\n" + pad + "    }")
-		}
-		out.WriteString(";")
-		step = step.Arms[0].Result
-	}
-	out.WriteString("\n" + pad + "  " + renderLayout(step, indent+2) + ";\n" + pad + "}")
-	return out.String()
 }

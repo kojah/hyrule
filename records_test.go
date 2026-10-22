@@ -19,16 +19,28 @@ type Box struct { Kind Kind; Count int; Source string; Any any }
 type Signature func(Box)(Box,bool)
 `
 
-const recordSchema = `record Box = Box { kind: Kind; count: Count; source: Source; any: Any; };
-const Known = Known;
+const recordSchema = `type Box = Box
+  kind: Kind
+  count: Count
+  source: Source
+  any: Any
+
+host
+  Known = Known
 `
 
 func TestTypedConstantPatternAndRecordGuardFallthrough(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", recordHost)
-	write(t, root, "input.rules", recordSchema+`
-rule Known: $box:(Box kind:Known count:$n) when $n >= 0 => (update $box count:7);
-rule Fallback: $box => (update $box count:-1);`)
+	write(t, root, "input.rules", recordSchema+`@Known
+rewrite box@(Box (kind: ^Known, count: n))
+  | n >= 0
+  =
+  box with (count: 7)
+
+@Fallback
+rewrite box = box with (count: -1)
+`)
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {
 		t.Fatal(err)
@@ -51,26 +63,44 @@ func TestRecords(t *testing.T) {
 
 func TestStructuralRuleDiagnostics(t *testing.T) {
 	for _, test := range []struct{ name, schema, rule, want string }{
-		{"constant must be immutable", recordSchema + `const Bad = Mutable;`, `$box => $box`, "requires a Go constant"},
-		{"typed constant mismatch", recordSchema + `const Bad = Foreign;`,
-			`(Box kind:Bad) => (Box kind:Known count:0 source:"" any:nil)`, "constant pattern type mismatch"},
-		{"unknown constant", recordSchema, `_ => Missing`, "unknown constant Missing"},
-		{"incomplete schema", `record Box = Box {kind: Kind;};`, `$box => $box`, "omits Go field"},
-		{"duplicate field", `record Box = Box {kind: Kind; count: Kind;};`, `$box => $box`, "duplicate record field"},
-		{"unknown field", recordSchema, `(Box missing:0) => (Box kind:Known count:0 source:"" any:nil)`, "unknown matcher field"},
-		{"missing construction field", recordSchema, `_ => (Box kind:Known)`, "missing named builder arguments"},
-		{"unknown update field", recordSchema, `$box => (update $box missing:0)`, "unknown update field"},
-		{"duplicate update field", recordSchema, `$box => (update $box count:0 count:1)`, "unique named fields"},
-		{"update needs captured base", recordSchema, `_ => (update 0 count:0)`, "explicit captured record base"},
-		{"unsafe interface equality", recordSchema, `$box:(Box any:$any) when $any == $any => $box`, "safe comparable operands"},
-		{"unordered scalar", recordSchema, `$box:(Box count:$n) when true < false => $box`, "ordered scalar types"},
-		{"incompatible comparison", recordSchema, `$box:(Box count:$n source:$source) when $n < $source => $box`, "compatible operand types"},
-		{"list requires slice", recordSchema, `_ => []`, "slice type"},
+		{"constant must be immutable", recordSchema + `host
+  Bad = Mutable
+`, `box = box`, "function or constant"},
+		{"typed constant mismatch", recordSchema + `host
+  Bad = Foreign
+`,
+			`(Box (kind: ^Bad)) = Box (kind: ^Known, count: 0, source: "", any: nil)`, "constant pattern type mismatch"},
+		{"unknown constant", recordSchema, `_ = ^Missing`, "unknown constant Missing"},
+		{"incomplete schema", `type Box = Box
+  kind: Kind
+`, `box = box`, "omits Go field"},
+		{"duplicate field", `type Box = Box
+  kind: Kind
+  count: Kind
+`, `box = box`, "duplicate record field"},
+		{"unknown field", recordSchema, `(Box (missing: 0)) = Box (kind: ^Known, count: 0, source: "", any: nil)`, "unknown matcher field"},
+		{"missing construction field", recordSchema, `_ = Box (kind: ^Known)`, "missing named builder arguments"},
+		{"unknown update field", recordSchema, `box = box with (missing: 0)`, "unknown update field"},
+		{"duplicate update field", recordSchema, `box = box with (count: 0, count: 1)`, "unique named fields"},
+		{"update needs captured base", recordSchema, `_ = 0 with (count: 0)`, "explicit captured record base"},
+		{"unsafe interface equality", recordSchema, `box@(Box (any: any))
+  | any == any
+  =
+  box`, "safe comparable operands"},
+		{"unordered scalar", recordSchema, `box@(Box (count: n))
+  | true < false
+  =
+  box`, "ordered scalar types"},
+		{"incompatible comparison", recordSchema, `box@(Box (count: n, source: source))
+  | n < source
+  =
+  box`, "compatible operand types"},
+		{"list requires slice", recordSchema, `_ = []`, "slice type"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
 			write(t, root, "bindings.go", recordHost)
-			write(t, root, "input.rules", test.schema+`rule Check: `+test.rule+`;`)
+			write(t, root, "input.rules", test.schema+"@Check\nrewrite "+test.rule+"\n")
 			config, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 			if err != nil {
 				t.Fatal(err)
@@ -84,7 +114,12 @@ func TestStructuralRuleDiagnostics(t *testing.T) {
 }
 
 func TestStructuralSyntaxFormatting(t *testing.T) {
-	input := []byte(recordSchema + `rule Copy: $box:(Box kind:Known count:$n) when $n >= 0 => (update $box count:$n);`)
+	input := []byte(recordSchema + `@Copy
+rewrite box@(Box (kind: ^Known, count: n))
+  | n >= 0
+  =
+  box with (count: n)
+`)
 	first, err := hyrule.Format("records.rules", input)
 	if err != nil {
 		t.Fatal(err)
@@ -104,11 +139,18 @@ type Effects []int
 type Box struct { Count int; Effects Effects }
 type Signature func(Box)(Box,bool)
 `)
-	write(t, root, "input.rules", `
-record Box = Box { count: Count; effects: Effects; };
-rule Construct: (Box count:0) => (Box count:1 effects:effects [7,8]);
-rule Update: $box:(Box count:1) => (update $box effects:effects []);
-rule Preserve: $box => $box;
+	write(t, root, "input.rules", `type Box = Box
+  count: Count
+  effects: Effects
+
+@Construct
+rewrite (Box (count: 0)) = Box (count: 1, effects: [7, 8])
+
+@Update
+rewrite box@(Box (count: 1)) = box with (effects: [])
+
+@Preserve
+rewrite box = box
 `)
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {

@@ -1,7 +1,7 @@
-match Read = MatchRead;
-build Plan = BuildPlan;
+host
+  Read? = MatchRead
+  Plan = BuildPlan
 
 // Lower the semantic operation to a complete bundle before applying effects.
-rule MapRead:
-  (Read $origin $map $key $tuple)
-  => (Plan origin:$origin m:$map key:$key tuple:$tuple);
+@MapRead
+rewrite (Read origin map key tuple) = Plan (origin: origin, m: map, key: key, tuple: tuple)

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule"
 )
@@ -21,13 +22,20 @@ func main() {
 }
 func run(ctx context.Context, args []string, out, stderr io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: hyrule {check|generate|fmt} [options]")
+		return fmt.Errorf("usage: hyrule {check|generate|fmt|migrate} [options]")
 	}
 	cmd := args[0]
+	if cmd == "migrate" {
+		for _, arg := range args[1:] {
+			if arg == "--config" || strings.HasPrefix(arg, "--config=") {
+				return migrateConfig(args[1:], out, stderr)
+			}
+		}
+	}
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	if cmd == "fmt" {
-		return formatFiles(fs, args[1:], out)
+	if cmd == "fmt" || cmd == "migrate" {
+		return formatFiles(fs, args[1:], out, cmd == "migrate")
 	}
 	if cmd != "check" && cmd != "generate" {
 		return fmt.Errorf("unknown command %q", cmd)
@@ -73,7 +81,7 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) error {
 	}
 	return err
 }
-func formatFiles(fs *flag.FlagSet, args []string, out io.Writer) error {
+func formatFiles(fs *flag.FlagSet, args []string, out io.Writer, migrate bool) error {
 	write := fs.Bool("write", false, "replace input files")
 	check := fs.Bool("check", false, "fail if files need formatting")
 	if err := fs.Parse(args); err != nil {
@@ -89,19 +97,9 @@ func formatFiles(fs *flag.FlagSet, args []string, out io.Writer) error {
 		return fmt.Errorf("stdout formatting accepts exactly one file")
 	}
 	outputs := map[string][]byte{}
-	for _, path := range fs.Args() {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		formatted, err := hyrule.Format(path, data)
-		if err != nil {
-			return err
-		}
-		if *check && !bytes.Equal(data, formatted) {
-			return fmt.Errorf("%s needs formatting", path)
-		}
-		outputs[path] = formatted
+	inputs := map[string][]byte{}
+	if err := convertFiles(fs.Args(), inputs, outputs, migrate, *check); err != nil {
+		return err
 	}
 	for _, path := range fs.Args() {
 		if *write {
@@ -117,6 +115,34 @@ func formatFiles(fs *flag.FlagSet, args []string, out io.Writer) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func convertFiles(paths []string, inputs, outputs map[string][]byte, migrate, check bool) error {
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		inputs[path] = data
+	}
+	for _, path := range paths {
+		data := inputs[path]
+		var err error
+		var formatted []byte
+		if migrate {
+			formatted, err = hyrule.Migrate(path, data, inputs)
+		} else {
+			formatted, err = hyrule.Format(path, data)
+		}
+		if err != nil {
+			return err
+		}
+		if check && !bytes.Equal(data, formatted) {
+			return fmt.Errorf("%s needs formatting", path)
+		}
+		outputs[path] = formatted
 	}
 	return nil
 }
