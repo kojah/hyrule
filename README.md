@@ -479,6 +479,6 @@ in `internal/lower/identity/value` uses derived traversal and transformation.
 
 ## Frontend design proposal
 
-[The indentation-based frontend proposal](FRONTEND_PROPOSAL.md) keeps `do` and
-`<|>`, simplifies common rule bodies, and maps the existing feature set to proposed
-syntax. It is a design document; the syntax described there is not implemented.
+[The Haskell-inspired frontend proposal](FRONTEND_PROPOSAL.md) uses pattern
+equations, whitespace application and guards while keeping layout-based `do` and
+`<|>`. It maps the existing feature set to proposed syntax. It is a design document; the syntax described there is not implemented.
