@@ -45,15 +45,7 @@ func render(x *Expr, indent int) string {
 	case Query, Selection:
 		return renderCase(x, indent)
 	case OrderedAlternatives:
-		parts := make([]string, len(x.Args))
-		for i, a := range x.Args {
-			parts[i] = render(a, indent)
-			// An unparenthesized else branch would absorb the later choices.
-			if a.Kind == Conditional && i < len(x.Args)-1 {
-				parts[i] = "(" + parts[i] + ")"
-			}
-		}
-		return strings.Join(parts, "\n"+strings.Repeat(" ", indent)+"<|> ")
+		return renderChoice(x, indent)
 	case Comparison:
 		return operand(x.Args[0], indent) + " " + x.Name + " " + operand(x.Args[1], indent)
 	case Logic:
@@ -192,4 +184,16 @@ func renderConditional(x *Expr, indent int) string {
 		}
 		value += pad + "else if " + render(next.Args[0], indent) + pad + "then " + render(next.Args[1], indent+2)
 	}
+}
+
+func renderChoice(x *Expr, indent int) string {
+	parts := make([]string, len(x.Args))
+	for i, a := range x.Args {
+		parts[i] = render(a, indent)
+		// An unparenthesized else branch would absorb the later choices.
+		if a.Kind == Conditional && i < len(x.Args)-1 {
+			parts[i] = "(" + parts[i] + ")"
+		}
+	}
+	return strings.Join(parts, "\n"+strings.Repeat(" ", indent)+"<|> ")
 }
