@@ -44,6 +44,7 @@ func (t *decisionTables) hookID(name string) matchir.HookID {
 	t.hooks = append(t.hooks, name)
 	return matchir.HookID(len(t.hooks) - 1)
 }
+
 // view records inline extraction data for a view hook spelled by name.
 func (t *decisionTables) view(name string, view *goplan.ViewHook) {
 	if t.views == nil {
