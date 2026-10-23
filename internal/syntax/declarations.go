@@ -44,10 +44,13 @@ func (p *parser) schema(file *File, comments []string) {
 		p.expect("type")
 	}
 	name := p.name()
-	p.expect("=")
 	var tuple []string
 	host := ""
-	if p.take("(") {
+	// A type whose Go storage has the same name may omit "= Name".
+	implicit := !view && !p.at("=")
+	if implicit {
+		host = name
+	} else if p.expect("="); p.take("(") {
 		tuple = append(tuple, p.hostType())
 		for p.take(",") {
 			tuple = append(tuple, p.hostType())
@@ -66,12 +69,12 @@ func (p *parser) schema(file *File, comments []string) {
 			p.fail("union schema requires a tag and variants")
 			return
 		}
-		file.Items = append(file.Items, Item{Record: &Record{Position: pos, Name: name, GoType: host, View: view, Comments: comments}})
+		file.Items = append(file.Items, Item{Record: &Record{Position: pos, Name: name, GoType: host, View: view, Implicit: implicit, Comments: comments}})
 		return
 	}
 	level := p.peek().indent
 	if p.take("tag") {
-		union := &Union{Position: pos, Name: name, GoType: host, Types: tuple, Tag: p.storage(), Exhaustive: exhaustive, Comments: comments}
+		union := &Union{Position: pos, Name: name, GoType: host, Types: tuple, Tag: p.storage(), Exhaustive: exhaustive, Implicit: implicit, Comments: comments}
 		if view {
 			p.fail("view cannot declare a union")
 		}
@@ -82,7 +85,7 @@ func (p *parser) schema(file *File, comments []string) {
 	if exhaustive || len(tuple) > 0 {
 		p.fail("union schema requires tag before variants")
 	}
-	record := &Record{Position: pos, Name: name, GoType: host, View: view, Comments: comments}
+	record := &Record{Position: pos, Name: name, GoType: host, View: view, Implicit: implicit, Comments: comments}
 	for !p.end() && p.peek().indent == level {
 		record.Fields = append(record.Fields, p.field())
 		p.lineEnd()

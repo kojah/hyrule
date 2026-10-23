@@ -43,7 +43,7 @@ func (e *resolver) builderPositions(x *semantic.Expr, signature *types.Signature
 		seen[argument.Field] = struct{}{}
 		indices[written] = parameter
 	}
-	if len(seen) != signature.Params().Len() {
+	if record := e.recordNames[x.Name]; len(seen) != signature.Params().Len() && (record == nil || !record.derived) {
 		return nil, e.fail(x, "missing named builder arguments")
 	}
 	return indices, nil

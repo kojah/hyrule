@@ -5,7 +5,9 @@ file = { declaration, NEWLINE }, EOF ;
 declaration = host | schema | pattern | signature | equation ;
 host = "host", INDENT, hostBinding, { NEWLINE, hostBinding }, DEDENT ;
 hostBinding = name, [ "?" | "!" ], { name }, [ "=", application ] ;
-schema = [ "exhaustive" ], ( "type" | "view" ), name, "=", hostType,
+(* A type may omit "= hostType" when the Go type has the same name. A type
+   without a body derives its fields from the Go struct. *)
+schema = [ "exhaustive" ], ( "type", name, [ "=", hostType ] | "view", name, "=", hostType ),
          [ INDENT, schemaBody, DEDENT ] ;
 schemaBody = ( "tag", storage, NEWLINE, variant, { NEWLINE, variant } )
            | ( field, { NEWLINE, field } ) ;

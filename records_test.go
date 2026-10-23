@@ -174,3 +174,81 @@ func TestEffectFields(t *testing.T) {
 }`)
 	runUnionFixture(t, root, "TestEffectFields")
 }
+
+// A bodiless type derives its schema from every direct Go field, so rules can
+// construct, match and update host structs without a handwritten builder.
+// Like a Go composite literal, named construction may omit derived fields.
+func TestDerivedRecordSchemas(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", `package fixture
+type Node struct { A, B int }
+type Copy struct { Source string; Destination, Input int; ID int }
+type Signature func(Node)(Copy,bool)
+func Pair(n Node)(int,int,bool){return n.A,n.B,true}
+`)
+	write(t, root, "input.rules", `type Copy
+
+host
+  Pair?
+
+@Partial
+rewrite (Pair 0 b) = Copy (destination: b)
+
+@Zero
+rewrite (Pair 1 1) = Copy()
+
+@Positional
+rewrite (Pair a b)
+  | a > 0
+  = Copy "positional" a b 1
+
+@Named
+rewrite (Pair a b)
+  | b > 0
+  = Copy (id: 2, input: b, destination: a, source: "named")
+
+@Updated
+rewrite (Pair a b)
+  | let base = Copy "base" a b 3
+  = base with (source: "updated")
+`)
+	if formatted, err := hyrule.Format("input.rules", []byte("type Copy\n\nrewrite x = x\n")); err != nil || !strings.HasPrefix(string(formatted), "type Copy\n") {
+		t.Fatalf("implicit storage type was not preserved: %v\n%s", err, formatted)
+	}
+	config, artifacts := compile(t, root)
+	if err := config.Publish(artifacts, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(artifacts[0].Data), "Copy{Source: ") {
+		t.Fatalf("derived record is not a composite literal:\n%s", artifacts[0].Data)
+	}
+	write(t, root, "behavior_test.go", `package fixture
+import "testing"
+func TestDerived(t *testing.T) {
+ for _, test := range []struct{input Node; want Copy}{
+  {Node{0,5}, Copy{Destination: 5}},
+  {Node{1,1}, Copy{}},
+  {Node{1,2}, Copy{"positional",1,2,1}},
+  {Node{-1,2}, Copy{"named",-1,2,2}},
+  {Node{-1,-2}, Copy{"updated",-1,-2,3}},
+ } {
+  if got,ok:=Rewrite(test.input); !ok || got!=test.want { t.Fatalf("%+v => %+v %t", test.input, got, ok) }
+ }
+}`)
+	runUnionFixture(t, root, "TestDerived")
+}
+
+func TestDerivedRecordDiagnostics(t *testing.T) {
+	for _, test := range []struct{ name, host, schema, want string }{
+		{"ambiguous labels", "type Box struct { Source, source int }", "type Box", "ambiguous"},
+		{"inaccessible field", "type Box = strings.Builder", "type Box", "inaccessible direct record field"},
+		{"not a struct", "type Box int", "type Box", "must be a Go struct"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := fixture(t)
+			write(t, root, "bindings.go", "package fixture\nimport \"strings\"\nvar _ strings.Builder\n"+test.host+"\ntype Signature func(Box)(Box,bool)\n")
+			write(t, root, "input.rules", test.schema+"\n\n@Check\nrewrite box = box\n")
+			expectUnionCompile(t, root, test.want)
+		})
+	}
+}

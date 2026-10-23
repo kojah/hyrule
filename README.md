@@ -138,7 +138,24 @@ exhaustive type Capacity = Capacity
 ```
 
 A product names every direct nonblank field of a local non-generic Go struct.
-Matching can omit named fields; construction supplies all fields. A `tag` line
+Matching can omit named fields; construction supplies all fields and emits a Go
+composite literal, so a one-line host builder is unnecessary.
+
+```text
+type Copy
+
+copy (Builtin source "copy" destination input) = Copy source destination input
+```
+
+A `type` without a field block derives its schema from the Go struct: every
+direct nonblank field in declaration order, labelled by lowercasing the leading
+capital run (`Source` is `source`, `ID` is `id`, `URLPath` is `urlPath`).
+Positional construction follows Go field order and supplies every field. Named
+construction uses the labels and, as in a Go composite literal, may omit fields,
+which keep their zero values; `Copy()` is the zero value. Explicit schemas
+still require every field. Colliding labels and inaccessible fields are errors; declare the fields
+explicitly then. `type Name` omits `= Name` when the Go type has the same name.
+Keep a host builder when construction does real work, such as normalization. A `tag` line
 instead declares a closed variant domain. Constructors expose only active fields
 and zero inactive storage on construction. Whole-value copies retain existing
 storage. Include provenance explicitly where constructors must preserve it.

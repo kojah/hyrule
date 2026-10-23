@@ -87,14 +87,8 @@ func (e *resolver) resolveCall(x *semantic.Expr, kind string) (*valueir.Value, e
 	var result *valueir.Value
 	var signature *types.Signature
 	if record := e.recordNames[x.Name]; record != nil {
-		if kind != "build" {
-			return nil, e.fail(x, "record constructors are not guard expressions")
-		}
-		if record.declaration.View {
-			return nil, e.fail(x, "views are read-only; use a builder for construction")
-		}
-		if len(x.Args) != len(record.fields) && !hasNamedArguments(x) {
-			return nil, e.fail(x, "record construction requires every declared field")
+		if err := e.checkRecordConstruction(x, record, kind); err != nil {
+			return nil, err
 		}
 		signature = e.recordSignature(record)
 		result = &valueir.Value{Kind: valueir.Product, Record: record.schema}
@@ -147,6 +141,21 @@ func (e *resolver) resolveCall(x *semantic.Expr, kind string) (*valueir.Value, e
 			Materialize: ordered && (arg.Kind == semantic.Call || arg.Kind == semantic.Effects || arg.Kind == semantic.List)})
 	}
 	return result, nil
+}
+
+// checkRecordConstruction requires every field positionally. Named arguments
+// may omit derived fields, and Name() builds a derived record's zero value.
+func (e *resolver) checkRecordConstruction(x *semantic.Expr, record *boundRecord, kind string) error {
+	if kind != "build" {
+		return e.fail(x, "record constructors are not guard expressions")
+	}
+	if record.declaration.View {
+		return e.fail(x, "views are read-only; use a builder for construction")
+	}
+	if len(x.Args) != len(record.fields) && !hasNamedArguments(x) && (!record.derived || len(x.Args) != 0) {
+		return e.fail(x, "record construction requires every declared field")
+	}
+	return nil
 }
 
 func (e *resolver) resolveCollection(x *semantic.Expr, expected types.Type) (*valueir.Value, error) {

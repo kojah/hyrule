@@ -146,6 +146,7 @@ type Union struct {
 	Name, GoType, Tag string
 	Types             []string // Native tuple result types; storage fields are zero-based indices.
 	Exhaustive        bool
+	Implicit          bool // Preserve an omitted same-name storage type when formatting.
 	Variants          []*Variant
 	Comments          []string
 }
@@ -174,10 +175,12 @@ type DecisionArm struct {
 
 // Record describes complete direct-field storage without a discriminator.
 // Construction supplies every declared field; patterns may omit named fields.
+// A type without fields derives them from its Go struct during resolution.
 type Record struct {
 	Position
 	Name, GoType string
 	View         bool // Read-only projection; permits partial and imported pointer storage.
+	Implicit     bool // Preserve an omitted same-name storage type when formatting.
 	Fields       []UnionField
 	Comments     []string
 }

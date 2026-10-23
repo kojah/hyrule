@@ -46,7 +46,11 @@ func (e *Emitter) Value(value *valueir.Value) string {
 	case valueir.Conditional:
 		return e.conditional(value)
 	}
-	arguments := make([]string, len(value.Arguments))
+	size := len(value.Arguments)
+	if value.Kind == valueir.Product {
+		size = len(e.Bindings.ValueRecordFields(value.Record.ID))
+	}
+	arguments := make([]string, size)
 	for _, argument := range value.Arguments {
 		text := e.Value(argument.Value)
 		if argument.Materialize {
@@ -69,9 +73,13 @@ func (e *Emitter) Value(value *valueir.Value) string {
 	}
 }
 
+// aggregate emits a keyed composite literal; an omitted derived-record field
+// has no value and keeps its Go zero value.
 func (e *Emitter) aggregate(typ matchir.TypeID, fields, values, prefix []string) string {
 	for i, name := range fields {
-		prefix = append(prefix, name+": "+values[i])
+		if values[i] != "" {
+			prefix = append(prefix, name+": "+values[i])
+		}
 	}
 	return e.Bindings.ValueType(typ) + "{" + strings.Join(prefix, ", ") + "}"
 }

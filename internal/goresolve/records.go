@@ -5,6 +5,7 @@ import (
 	"go/token"
 	"go/types"
 	"strings"
+	"unicode"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/goplan"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
@@ -17,6 +18,9 @@ type boundRecord struct {
 	typ         types.Type
 	fields      []*types.Var
 	signature   *types.Signature
+	// derived schemas mirror Go composite literals: named construction may
+	// omit fields, which keep their zero values.
+	derived bool
 }
 
 func (e *resolver) bindRecords(declarations []*semantic.Record) error {
@@ -55,8 +59,16 @@ func (e *resolver) bindRecord(declaration *semantic.Record) error {
 		schema: &matchir.RecordSchema{ID: matchir.RecordID(len(e.records)), Name: declaration.Name, Type: e.tables.typeID(typ)}}
 	names, storage := map[string]bool{}, map[string]bool{}
 	var results []*types.Var
-	for index, field := range declaration.Fields {
+	fields := declaration.Fields
+	if !declaration.View && len(fields) == 0 {
+		fields = derivedFields(declaration, structure)
+		record.derived = true
+	}
+	for index, field := range fields {
 		if names[field.Name] || storage[field.HostName] {
+			if len(declaration.Fields) == 0 {
+				return failure("derived record field " + field.Name + " is ambiguous; declare the fields explicitly")
+			}
 			return failure("duplicate record field or storage field " + field.Name)
 		}
 		names[field.Name], storage[field.HostName] = true, true
@@ -79,6 +91,34 @@ func (e *resolver) bindRecord(declaration *semantic.Record) error {
 	e.records = append(e.records, record)
 	e.recordNames[declaration.Name] = record
 	return nil
+}
+
+// derivedFields lists every direct nonblank field of a bodiless product in Go
+// declaration order. Each label lowercases the leading capital run of the Go
+// name: Source becomes source, ID becomes id and URLPath becomes urlPath.
+func derivedFields(declaration *semantic.Record, structure *types.Struct) []semantic.UnionField {
+	var fields []semantic.UnionField
+	for index := 0; index < structure.NumFields(); index++ {
+		if name := structure.Field(index).Name(); name != "_" {
+			fields = append(fields, semantic.UnionField{Position: declaration.Position, Name: fieldLabel(name), HostName: name})
+		}
+	}
+	return fields
+}
+
+func fieldLabel(name string) string {
+	runes := []rune(name)
+	upper := 0
+	for upper < len(runes) && unicode.IsUpper(runes[upper]) {
+		upper++
+	}
+	if upper > 1 && upper < len(runes) && unicode.IsLower(runes[upper]) {
+		upper--
+	}
+	for index := range upper {
+		runes[index] = unicode.ToLower(runes[index])
+	}
+	return string(runes)
 }
 
 func (e *resolver) recordFor(typ types.Type) *boundRecord {

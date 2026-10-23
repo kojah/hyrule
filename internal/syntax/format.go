@@ -91,7 +91,11 @@ func printRecord(out *strings.Builder, item *Record) {
 	if r.View {
 		kind = "view"
 	}
-	fmt.Fprintf(out, "%s %s = %s\n", kind, identifierText(r.Name), r.GoType)
+	if r.Implicit {
+		fmt.Fprintf(out, "%s %s\n", kind, identifierText(r.Name))
+	} else {
+		fmt.Fprintf(out, "%s %s = %s\n", kind, identifierText(r.Name), r.GoType)
+	}
 	for _, f := range r.Fields {
 		out.WriteString("  " + fieldText(f) + "\n")
 	}
@@ -109,7 +113,11 @@ func printUnion(out *strings.Builder, item *Union) {
 	if len(u.Types) > 0 {
 		host = "(" + strings.Join(u.Types, ", ") + ")"
 	}
-	fmt.Fprintf(out, "type %s = %s\n  tag %s\n", identifierText(u.Name), host, u.Tag)
+	if u.Implicit {
+		fmt.Fprintf(out, "type %s\n  tag %s\n", identifierText(u.Name), u.Tag)
+	} else {
+		fmt.Fprintf(out, "type %s = %s\n  tag %s\n", identifierText(u.Name), host, u.Tag)
+	}
 	for _, v := range u.Variants {
 		out.WriteString("  " + identifierText(v.Name))
 		if len(v.Fields) > 0 {
