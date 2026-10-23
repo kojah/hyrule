@@ -121,7 +121,7 @@ func (program *Program) collectItem(item semantic.Item, names map[string]bool) e
 	return nil
 }
 func (program *Program) checkNativeNames() error {
-	if program.API != nil {
+	if program.API.Native() {
 		for _, name := range []string{"inputs", "outputs"} {
 			if program.Bindings[name] != nil || program.patterns[name] != nil {
 				return &semantic.Diagnostic{Position: program.API.Position, Message: "native signature reserves " + name}

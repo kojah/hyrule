@@ -32,7 +32,7 @@ func Lower(files []*syntax.File) ([]*semantic.File, error) {
 				for _, variant := range item.Union.Variants {
 					constructors[variant.Name] = true
 				}
-			case item.API != nil:
+			case item.API != nil && item.API.Mode != "":
 				constructors["inputs"], constructors["outputs"] = true, true
 			}
 		}
@@ -210,9 +210,18 @@ func (l lowering) item(item syntax.Item) semantic.Item {
 		}
 	}
 	if x := item.API; x != nil {
-		out.API = &semantic.API{Position: position(x.Position), Mode: x.Mode, Fallback: l.expression(x.Fallback)}
+		out.API = &semantic.API{Position: position(x.Position), Mode: x.Mode, Fallback: l.expression(x.Fallback),
+			Inputs: params(x.Inputs), Outputs: params(x.Outputs)}
 	}
 	return out
+}
+
+func params(input []syntax.Param) []semantic.Param {
+	result := make([]semantic.Param, len(input))
+	for i, param := range input {
+		result[i] = semantic.Param{Name: param.Name, Type: param.Type}
+	}
+	return result
 }
 
 func fields(input []syntax.UnionField) []semantic.UnionField {

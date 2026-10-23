@@ -139,7 +139,13 @@ func printAPI(out *strings.Builder, item *API) {
 
 	api := item
 	printComments(out, api.Comments)
-	out.WriteString("signature " + api.Mode)
+	out.WriteString("signature")
+	if api.Mode != "" {
+		out.WriteString(" " + api.Mode)
+	}
+	if len(api.Inputs) > 0 {
+		out.WriteString(" " + paramsText(api.Inputs) + " -> " + paramsText(api.Outputs))
+	}
 	if api.Fallback != nil {
 		out.WriteString(" = " + render(api.Fallback, 0))
 	}

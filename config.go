@@ -22,7 +22,9 @@ type Config struct {
 	root    string
 }
 
-// Target connects one ordered ruleset with a Go host signature.
+// Target connects one ordered ruleset with a Go host signature. Signature is
+// optional when the rules declare their types; naming it then generates the
+// function type, or checks a handwritten one in the binding file.
 type Target struct {
 	Name      string   `yaml:"name"`
 	Package   string   `yaml:"package"`
@@ -58,7 +60,8 @@ func Load(path string) (*Config, error) {
 	}
 	names, outputs := map[string]bool{}, map[string]bool{}
 	for _, t := range c.Targets {
-		if !token.IsIdentifier(t.Name) || !token.IsIdentifier(t.Signature) || !token.IsIdentifier(t.Function) || t.Function == "_" {
+		validSignature := t.Signature == "" || token.IsIdentifier(t.Signature) && t.Signature != "_"
+		if !token.IsIdentifier(t.Name) || !validSignature || !token.IsIdentifier(t.Function) || t.Function == "_" {
 			return nil, fmt.Errorf("target %q: invalid name, signature or function", t.Name)
 		}
 		if names[t.Name] {

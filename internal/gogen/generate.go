@@ -34,6 +34,14 @@ func Generate(program *goplan.Program) ([]byte, error) {
 	sig := h.Signature
 	e := emitter{host: &h, tables: program.Tables, records: program.Records, unions: program.Unions, serial: program.Serial}
 	output := h.TypeName(sig.Results().At(0).Type())
+	if h.Declare != "" {
+		function := h.Function
+		if program.Native != nil {
+			function = program.Native.Function
+		}
+		fmt.Fprintf(&e.out, "// %s is the API of %s, declared by its rule signature.\ntype %s func(%s) (%s)\n",
+			h.Declare, function, h.Declare, e.tupleText(h.Declared.Params()), e.tupleText(h.Declared.Results()))
+	}
 	var params []string
 	for i := 0; i < sig.Params().Len(); i++ {
 		params = append(params, fmt.Sprintf("harg%d %s", i, h.TypeName(sig.Params().At(i).Type())))
@@ -88,3 +96,21 @@ func renderSource(h *Host, body string) ([]byte, error) {
 }
 
 func sigOutput(e *emitter) types.Type { return e.host.Signature.Results().At(0).Type() }
+
+// tupleText names every element when any is named, using _ for the others.
+func (e *emitter) tupleText(tuple *types.Tuple) string {
+	named := false
+	for i := range tuple.Len() {
+		named = named || tuple.At(i).Name() != ""
+	}
+	parts := make([]string, tuple.Len())
+	for i := range parts {
+		parts[i] = e.host.TypeName(tuple.At(i).Type())
+		if name := tuple.At(i).Name(); named && name != "" {
+			parts[i] = name + " " + parts[i]
+		} else if named {
+			parts[i] = "_ " + parts[i]
+		}
+	}
+	return strings.Join(parts, ", ")
+}

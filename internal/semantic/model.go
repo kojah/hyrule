@@ -162,8 +162,19 @@ type Record struct {
 }
 
 // API opts into a native parameter/result list. Total APIs declare a failure value.
+// Declared Inputs and Outputs let the generator infer the Go signature; an
+// empty Mode with declared types keeps the implicit func(Input[, Host]) API.
 type API struct {
 	Position
-	Mode     string
-	Fallback *Expr
+	Mode            string
+	Inputs, Outputs []Param
+	Fallback        *Expr
+}
+
+// Native reports whether the API uses native parameter/result records.
+func (api *API) Native() bool { return api != nil && api.Mode != "" }
+
+// Param is one declared Go parameter or result type; Name may be empty.
+type Param struct {
+	Name, Type string
 }

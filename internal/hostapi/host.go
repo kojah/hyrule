@@ -13,9 +13,11 @@ import (
 	"strings"
 )
 
-// Stub recovers the signature from a binding file before generated code exists.
-// Signature types must be declared directly as function types in this file.
-func Stub(path, signature, function string) ([]byte, error) {
+// Stub declares the generated function before generated code exists. An
+// inferred Go function type wins; otherwise the signature must be declared
+// directly as a function type in the binding file. A named inferred signature
+// that the binding file does not declare is declared by the stub as well.
+func Stub(path, signature, function, inferred string) ([]byte, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -26,14 +28,29 @@ func Stub(path, signature, function string) ([]byte, error) {
 		return nil, err
 	}
 	var ft *ast.FuncType
+	declared := false
 	ast.Inspect(file, func(n ast.Node) bool {
-		if spec, ok := n.(*ast.TypeSpec); ok && spec.Name.Name == signature {
+		if spec, ok := n.(*ast.TypeSpec); ok && signature != "" && spec.Name.Name == signature {
 			ft, _ = spec.Type.(*ast.FuncType)
+			declared = true
 		}
 		return true
 	})
+	if inferred != "" {
+		expression, err := parser.ParseExprFrom(fs, "signature", inferred, 0)
+		if ft, _ = expression.(*ast.FuncType); err != nil || ft == nil {
+			return nil, fmt.Errorf("invalid inferred signature %s", inferred)
+		}
+	}
+	if ft == nil && signature == "" {
+		return nil, fmt.Errorf("signature requires declared rule types or a Go signature type")
+	}
 	if ft == nil {
 		return nil, fmt.Errorf("%s: %s must be a declared function type", path, signature)
+	}
+	declaration := ""
+	if inferred != "" && signature != "" && !declared {
+		declaration = fmt.Sprintf("type %s %s\n", signature, inferred)
 	}
 	fields, err := signatureFields(ft)
 	if err != nil {
@@ -69,6 +86,7 @@ func Stub(path, signature, function string) ([]byte, error) {
 			fmt.Fprintf(&out, "import %s %s\n", name, im.Path.Value)
 		}
 	}
+	out.WriteString(declaration)
 	fmt.Fprintf(&out, "func %s%s { panic(\"Hyrule validation stub\") }\n", function, strings.TrimPrefix(sig.String(), "func"))
 	return []byte(out.String()), nil
 }
@@ -97,12 +115,16 @@ func signatureFields(ft *ast.FuncType) ([]*ast.Field, error) {
 }
 
 // Host contains the package and the selected generated function signature.
+// Declare names a generated declaration of the Declared signature type, for
+// targets whose signature is inferred from rules rather than handwritten.
 type Host struct {
 	Package     *types.Package
 	Signature   *types.Signature
 	Function    string
 	Imports     map[string]string
 	ImportNames map[string]*types.Package
+	Declare     string
+	Declared    *types.Signature
 }
 
 // TypeName renders a type and records its generated imports.

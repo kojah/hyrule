@@ -64,15 +64,11 @@ func (c *Config) Compile(ctx context.Context, target string) ([]Artifact, error)
 // then emits its typed dispatcher.
 func (c *Config) compileTarget(pkg *packages.Package, selected preparedTarget) ([]byte, error) {
 	t := selected.target
-	obj := pkg.Types.Scope().Lookup(t.Signature)
-	if obj == nil {
-		return nil, fmt.Errorf("missing signature %s", t.Signature)
-	}
-	sig, ok := obj.Type().Underlying().(*types.Signature)
-	if !ok {
-		return nil, fmt.Errorf("%s is not a function signature", t.Signature)
-	}
 	program := selected.program
+	sig, declare, err := c.targetSignature(pkg, t, program.API)
+	if err != nil {
+		return nil, err
+	}
 	names := map[string]*types.Package{}
 	for _, file := range pkg.Syntax {
 		if filepath.Clean(pkg.Fset.Position(file.Pos()).Filename) != filepath.Join(c.root, t.Bindings) {
@@ -88,7 +84,11 @@ func (c *Config) compileTarget(pkg *packages.Package, selected preparedTarget) (
 			}
 		}
 	}
-	resolved, err := goresolve.Resolve(goresolve.Host{Package: pkg.Types, Signature: sig, Function: t.Function, ImportNames: names}, program)
+	host := goresolve.Host{Package: pkg.Types, Signature: sig, Function: t.Function, ImportNames: names}
+	if declare != "" {
+		host.Declare, host.Declared = declare, sig
+	}
+	resolved, err := goresolve.Resolve(host, program)
 	if err != nil {
 		return nil, err
 	}

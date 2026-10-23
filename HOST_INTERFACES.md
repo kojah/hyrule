@@ -74,13 +74,19 @@ without adding implicit state or changing their execution phase.
 
 ## Native generated signatures
 
-Declare a named function type directly in the configured binding file:
+Declare the parameter and result types with the failure contract:
+
+```text
+signature total evidence: *Evidence, probe: Probe, instruction: Instruction,
+  obligation: Obligation -> Status, Reason = outputs statusUnknown reasonNone
+```
+
+Alternatively declare a named function type directly in the configured binding
+file and only the failure contract in the rules:
 
 ```go
 type Signature func(*Evidence, Probe, Instruction, Obligation) (Status, Reason)
 ```
-
-Then declare the failure contract:
 
 ```text
 signature total = outputs statusUnknown reasonNone
@@ -94,8 +100,8 @@ classify (inputs evidence probe instruction obligation) =
 The example assumes aliases for constants and the query. `inputs` matches the
 parameter list; `outputs` constructs the result list. A matching tuple-union
 constructor can construct those outputs too. Positional fields always work;
-named fields use Go parameter/result names, or `value0`, `value1`, ... for unnamed
-slots. Native targets reserve `inputs` and `outputs`.
+named fields use the declared `name: T` or Go parameter/result names, or
+`value0`, `value1`, ... for unnamed slots. Native targets reserve `inputs` and `outputs`.
 
 Total fallback runs for unmatched input or invalid query/schema outcomes. It
 must construct outputs without rule captures or queries. It is distinct from

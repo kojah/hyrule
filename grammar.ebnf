@@ -17,7 +17,16 @@ field = name, [ ":", storage ] ;
 storage = path | integer ;
 variant = name, [ "(", field, { ",", field }, ")" ], [ "=", path ] ;
 pattern = "pattern", name, { name }, "=", patternExpression ;
-signature = "signature", ( "partial" | "total", "=", expression ) ;
+(* Declared types infer the generated Go signature; without a mode they keep
+   the implicit func(Input[, Host]) (Output, bool) API. *)
+signature = "signature", ( "partial", [ signatureTypes ]
+                         | "total", [ signatureTypes ], "=", expression
+                         | signatureTypes ) ;
+signatureTypes = parameters, "->", parameters ;
+parameters = parameter, { ",", parameter } ;
+parameter = [ name, ":" ], goType ;
+goType = "*", goType | "[", "]", goType | "map", "[", goType, "]", goType
+       | path, [ "[", goType, { ",", goType }, "]" ] ;
 equation = [ "@", name, NEWLINE ], name, patternExpression,
            ( "=", expression | guarded, { guarded } ), [ where ] ;
 guarded = "|", qualifier, { ",", qualifier }, "=", expression ;

@@ -31,7 +31,7 @@ func nativeAPI(h *Host, api *semantic.API) (*nativeSignature, error) {
 	if sig.Variadic() || sig.TypeParams().Len() != 0 || sig.Params().Len() < 1 {
 		return nil, fmt.Errorf("signature requires non-generic, non-variadic parameters")
 	}
-	if api == nil {
+	if !api.Native() {
 		if sig.Params().Len() > 2 || sig.Results().Len() != 2 || !types.Identical(sig.Results().At(1).Type(), types.Typ[types.Bool]) {
 			return nil, fmt.Errorf("signature must be func(Input[, Host]) (Output, bool); use signature partial or total fallback for a native API")
 		}

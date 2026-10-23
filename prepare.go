@@ -38,7 +38,7 @@ func (c *Config) prepare(target string) (*preparedCompilation, error) {
 		if err != nil {
 			return nil, fmt.Errorf("target %s: %w", t.Name, err)
 		}
-		functions := []hostapi.FunctionStub{{Signature: t.Signature, Function: t.Function}}
+		functions := []hostapi.FunctionStub{{Signature: t.Signature, Function: t.Function, Type: inferredType(program.API)}}
 		data, err := hostapi.Stubs(filepath.Join(c.root, t.Bindings), functions)
 		if err != nil {
 			return nil, fmt.Errorf("target %s: %w", t.Name, err)

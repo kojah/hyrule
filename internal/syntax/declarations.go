@@ -13,14 +13,7 @@ func (p *parser) declaration(file *File, comments []string) {
 	case p.at("type") || p.at("view") || p.at("exhaustive"):
 		p.schema(file, comments)
 	case p.take("signature"):
-		api := &API{Position: pos, Mode: p.name(), Comments: comments}
-		if api.Mode == "total" {
-			p.expect("=")
-			api.Fallback = p.expression(0, false, 0)
-		} else if api.Mode != "partial" {
-			p.fail("expected partial or total signature")
-		}
-		file.Items = append(file.Items, Item{API: api})
+		file.Items = append(file.Items, Item{API: p.signature(pos, comments)})
 		p.lineEnd()
 	case p.take("pattern"):
 		pattern := &Pattern{Position: pos, Name: p.name(), Comments: comments}

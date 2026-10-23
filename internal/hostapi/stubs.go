@@ -10,8 +10,9 @@ import (
 	"sort"
 )
 
-// FunctionStub is one generated API declared by a named host function type.
-type FunctionStub struct{ Signature, Function string }
+// FunctionStub is one generated API. Type is the Go function type inferred
+// from the rules; when empty, the binding file must declare Signature.
+type FunctionStub struct{ Signature, Function, Type string }
 
 // Stubs declares the configured rule functions in one pre-generation overlay.
 // Actual generated code is checked separately; no stub is published or executed.
@@ -25,7 +26,7 @@ func Stubs(path string, functions []FunctionStub) ([]byte, error) {
 			return nil, fmt.Errorf("duplicate generated function %s", function.Function)
 		}
 		names[function.Function] = true
-		source, err := Stub(path, function.Signature, function.Function)
+		source, err := Stub(path, function.Signature, function.Function, function.Type)
 		if err != nil {
 			return nil, err
 		}

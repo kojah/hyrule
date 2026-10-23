@@ -251,8 +251,24 @@ indentation.
 
 ## Host and compiler contracts
 
-Declare a named function type directly in the configured binding file. The
-implicit API is `func(Input[, Host]) (Output, bool)`. Native `signature partial`
+Declare the generated API's types in the rules, or a named function type
+directly in the configured binding file:
+
+```text
+signature ssa.Instruction -> Copy
+signature Event, *Host -> []Effect
+signature partial value: ssa.Value, kind: Kind -> ImmediateKind
+signature total TransferRequest -> TransferPlan = outputs TransferMissing()
+```
+
+Types use Go syntax (`*T`, `[]T`, `map[K]V`, `pkg.T`, `pkg.T[A]`) with the
+binding file's import names. A signature without a mode keeps the implicit API
+`func(Input[, Host]) (Output, bool)`; `partial` appends the success Boolean;
+`total` returns the outputs alone. `name: T` names a native input or output
+field. With declared types the target's `signature:` setting is optional: when
+named and absent from the binding file, the generator declares that function
+type; when the binding file declares it, it must be identical. Without
+declared types, the binding file must declare the named signature. Native `signature partial`
 or `signature total = outputs ...` supports multiple parameters/results; see
 [host interfaces](HOST_INTERFACES.md). Generic/variadic signatures and hooks are
 unsupported. Imported types need the binding file's actual import aliases;
@@ -308,8 +324,8 @@ Both accept `--config`, `--target`, `--format text|json`. `fmt FILE` prints one 
 `--write FILES...` replaces files and `--check FILES...` checks canonical spelling.
 Formatting retains comments, moving internal comments to declaration boundaries.
 
-Version 1 YAML declares explicit rule paths, package, binding file, signature,
-function and output. Paths remain inside the config directory; no globs/includes.
+Version 1 YAML declares explicit rule paths, package, binding file, function,
+output and, unless the rules declare their types, signature. Paths remain inside the config directory; no globs/includes.
 Outputs must be `.go` files in their package. Hosts load with in-memory signature
 stubs, permitting handwritten callers before first generation. Stubs are never
 published. Generated packages are type-checked before any output writes.
