@@ -144,7 +144,7 @@ composite literal, so a one-line host builder is unnecessary.
 ```text
 type Copy
 
-copy (Builtin source "copy" destination input) = Copy source destination input
+copy (Builtin source "copy" [destination, input]) = Copy source destination input
 ```
 
 A `type` without a field block derives its schema from the Go struct: every
@@ -194,8 +194,25 @@ fields and non-record bases are errors. Union updates use constructors instead.
 Lists such as `[Observe resource, Change resource]` construct typed slices in
 written order. Context comes from the result, record field or builder parameter;
 `[]` is non-nil empty. Declared value representations are checked before success.
-Dynamic collection transforms and list patterns are not supported. Nonempty lists
-and records can be local values; empty lists and nil need a known type context.
+Dynamic collection transforms are not supported. Nonempty lists and records can
+be local values; empty lists and nil need a known type context.
+
+### List patterns
+
+```text
+pair (Arguments [left, right]) = Pair left right
+first (Arguments [head, ..rest]) = Split head rest
+```
+
+`[]`, `[a]` and `[a, b]` match exactly that many elements; `[a, ..rest]` matches
+at least the listed elements and binds the remaining suffix. Elements and the
+rest are ordinary patterns, so literals, constructors, nested lists, repeated
+captures and `whole@[...]` work as elsewhere. A length mismatch is a failed
+match that tries the next rule. Patterns accept Go slices, using `len` and
+indexing, and any type with `Len() int` and `At(int) E` value methods, such as
+`readonly.Slice[T]`; a rest pattern on such a type also needs `Sub(int, int)`
+returning the same type. Those methods are host matchers: they must be pure
+reads. A rest suffix aliases the input. A nil slice matches `[]`.
 
 ## Ordered queries and result choice
 

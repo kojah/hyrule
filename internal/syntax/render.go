@@ -70,7 +70,10 @@ func render(x *Expr, indent int) string {
 		for i, a := range x.Args {
 			parts[i] = render(a, indent)
 		}
-		return "[" + strings.Join(parts, ", ") + "]"
+		if x.Rest {
+			parts[len(parts)-1] = ".." + operand(x.Args[len(x.Args)-1], indent)
+		}
+		return bindPrefix(x) + "[" + strings.Join(parts, ", ") + "]"
 	case Update:
 		return render(x.Args[0], indent) + " with " + namedText(x.Args[1:], indent)
 	default:

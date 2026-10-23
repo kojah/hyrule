@@ -245,14 +245,20 @@ func applicable(x *Expr) bool {
 func (p *parser) list(t token, base int, pattern bool) *Expr {
 	x := &Expr{Position: t.Position}
 
-	if pattern {
-		p.fail("list patterns are not supported")
-	}
 	x.Kind = List
 	p.grouped++
 	p.skipLines()
 	for !p.end() && !p.at("]") {
-		x.Args = append(x.Args, p.expression(base, false, 0))
+		if pattern && p.take("..") {
+			// A rest pattern is the final element and matches the remaining suffix.
+			x.Rest = true
+			x.Args = append(x.Args, p.atom(base, true))
+			p.skipLines()
+			p.take(",")
+			p.skipLines()
+			break
+		}
+		x.Args = append(x.Args, p.expression(base, pattern, 0))
 		p.skipLines()
 		if !p.take(",") {
 			break

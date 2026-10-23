@@ -73,7 +73,7 @@ func (e *resolver) pattern(x *semantic.Expr, value matchir.ValueID, t types.Type
 		}
 		e.cursor.Test(matchir.Value(value), matchir.Constant(e.constants[x.Name].schema.ID))
 		return nil
-	case semantic.Call:
+	case semantic.Call, semantic.List:
 		return e.callPattern(x, value, t, view)
 	default:
 		return e.fail(x, "invalid pattern")

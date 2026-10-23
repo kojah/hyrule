@@ -66,6 +66,8 @@ type Expr struct {
 	Arms  []DecisionArm
 	// BindResult consumes a complete query result rather than matching a variant.
 	BindResult bool
+	// Rest marks a list pattern whose final element matches the remaining suffix.
+	Rest bool
 }
 
 // Binding declares a named matcher, builder, pure guard or ordered host query.

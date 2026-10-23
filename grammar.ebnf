@@ -52,7 +52,11 @@ patternAtom = path | "^", path | literal | "_" | name, "@", patternAtom
             | "(", patternApplication, { "|", patternApplication }, ")"
             | "(", name, ":", patternExpression,
               { ",", name, ":", patternExpression }, [ "," ], ")"
-            | "(", ")" ;
+            | "(", ")"
+            | "[", [ listElements ], "]" ;
+(* A list pattern matches exactly its elements, or at least them with a rest. *)
+listElements = patternExpression, { ",", patternExpression }, [ ",", "..", patternAtom ], [ "," ]
+             | "..", patternAtom, [ "," ] ;
 path = name, { ".", name } ;
 name = identifier | escapedIdentifier ;
 literal = [ "-" ], ( integer | float ) | string | "true" | "false" | "nil" ;

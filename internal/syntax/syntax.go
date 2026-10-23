@@ -73,6 +73,8 @@ type Expr struct {
 	Sequential bool
 	// ExpressionElse preserves a Boolean do step's single-expression else.
 	ExpressionElse bool
+	// Rest marks a list pattern whose final element matches the remaining suffix.
+	Rest bool
 }
 
 // Binding declares a named matcher, builder, pure guard or ordered host query.
