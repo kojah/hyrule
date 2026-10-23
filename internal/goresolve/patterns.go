@@ -45,6 +45,10 @@ func safeEquality(t types.Type) bool {
 	return true
 }
 func (e *resolver) pattern(x *semantic.Expr, value matchir.ValueID, t types.Type) error {
+	x, err := e.constantPattern(x, t)
+	if err != nil {
+		return err
+	}
 	if x.Kind == semantic.Variable && strings.Contains(x.Name, ".") {
 		return e.fail(x, "field projections are read-only values, not capture patterns")
 	}

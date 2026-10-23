@@ -17,6 +17,7 @@ func untyped(typ types.Type) bool {
 }
 
 func (e *resolver) expressionType(expression *semantic.Expr) (types.Type, error) {
+	expression = e.valueConstant(expression)
 	switch expression.Kind {
 	case semantic.Variable:
 		name, path, _ := strings.Cut(expression.Name, ".")
@@ -115,6 +116,7 @@ func (e *resolver) arithmeticType(expression *semantic.Expr, expected types.Type
 func (e *resolver) prepareValue(expression *semantic.Expr, expected types.Type) (*semantic.Expr, error) {
 	// Ordered query continuations bind their outcome captures only at the winning
 	// result. Do not lift work from those arms into the matching graph.
+	expression = e.valueConstant(expression)
 	switch expression.Kind {
 	case semantic.Query, semantic.OrderedAlternatives, semantic.Selection, semantic.Pure, semantic.Do, semantic.Decline, semantic.Conditional:
 		return expression, nil

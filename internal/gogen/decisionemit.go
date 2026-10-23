@@ -18,7 +18,11 @@ func (e *emitter) operand(operand matchir.Operand) string {
 		return e.tables.Literals[operand.Literal]
 	}
 	if operand.Kind == matchir.ConstantOperand {
-		return e.tables.Constants[operand.Constant].Name()
+		object := e.tables.Constants[operand.Constant]
+		if object.Pkg() != e.host.Package {
+			return e.host.Qualifier(object.Pkg()) + "." + object.Name()
+		}
+		return object.Name()
 	}
 	return valueName(operand.Value)
 }

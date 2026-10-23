@@ -68,6 +68,8 @@ type Expr struct {
 	BindResult bool
 	// Rest marks a list pattern whose final element matches the remaining suffix.
 	Rest bool
+	// Quoted marks a backtick-escaped capture that never names a Go constant.
+	Quoted bool
 }
 
 // Binding declares a named matcher, builder, pure guard or ordered host query.

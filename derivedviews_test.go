@@ -119,3 +119,79 @@ func TestDerivedViewDiagnostics(t *testing.T) {
 		})
 	}
 }
+
+const constantHost = `package fixture
+type Action uint8
+const (
+ UnknownAction Action = iota
+ Send
+ Receive
+)
+type CapacityKind uint8
+const (
+ NilCapacity CapacityKind = iota
+ FiniteCapacity
+ UnboundedCapacity
+)
+type Capacity struct { Kind CapacityKind; Bound int }
+type Request struct { Action Action; Capacity Capacity }
+`
+
+// Typed Go constants match by name with Go equality. Applied to a struct
+// whose unique field has the constant's type, they match a tagged variant.
+func TestTypedConstantPatterns(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", constantHost)
+	signatureConfig(t, root, "")
+	write(t, root, "input.rules", `signature Request -> int
+
+@FiniteSend
+rewrite (Request (Action: Send, Capacity: FiniteCapacity (Bound: bound))) = bound
+
+@NilReceive
+rewrite (Request (Action: Receive(), Capacity: NilCapacity())) = -1
+
+@Unbounded
+rewrite (Request (Capacity: c@UnboundedCapacity)) = -2
+
+@Other
+rewrite (Request (Action: action))
+  | action == UnknownAction
+  = -3
+`)
+	config, artifacts := compile(t, root)
+	if err := config.Publish(artifacts, false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "behavior_test.go", `package fixture
+import "testing"
+func TestConstants(t *testing.T) {
+ for _, test := range []struct{input Request; want int; ok bool}{
+  {Request{Send, Capacity{FiniteCapacity, 4}}, 4, true},
+  {Request{Send, Capacity{NilCapacity, 4}}, 0, false},
+  {Request{Receive, Capacity{NilCapacity, 4}}, -1, true},
+  {Request{Receive, Capacity{UnboundedCapacity, 0}}, -2, true},
+  {Request{Send, Capacity{CapacityKind(9), 4}}, 0, false},
+  {Request{Action(7), Capacity{CapacityKind(9), 4}}, 0, false},
+ } {
+  if got, ok := Rewrite(test.input); ok != test.ok || got != test.want { t.Fatalf("%+v => %d %t", test.input, got, ok) }
+ }
+}`)
+	runUnionFixture(t, root, "TestConstants")
+}
+
+func TestTypedConstantDiagnostics(t *testing.T) {
+	for _, test := range []struct{ name, pattern, want string }{
+		{"fields on a plain constant", "(Request (Action: Send (Bound: 1)))", "constant pattern Send takes no fields"},
+		{"no tag field", "(FiniteCapacity (Bound: b))", "constant FiniteCapacity does not match input type"},
+		{"positional variant", "(Request (Capacity: FiniteCapacity b))", "requires named Go fields"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := fixture(t)
+			write(t, root, "bindings.go", constantHost)
+			signatureConfig(t, root, "")
+			write(t, root, "input.rules", "signature Request -> int\n\n@Check\nrewrite "+test.pattern+" = 0\n")
+			expectUnionCompile(t, root, test.want)
+		})
+	}
+}

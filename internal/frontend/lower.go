@@ -86,7 +86,8 @@ func (l lowering) expression(x *syntax.Expr) *semantic.Expr {
 	if substituted, ok := l.substitute(x); ok {
 		return substituted
 	}
-	result := &semantic.Expr{Position: position(x.Position), Kind: expressionKind(x.Kind), Name: x.Name, Bind: x.Bind, Field: x.Field, Rest: x.Rest,
+	result := &semantic.Expr{Position: position(x.Position), Kind: expressionKind(x.Kind), Name: x.Name, Bind: x.Bind, Field: x.Field,
+		Rest: x.Rest, Quoted: x.Quoted,
 		BindResult: x.Sequential && len(x.Arms) > 0 && x.Arms[0].Pattern.Kind == syntax.Variable}
 	if x.Bare {
 		base, _, _ := strings.Cut(x.Name, ".")

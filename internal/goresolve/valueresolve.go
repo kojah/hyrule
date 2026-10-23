@@ -19,6 +19,9 @@ func (e *resolver) resolveValue(x *semantic.Expr, kind string, expected types.Ty
 	}
 	switch x.Kind {
 	case semantic.Variable:
+		if constant := e.valueConstant(x); constant != x {
+			return e.resolveValue(constant, kind, expected)
+		}
 		return e.resolveCapture(x)
 	case semantic.Literal:
 		evaluated, err := types.Eval(token.NewFileSet(), e.host.Package, token.NoPos, x.Name)

@@ -9,6 +9,7 @@ import (
 )
 
 func (e *resolver) comparisonOperand(expression *semantic.Expr) (matchir.Operand, types.Type, error) {
+	expression = e.valueConstant(expression)
 	switch expression.Kind {
 	case semantic.Variable:
 		value, known := e.captures[expression.Name]

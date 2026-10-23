@@ -153,6 +153,22 @@ embedded pointer is an error; match the embedded field explicitly. A derived
 view introduces no runtime registry and shares the inline extraction and type
 switch of declared views. Declare a `view` to rename fields.
 
+### Typed Go constants and tagged structs
+
+A constant of a named Go type is usable by name without a host alias. As a
+pattern, `SendChannel` or `SendChannel()` on an input of exactly its type
+tests Go `==`; in values and guards, `OperationEnabled` or `action ==
+UnknownAction` reads it. Qualified names use the binding file's imports.
+
+Applied to a struct whose unique field has the constant's type, the name is a
+tagged variant: `FiniteCapacity (Bound: bound)` on a `ChannelCapacity{Kind
+CapacityKind; Bound int}` input requires `Kind == FiniteCapacity` and matches
+the named Go fields. The constants of the tag type are the variant set; a tag
+outside them matches no variant. Two fields of the tag type are ambiguous.
+Captures keep priority: a name already bound in the rule, or a backtick-quoted
+capture, never reads a constant. Declare a `type ... tag` union schema for
+renamed fields, construction or exhaustiveness checks.
+
 A whole view capture, `deferred@Deferred`, retains the concrete storage type that
 passed the assertion. A hook requiring `*ssa.Defer` can consume it even when the
 original input was `ssa.Instruction`. Identity is preserved and no extra field

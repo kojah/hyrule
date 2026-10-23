@@ -81,6 +81,10 @@ func (e *resolver) matcherHook(x *semantic.Expr, input types.Type) (string, *typ
 // checkPattern joins capture contracts at each OR, before later siblings can
 // hide a missing binding. It never invokes a host hook or constructs effects.
 func (e *resolver) checkPattern(x *semantic.Expr, input types.Type) error {
+	x, err := e.constantPattern(x, input)
+	if err != nil {
+		return err
+	}
 	if x.Bind != "" {
 		captured := input
 		if view, err := e.capturedView(x, input); err != nil {
