@@ -90,6 +90,9 @@ type Rule struct {
 	Match   *Expr
 	Clauses []Clause
 	Build   *Expr
+	// Choices are the source positions of the OR alternatives, spelled in the
+	// rule itself, that this OR-free expansion takes.
+	Choices []Position
 }
 
 // Clause preserves evaluation order. A nonempty Name declares an immutable

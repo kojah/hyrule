@@ -218,6 +218,46 @@ indexing, and any type with `Len() int` and `At(int) E` value methods, such as
 returning the same type. Those methods are host matchers: they must be pure
 reads. A rest suffix aliases the input. A nil slice matches `[]`.
 
+## Unreachable rules
+
+Every target's equations are checked with the usefulness algorithm of Maranget,
+"Warnings for pattern matching" (JFP 2007), over the resolved, OR-expanded
+patterns. The checks report diagnostics only; they never change generated code.
+Hyrule has no warnings, so findings are compile errors, like unused pattern
+definitions, and a target reports all of its findings together.
+
+An equation, guarded branch or OR alternative written in the rule is
+*unreachable* when earlier unguarded rules, and earlier alternatives of the same
+equation, match every input it matches:
+`rule Late: unreachable rule: rule First matches every input it matches`.
+Alternatives of reusable pattern definitions are judged only as part of the
+whole rule, since other uses may need them.
+
+The analysis is sound: it never reports a reachable rule. Patterns it cannot
+see through count as covering nothing and as possibly matching anything:
+
+- Closed domains can be covered: Booleans; nil and non-nil pointers; products
+  (records, and views over their own struct input); union variants where the
+  generated code validates tags, namely the root input and active fields reached
+  through records and unions; and Go slice lengths, where `[]`, `[_]` and
+  `[_, _, .._]` cover every slice.
+- Open domains leave a residual, so a fallback after all of their heads stays
+  reachable: integer, float and string literals; typed Go constants, since Go
+  admits other values of the type (the declared constants only name witnesses);
+  interface inputs, whose closed implementer set limits what patterns may name
+  but not what values hold, such as other dynamic types and typed nil pointers;
+  unions reached through views or host matchers, which are not validated; and
+  host sequences, whose `Len` may be negative.
+- Opaque tests never cover or subsume other rows: guards and pattern guards (a
+  `let` alone does not guard), refutable accessor projections, repeated
+  captures, `nil` of slices and maps, constants matched against interfaces and
+  list rests other than captures or lists. A host `?` matcher is deterministic
+  under the hook contract, so it subsumes a later use of the same matcher whose
+  children it subsumes, and nothing else.
+
+Literals and constants compare by exact value. Each query is bounded to 65,536
+steps; an exhausted query answers conservatively.
+
 ## Ordered queries and result choice
 
 ```text

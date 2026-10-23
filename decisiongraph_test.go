@@ -127,8 +127,8 @@ rewrite _ = Sum "wrong" 2
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = config.Compile(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "cannot use") {
-		t.Fatalf("unreachable builder escaped type validation: %v", err)
+	if _, err = config.Compile(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "rule Invalid: unreachable rule: rule First matches") {
+		t.Fatalf("unreachable rule escaped validation: %v", err)
 	}
 }
 

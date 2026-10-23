@@ -308,7 +308,7 @@ host
   Later = Later
 
 @First
-rewrite _ = [Invalid(), Later()]
+rewrite (Node (A: 0)) = [Invalid(), Later()]
 
 @Fallback
 rewrite _ = [Later()]

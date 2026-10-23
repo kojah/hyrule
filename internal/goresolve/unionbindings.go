@@ -175,3 +175,13 @@ func (e *resolver) bindUnion(declaration *semantic.Union) error {
 	e.unions = append(e.unions, union)
 	return nil
 }
+
+// unionFor returns the union bound to typ, if any.
+func (e *resolver) unionFor(typ types.Type) *boundUnion {
+	for _, union := range e.unions {
+		if types.Identical(typ, union.typ) {
+			return union
+		}
+	}
+	return nil
+}

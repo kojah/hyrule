@@ -21,9 +21,10 @@ func (e *Program) expandRules(rules iter.Seq[*semantic.Rule], check func(*semant
 		if err := check(rule); err != nil {
 			return nil, err
 		}
-		for _, pattern := range expandPattern(rule.Match) {
+		for _, alternative := range e.expandPattern(rule.Match) {
 			variant := *rule
-			variant.Match = pattern
+			variant.Match = alternative.pattern
+			variant.Choices = alternative.choices
 			expanded = append(expanded, &variant)
 		}
 	}
@@ -55,35 +56,47 @@ func (e *Program) variantCount(x *semantic.Expr) (int, error) {
 	return count, nil
 }
 
-func expandPattern(x *semantic.Expr) []*semantic.Expr {
+// alternative is one OR-free expansion and the written alternatives it takes.
+type alternative struct {
+	pattern *semantic.Expr
+	choices []semantic.Position
+}
+
+func (e *Program) expandPattern(x *semantic.Expr) []alternative {
 	if x.Kind == semantic.Alternation {
-		var result []*semantic.Expr
-		for _, child := range x.Args {
-			for _, variant := range expandPattern(child) {
-				copy := *variant
+		var result []alternative
+		written := e.written[x]
+		for index, child := range x.Args {
+			for _, variant := range e.expandPattern(child) {
+				copy := *variant.pattern
 				// Preserve an outer whole-input capture without replacing an inner one.
 				if x.Bind != "" && copy.Bind != "" {
-					copy = semantic.Expr{Position: x.Position, Kind: semantic.Alternation, Bind: x.Bind, Args: []*semantic.Expr{variant}}
+					copy = semantic.Expr{Position: x.Position, Kind: semantic.Alternation, Bind: x.Bind, Args: []*semantic.Expr{variant.pattern}}
 				} else if x.Bind != "" {
 					copy.Bind = x.Bind
 				}
 				copy.Field = x.Field
-				result = append(result, &copy)
+				choices := variant.choices
+				if written != nil {
+					choices = append([]semantic.Position{written[index]}, choices...)
+				}
+				result = append(result, alternative{&copy, choices})
 			}
 		}
 		return result
 	}
 	copy := *x
 	copy.Args = nil
-	variants := []*semantic.Expr{&copy}
+	variants := []alternative{{pattern: &copy}}
 	for _, child := range x.Args {
-		choices := expandPattern(child)
-		next := make([]*semantic.Expr, 0, len(variants)*len(choices))
+		choices := e.expandPattern(child)
+		next := make([]alternative, 0, len(variants)*len(choices))
 		for _, partial := range variants {
 			for _, choice := range choices {
-				composed := *partial
-				composed.Args = append(append([]*semantic.Expr(nil), partial.Args...), choice)
-				next = append(next, &composed)
+				composed := *partial.pattern
+				composed.Args = append(append([]*semantic.Expr(nil), partial.pattern.Args...), choice.pattern)
+				taken := append(append([]semantic.Position(nil), partial.choices...), choice.choices...)
+				next = append(next, alternative{&composed, taken})
 			}
 		}
 		variants = next

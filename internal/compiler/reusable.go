@@ -115,6 +115,12 @@ func (expansion *patternExpansion) expandShape(x *semantic.Expr, scope map[strin
 			}
 			result.Args = append(result.Args, expanded)
 		}
+		// A nil scope means the rule itself spells this OR, not a definition.
+		if x.Kind == semantic.Alternation && len(x.Args) > 1 && scope == nil {
+			for _, child := range x.Args {
+				e.written[result] = append(e.written[result], child.Position)
+			}
+		}
 	}
 	return result, nil
 }

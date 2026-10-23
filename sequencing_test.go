@@ -9,6 +9,9 @@ import (
 	"github.com/kojah/lockdoc/tools/hyrule"
 )
 
+// Main matches nil inputs, which the behavior tests pass, so Later stays
+// reachable for other inputs while showing that a committed result never
+// retries a later equation.
 const doRules = `signature total = outputs 0 (-1)
 
 host
@@ -23,7 +26,7 @@ type Proof = (Kind, int)
   Unavailable (reason: 1) = Unknown
 
 @Main
-rewrite (inputs input n host) =
+rewrite (inputs nil n host) =
   do
     Proven (reason: first) <- ask host n 0
       else

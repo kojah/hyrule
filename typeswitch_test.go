@@ -19,6 +19,8 @@ view Second = *B
 
 view Third = *C
 
+view Fourth = *D
+
 host
   Small
   Probe
@@ -42,7 +44,7 @@ rewrite (inputs shape host)
   outputs 4
 
 @AfterProbe
-rewrite (inputs (Second()) host) = outputs 5
+rewrite (inputs (Fourth()) host) = outputs 5
 `
 
 const typeSwitchHost = `package fixture
@@ -50,9 +52,11 @@ type Shape interface{ shape() }
 type A struct{ N int }
 type B struct{}
 type C struct{}
+type D struct{}
 func (*A) shape() {}
 func (*B) shape() {}
 func (*C) shape() {}
+func (*D) shape() {}
 type Host struct { Calls []string; Probe bool }
 type Signature func(Shape, *Host) int
 func Small(h *Host, n int) bool { h.Calls = append(h.Calls, "small"); return n < 10 }
@@ -86,6 +90,7 @@ func TestBehavior(t *testing.T) {
   {"typed nil reaches probe", none, true, 4, []string{"probe"}},
   {"typed nil fails probe", none, false, 0, []string{"probe"}},
   {"nil interface", nil, false, 0, []string{"probe"}},
+  {"after probe", &D{}, false, 5, []string{"probe"}},
  } {
   h := &Host{Probe: tt.probe}
   if got := Rewrite(tt.shape, h); got != tt.want || !reflect.DeepEqual(h.Calls, tt.calls) {

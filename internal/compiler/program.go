@@ -20,9 +20,12 @@ type Program struct {
 	RecordNames  map[string]*semantic.Record
 	Implementers []*semantic.Implementers
 	patterns     map[string]*semantic.Pattern
-	rules        []*semantic.Rule
-	rule         string
-	family       string
+	// written maps each expanded OR a rule spells itself to the source
+	// positions of its alternatives; definition ORs have no entry.
+	written map[*semantic.Expr][]semantic.Position
+	rules   []*semantic.Rule
+	rule    string
+	family  string
 }
 
 // Collect validates names independently of any target-language hook discovery.
@@ -66,6 +69,7 @@ func (program *Program) collectRecords() error {
 // Expand checks reusable definitions, then preserves the priority of every
 // expanded OR alternative. The adapter validates capture types before expansion.
 func (p *Program) Expand(check func(*semantic.Rule) error) ([]*semantic.Rule, error) {
+	p.written = map[*semantic.Expr][]semantic.Position{}
 	rules, err := p.reuseRules(slices.Values(p.rules))
 	if err != nil {
 		return nil, err
