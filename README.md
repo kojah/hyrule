@@ -275,8 +275,9 @@ type; when the binding file declares it, it must be identical. Without
 declared types, the binding file must declare the named signature. Native `signature partial`
 or `signature total = outputs ...` supports multiple parameters/results; see
 [host interfaces](HOST_INTERFACES.md). Generic/variadic signatures and hooks are
-unsupported. Imported types need the binding file's actual import aliases;
-dot imports are unsupported. Queries may return Boolean, struct-union or tuple
+unsupported. Imported names use the binding file's import aliases, then names
+other handwritten files of the package import unambiguously; dot imports are
+unsupported. Queries may return Boolean, struct-union or tuple
 outcomes. Ordinary pure functions return one value.
 
 Matchers and guards must not mutate inputs, host state or externally observable

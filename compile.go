@@ -73,21 +73,7 @@ func (c *Config) compileTarget(pkg *packages.Package, selected preparedTarget, a
 	if err != nil {
 		return nil, err
 	}
-	names := map[string]*types.Package{}
-	for _, file := range pkg.Syntax {
-		if filepath.Clean(pkg.Fset.Position(file.Pos()).Filename) != filepath.Join(c.root, t.Bindings) {
-			continue
-		}
-		for _, spec := range file.Imports {
-			obj := pkg.TypesInfo.Implicits[spec]
-			if spec.Name != nil {
-				obj = pkg.TypesInfo.Defs[spec.Name]
-			}
-			if imported, ok := obj.(*types.PkgName); ok {
-				names[imported.Name()] = imported.Imported()
-			}
-		}
-	}
+	names := c.importNames(pkg, t)
 	host := goresolve.Host{Package: pkg.Types, Signature: sig, Function: t.Function, ImportNames: names, Accessors: accessors}
 	if declare != "" {
 		host.Declare, host.Declared = declare, sig
@@ -101,6 +87,48 @@ func (c *Config) compileTarget(pkg *packages.Package, selected preparedTarget, a
 		return nil, err
 	}
 	return data, nil
+}
+
+// importNames maps the binding file's import names to packages, then adds
+// names other handwritten files of the package import unambiguously. Rules
+// can therefore name ssa.Call or token.ARROW where the package imports them.
+func (c *Config) importNames(pkg *packages.Package, t Target) map[string]*types.Package {
+	bindings, others, ambiguous := map[string]*types.Package{}, map[string]*types.Package{}, map[string]bool{}
+	for _, file := range pkg.Syntax {
+		filename := filepath.Clean(pkg.Fset.Position(file.Pos()).Filename)
+		generated := false
+		for _, target := range c.Targets {
+			generated = generated || filename == filepath.Join(c.root, target.Out)
+		}
+		if generated {
+			continue
+		}
+		for _, spec := range file.Imports {
+			obj := pkg.TypesInfo.Implicits[spec]
+			if spec.Name != nil {
+				obj = pkg.TypesInfo.Defs[spec.Name]
+			}
+			imported, ok := obj.(*types.PkgName)
+			if !ok {
+				continue
+			}
+			name := imported.Name()
+			switch {
+			case filename == filepath.Join(c.root, t.Bindings):
+				bindings[name] = imported.Imported()
+			case others[name] != nil && others[name] != imported.Imported():
+				ambiguous[name] = true
+			default:
+				others[name] = imported.Imported()
+			}
+		}
+	}
+	for name, imported := range others {
+		if bindings[name] == nil && !ambiguous[name] {
+			bindings[name] = imported
+		}
+	}
+	return bindings
 }
 
 func (c *Config) rules(t Target) ([]*syntax.File, error) {

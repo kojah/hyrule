@@ -268,3 +268,24 @@ func TestClosedImplementerDiagnostics(t *testing.T) {
 		})
 	}
 }
+
+// Rules may use import names from any handwritten file of the package when
+// the binding file does not import them and the name is unambiguous.
+func TestPackageImportNames(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", "package fixture\n")
+	write(t, root, "other.go", "package fixture\nimport \"go/token\"\ntype Op struct{ Kind token.Token }\n")
+	signatureConfig(t, root, "")
+	write(t, root, "input.rules", "signature Op -> bool\n\n@Add\nrewrite (Op (Kind: token.ADD)) = true\n")
+	config, artifacts := compile(t, root)
+	if err := config.Publish(artifacts, false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "behavior_test.go", `package fixture
+import ("go/token"; "testing")
+func TestImports(t *testing.T) {
+ if got, ok := Rewrite(Op{token.ADD}); !ok || !got { t.Fatal("ADD") }
+ if _, ok := Rewrite(Op{token.SUB}); ok { t.Fatal("SUB") }
+}`)
+	runUnionFixture(t, root, "TestImports")
+}
