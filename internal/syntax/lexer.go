@@ -1,6 +1,7 @@
 package syntax
 
 import (
+	"fmt"
 	"io"
 	"strings"
 	"text/scanner"
@@ -9,10 +10,12 @@ import (
 
 const maxDepth = 64
 const maxTokens = 100000
+const inlineGoToken = -100
 
 type token struct {
 	Position
 	text   string
+	goBody string
 	kind   rune
 	indent int
 }
@@ -20,10 +23,17 @@ type token struct {
 // lex retains physical newlines and columns. The parser owns layout because
 // continuation indentation is distinct from a do/case/schema block.
 func lex(name string, input io.Reader) ([]token, error) {
+	data, err := io.ReadAll(io.LimitReader(input, (4<<20)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > 4<<20 {
+		return nil, fmt.Errorf("%s: rule file exceeds 4 MiB", name)
+	}
 	var scan scanner.Scanner
-	scan.Init(input)
+	scan.Init(strings.NewReader(string(data)))
 	scan.Filename = name
-	scan.Mode = scanner.ScanIdents | scanner.ScanInts | scanner.ScanFloats | scanner.ScanStrings | scanner.ScanRawStrings | scanner.ScanComments
+	scan.Mode = scanner.ScanIdents | scanner.ScanInts | scanner.ScanFloats | scanner.ScanStrings | scanner.ScanChars | scanner.ScanRawStrings | scanner.ScanComments
 	scan.Whitespace = 1<<' ' | 1<<'\r'
 	var failure error
 	scan.Error = func(s *scanner.Scanner, message string) {
@@ -33,10 +43,24 @@ func lex(name string, input io.Reader) ([]token, error) {
 	}
 	var result []token
 	indent, line := 0, 0
-	for len(result) <= maxTokens && failure == nil {
+	for count := 0; count <= maxTokens && failure == nil; count++ {
 		kind := scan.Scan()
 		pos := Position{name, scan.Line, scan.Column}
 		text := scan.TokenText()
+		if text == "{" && len(result) >= 2 && result[len(result)-2].text == "go" && result[len(result)-1].text == "!" {
+			start := result[len(result)-2]
+			body, consumed, err := scanGo(&scan, data, maxTokens-count)
+			count += consumed
+			if err != nil {
+				return nil, &Diagnostic{Position: start.Position, Message: err.Error()}
+			}
+			if failure != nil {
+				return nil, failure
+			}
+			start.kind, start.text, start.goBody = inlineGoToken, "go!", body
+			result = append(result[:len(result)-2], start)
+			continue
+		}
 		if kind == '\t' {
 			return nil, &Diagnostic{Position: pos, Message: "tabs are not permitted; use spaces"}
 		}

@@ -89,6 +89,13 @@ func (l lowering) expression(x *syntax.Expr) *semantic.Expr {
 	result := &semantic.Expr{Position: position(x.Position), Kind: expressionKind(x.Kind), Name: x.Name, Bind: x.Bind, Field: x.Field,
 		Rest: x.Rest, Quoted: x.Quoted,
 		BindResult: x.Sequential && len(x.Arms) > 0 && x.Arms[0].Pattern.Kind == syntax.Variable}
+	if x.Kind == syntax.InlineGo {
+		// Freeze lexical visibility here, including where's equation-only scope.
+		for _, name := range slices.Sorted(maps.Keys(l.captures)) {
+			result.Args = append(result.Args, &semantic.Expr{Position: result.Position, Kind: semantic.Variable, Name: name})
+		}
+		return result
+	}
 	if x.Bare {
 		base, _, _ := strings.Cut(x.Name, ".")
 		switch {
@@ -127,6 +134,8 @@ func (l lowering) expression(x *syntax.Expr) *semantic.Expr {
 
 func expressionKind(kind syntax.Kind) semantic.Kind {
 	switch kind {
+	case syntax.InlineGo:
+		return semantic.InlineGo
 	case syntax.Call:
 		return semantic.Call
 	case syntax.Variable:

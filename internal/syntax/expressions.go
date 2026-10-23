@@ -128,7 +128,7 @@ func (p *parser) atomStart() bool {
 	case "of", "else", "with", "let", "require", "do", "case", "decline", "if", "then", "not", "where":
 		return false
 	}
-	return t.kind == scanner.Ident || t.kind == scanner.RawString || t.kind == scanner.Int || t.kind == scanner.Float || t.kind == scanner.String ||
+	return t.kind == inlineGoToken || t.kind == scanner.Ident || t.kind == scanner.RawString || t.kind == scanner.Int || t.kind == scanner.Float || t.kind == scanner.String ||
 		t.text == "(" || t.text == "[" || t.text == "^"
 }
 func (p *parser) emptyAhead() bool {
@@ -161,6 +161,12 @@ func (p *parser) atom(base int, pattern bool) *Expr {
 	t := p.peek()
 	x := &Expr{Position: t.Position}
 	switch {
+	case t.kind == inlineGoToken:
+		p.next()
+		if pattern {
+			p.fail("go! is not allowed in patterns")
+		}
+		x.Kind, x.Name = InlineGo, t.goBody
 	case p.take("require"):
 		p.fail("require is only allowed as a do step")
 	case !pattern && p.take("do"):

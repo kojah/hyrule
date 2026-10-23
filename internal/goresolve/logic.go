@@ -36,6 +36,9 @@ func (e *resolver) prepareLazy(expression *semantic.Expr) (*semantic.Expr, error
 }
 
 func (e *resolver) booleanOperand(x *semantic.Expr) (*valueir.Value, error) {
+	if x.Kind == semantic.InlineGo {
+		return e.resolveInlineGo(x, types.Typ[types.Bool])
+	}
 	typ, err := e.expressionType(x)
 	if err != nil {
 		return nil, err

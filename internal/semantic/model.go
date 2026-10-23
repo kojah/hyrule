@@ -51,6 +51,8 @@ const (
 	Logic
 	// Conditional is if/then/else: condition, then branch, else branch.
 	Conditional
+	// InlineGo carries an opaque Go expression or result block in Name.
+	InlineGo
 )
 
 // Expr is a pattern or construction expression. Bind names an entire matched

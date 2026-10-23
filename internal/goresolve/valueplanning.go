@@ -19,6 +19,12 @@ func untyped(typ types.Type) bool {
 func (e *resolver) expressionType(expression *semantic.Expr) (types.Type, error) {
 	expression = e.valueConstant(expression)
 	switch expression.Kind {
+	case semantic.InlineGo:
+		inline, err := e.inlineGo(expression, nil)
+		if err != nil {
+			return nil, err
+		}
+		return inline.Result, nil
 	case semantic.Variable:
 		name, path, _ := strings.Cut(expression.Name, ".")
 		value, known := e.captures[name]
@@ -118,7 +124,7 @@ func (e *resolver) prepareValue(expression *semantic.Expr, expected types.Type) 
 	// result. Do not lift work from those arms into the matching graph.
 	expression = e.valueConstant(expression)
 	switch expression.Kind {
-	case semantic.Query, semantic.OrderedAlternatives, semantic.Selection, semantic.Pure, semantic.Do, semantic.Decline, semantic.Conditional:
+	case semantic.InlineGo, semantic.Query, semantic.OrderedAlternatives, semantic.Selection, semantic.Pure, semantic.Do, semantic.Decline, semantic.Conditional:
 		return expression, nil
 	case semantic.Logic:
 		return e.prepareLazy(expression)
@@ -235,6 +241,16 @@ func (e *resolver) arithmeticEvaluation(expression *semantic.Expr, expected type
 	operation, _ := compiler.Arithmetic(expression.Name)
 	result := &matchir.Evaluation{Kind: matchir.ArithmeticEvaluation, Type: e.tables.typeID(typ), Arithmetic: operation}
 	for _, argument := range expression.Args {
+		if argument.Kind == semantic.InlineGo {
+			value, err := e.resolveInlineGo(argument, typ)
+			if err != nil {
+				return nil, nil, err
+			}
+			result.Arguments = append(result.Arguments, &matchir.Evaluation{
+				Kind: matchir.ForeignEvaluation, Type: e.tables.typeID(typ), Expression: e.storeValue(value),
+			})
+			continue
+		}
 		if argument.Kind == semantic.Call {
 			if _, arithmetic := compiler.Arithmetic(argument.Name); arithmetic {
 				nested, _, err := e.arithmeticEvaluation(argument, typ)

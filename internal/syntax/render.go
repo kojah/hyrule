@@ -17,6 +17,8 @@ func render(x *Expr, indent int) string {
 		return ""
 	}
 	switch x.Kind {
+	case InlineGo:
+		return "go! {" + x.Name + "}"
 	case Variable:
 		if x.Quoted {
 			base, rest, has := strings.Cut(x.Name, ".")

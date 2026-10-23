@@ -8,8 +8,9 @@ worklists, fixed points, budgets and applying effect plans remain host concerns.
 The frontend is a handwritten lexer and parser. The checked-in
 [EBNF grammar](grammar.ebnf) and [layout specification](LAYOUT.md) define its
 surface syntax. It uses equations, whitespace application and layout blocks;
-there are no braces or semicolons. This is Haskell-inspired syntax over strict
-local decisions, without currying, lazy values, unrestricted recursion or loops.
+Hyrule blocks have no braces or semicolons (embedded Go does). This is Haskell-inspired syntax over strict
+local decisions, without currying, lazy values, unrestricted recursion or loops in Hyrule itself.
+The explicit `go!` escape accepts ordinary Go expressions and statement blocks.
 
 ## Equations and host bindings
 
@@ -119,6 +120,56 @@ recursive definitions are errors, including unused definitions. Definitions can
 refer forward and across configured files. A whole-capture parameter accepts a
 capture or `_`. Expansion is bounded to 64 levels and 10,000 nodes before the OR
 limit is applied. Reuse introduces no runtime registry or traversal.
+
+## Inline Go
+
+Use `go! { expression }` for a Go expression, or `go! { statements; return value }`
+for a result block. Existing Hyrule expression syntax remains available.
+
+```text
+signature Request -> Plan
+
+rewrite (Request (Text: text, A: a, B: b))
+  | go! { a >= 0 && b >= 0 }
+  , let total = go! { a + b }
+  = go! {
+      result := Plan{Text: strings.ToUpper(text), Total: total}
+      if result.Text == "" {
+          result.Text = "EMPTY"
+      }
+      return result
+    }
+```
+
+Go code sees lexical pattern captures, earlier guard locals and query-result
+captures, plus Go package declarations and imports available through the binding
+file's import names. Hyrule aliases and lazy `where` names are not Go variables;
+bind a value with `let` before using it inside Go. A `where` expression containing
+Go retains the equation's capture scope. Go-local declarations follow Go's normal
+shadowing rules and do not escape the block. Generated dispatcher locals are not
+visible.
+
+Expressions infer a type when needed. Statement blocks require a contextual
+result type, such as a rule result, a builder argument or a Boolean guard.
+When inference is needed, an explicitly typed Go function expression works:
+`go! { func() int { return value + 1 }() }`.
+Each escape produces exactly one value; a block can unpack a multi-result Go
+call internally. Its `return` returns from the embedded block, not from the
+rule dispatcher. Use `outputs` to assemble multiple native API results.
+
+The compiler type-checks embedded Go before emission, binds captures through
+typed function parameters, and resolves import identifiers without rewriting
+strings or field names. Invalid Go is reported at the `go!` source location
+with the inner Go diagnostic. Bodies are preserved verbatim by the rule formatter,
+including comments and raw strings. See the runnable configuration at
+[examples/inlinego](examples/inlinego/rewrite.rules).
+
+The bang marks embedded Go, not permission to run ordered effects. Inline Go
+obeys the same purity contract as host builders and guards: leave existing inputs
+and host state unchanged; constructing fresh output values is allowed. Guard work
+may be shared or skipped, and result work runs only on its reached branch.
+Hyrule does not prove purity of Go code. Keep budget spending, evidence recording
+and other ordered effects in `!` query hooks. `go!` is not allowed in patterns.
 
 ## Records, unions and local values
 

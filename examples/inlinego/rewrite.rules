@@ -1,0 +1,17 @@
+signature Request -> Plan
+
+@Positive
+rewrite (Request (Text: text, A: a, B: b))
+  | go! { a >= 0 && b >= 0 }
+  , let total = go! { a + b }
+  =
+  go! {
+      result := Plan{Text: strings.ToUpper(text), Total: total}
+      if result.Text == "" {
+          result.Text = "EMPTY"
+      }
+      return result
+    }
+
+@Fallback
+rewrite _ = go! { Plan{Text: "invalid"} }

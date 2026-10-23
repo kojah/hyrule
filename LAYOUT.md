@@ -14,7 +14,7 @@ The formatter moves internal comments before their containing declaration.
 `else` introduce blocks. The first child establishes the block's indentation;
 subsequent siblings align with it. A smaller indentation closes the block.
 A greater indentation continues a statement or begins an explicitly introduced
-child block. There are no braces or semicolons as alternative block delimiters.
+child block. There are no braces or semicolons as alternative Hyrule block delimiters.
 
 `require expression` is a standalone step aligned with other bindings inside
 a `do` block; it does not introduce a block or take an `else` clause.
@@ -39,3 +39,12 @@ Backticks quote identifiers, not strings. Use double-quoted string literals for
 values. `^Name` explicitly references a constant. Ordinary names remain unresolved
 until the frontend knows the declarations and captures of the target. An explicit
 empty argument list distinguishes a nullary host call, `Name()`, from a value.
+
+## Embedded Go
+
+`go! { ... }` is one expression token. Braces inside Go strings, rune literals
+and comments do not close it. Nested braces are balanced. Go newlines and tabs
+inside the braces do not affect Hyrule indentation. The formatter preserves the
+body verbatim, including comments and raw string contents; generated Go is
+formatted normally. Hyrule resumes immediately after the closing brace.
+Embedded tokens count toward the file token limit.

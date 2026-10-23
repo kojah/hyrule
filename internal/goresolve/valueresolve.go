@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/compiler"
+	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 	"github.com/kojah/lockdoc/tools/hyrule/internal/valueir"
@@ -18,6 +19,8 @@ func (e *resolver) resolveValue(x *semantic.Expr, kind string, expected types.Ty
 		return nil, e.fail(x, "captures may only be bound in patterns")
 	}
 	switch x.Kind {
+	case semantic.InlineGo:
+		return e.resolveInlineGo(x, expected)
 	case semantic.Variable:
 		if constant := e.valueConstant(x); constant != x {
 			return e.resolveValue(constant, kind, expected)
@@ -141,7 +144,7 @@ func (e *resolver) resolveCall(x *semantic.Expr, kind string) (*valueir.Value, e
 		}
 		result.Arguments = append(result.Arguments, valueir.Argument{Value: value, Type: e.tables.typeID(typ),
 			Position:    positions[i],
-			Materialize: ordered && (arg.Kind == semantic.Call || arg.Kind == semantic.Effects || arg.Kind == semantic.List)})
+			Materialize: ordered && (arg.Kind == semantic.Call || arg.Kind == semantic.InlineGo || arg.Kind == semantic.Effects || arg.Kind == semantic.List)})
 	}
 	return result, nil
 }
@@ -203,4 +206,38 @@ func (e *resolver) resolveUpdate(x *semantic.Expr) (*valueir.Value, error) {
 			Position: indices[i]})
 	}
 	return result, nil
+}
+
+// resolveInlineGo binds a checked Go function literal through the ordinary
+// invocation plan; no Go source parsing or lexical lookup reaches the emitter.
+func (e *resolver) resolveInlineGo(x *semantic.Expr, expected types.Type) (*valueir.Value, error) {
+	inline, err := e.inlineGo(x, expected)
+	if err != nil {
+		return nil, err
+	}
+	result := &valueir.Value{Kind: valueir.Invoke, Type: e.tables.typeID(inline.Result), Hook: e.tables.hookID(inline.Function)}
+	for i, name := range inline.Parameters {
+		captured := e.captures[name]
+		typ := e.tables.typeID(captured.typ)
+		result.Arguments = append(result.Arguments, valueir.Argument{
+			Position: i, Type: typ,
+			Value: &valueir.Value{Kind: valueir.Operand, Type: typ, Operand: matchir.Operand{Kind: matchir.ValueOperand, Value: captured.id}},
+		})
+	}
+	return result, nil
+}
+
+func (e *resolver) inlineGo(x *semantic.Expr, expected types.Type) (*hostapi.Inline, error) {
+	captures := make([]*types.Var, 0, len(x.Args))
+	for _, arg := range x.Args {
+		captured, ok := e.captures[arg.Name]
+		if ok && token.IsIdentifier(arg.Name) && arg.Name != "_" {
+			captures = append(captures, types.NewVar(token.NoPos, e.host.Package, arg.Name, captured.typ))
+		}
+	}
+	inline, err := e.host.InlineGo(x.Name, captures, expected)
+	if err != nil {
+		return nil, e.fail(x, "go!: "+err.Error())
+	}
+	return inline, nil
 }

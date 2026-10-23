@@ -1,0 +1,8 @@
+version: 1
+targets:
+  - name: inlineGo
+    package: .
+    rules: [rewrite.rules]
+    bindings: bindings.go
+    function: Rewrite
+    out: hyrule_rewrite_gen.go

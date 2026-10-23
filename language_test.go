@@ -179,3 +179,112 @@ rewrite (inputs n host) =
 		t.Fatalf("formatted:\n%s\nwant:\n%s", formatted, want)
 	}
 }
+
+// Inline Go keeps lexical captures, Go-local shadowing, and import aliases
+// separate from dispatcher names while preserving ordinary guard fallthrough.
+func TestInlineGoValuesAndScope(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", inlineGoHost)
+	rules := inlineGoRules
+	formatted, err := hyrule.Format("input.rules", []byte(rules))
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := hyrule.Format("input.rules", formatted)
+	if err != nil || string(again) != string(formatted) {
+		t.Fatalf("unstable inline Go formatting: %v\n%s", err, formatted)
+	}
+	if !strings.Contains(string(formatted), "// braces } stay inside Go") ||
+		!strings.Contains(string(formatted), "`raw }\n  text`") {
+		t.Fatalf("inline Go contents changed:\n%s", formatted)
+	}
+	write(t, root, "input.rules", string(formatted))
+	c, artifacts := compile(t, root)
+	if err := c.Publish(artifacts, false); err != nil {
+		t.Fatal(err)
+	}
+	_, repeated := compile(t, root)
+	if string(artifacts[0].Data) != string(repeated[0].Data) {
+		t.Fatal("nondeterministic inline Go generation")
+	}
+	write(t, root, "behavior_test.go", `package fixture
+import "testing"
+func TestInline(t *testing.T) {
+ for _,tt := range []struct{node Node; want int}{
+  {Node{2,3},12}, {Node{-1,3},-1}, {Node{0,0},7},
+ } {
+  got,ok := Rewrite(tt.node)
+  if !ok || got != tt.want { t.Fatalf("%+v: got %d,%v",tt,got,ok) }
+ }
+}`)
+	runUnionFixture(t, root, "TestInline")
+}
+
+const inlineGoHost = `package fixture
+import numbers "strconv"
+type Node struct { A, B int }
+type Signature func(Node) (int, bool)
+func decimal(n int) string { return numbers.Itoa(n) }
+`
+
+const inlineGoRules = `rewrite (Node (A: left, B: right))
+  | go! { left >= 0 }
+  , let total = go! { left + right }
+  = go! {
+      // braces } stay inside Go
+      hyruleImport0 := total
+      text := ` + "`raw }\n  text`" + `
+      if text == "" || '}' == '{' { return 0 }
+      result, err := numbers.Atoi(numbers.Itoa(hyruleImport0))
+      if err != nil { return 0 }
+      { left := 7; result += left }
+      return result
+    }
+
+rewrite _ = go! { -1 }
+`
+
+func TestInlineGoDiagnostics(t *testing.T) {
+	cases := []struct{ name, body, want string }{
+		{"wrong result", `go! { "wrong" }`, "cannot use"},
+		{"missing return", `go! { n := 1; _ = n }`, "missing return"},
+		{"unknown name", `go! { missing }`, "undefined"},
+		{"multiple results", `go! { numbers.Atoi("1") }`, "multiple-value"},
+		{"unknown import", `go! { missingpkg.Value }`, "undefined"},
+		{"generated names unavailable", `go! { harg0 }`, "undefined"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := fixture(t)
+			write(t, root, "bindings.go", inlineGoHost)
+			write(t, root, "input.rules", "rewrite input = "+tc.body+"\n")
+			c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = c.Compile(context.Background(), "")
+			if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "input.rules:") {
+				t.Fatalf("want source-located %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestInlineGoWhereCannotSeeGuardLocals(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", inlineGoHost)
+	write(t, root, "input.rules", `rewrite input
+  | let later = 1
+  = answer
+  where
+    answer = go! { later }
+`)
+	c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.Compile(context.Background(), "")
+	if err == nil || !strings.Contains(err.Error(), "undefined: later") {
+		t.Fatalf("where leaked a guard local: %v", err)
+	}
+}

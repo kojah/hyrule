@@ -41,6 +41,7 @@ classify (inputs value)
 
 func TestEquationLayoutAndEscapes(t *testing.T) {
 	good := []string{
+		"rewrite value\n  | go!{let}\n  = go!{require}\n",
 		"rewrite value = do\n  require ready value\n  require value > 0\n  value\n<|> 0\n",
 		"rewrite `require` = `require`\n",
 		"host\n  Match?\n@Escaped\nrewrite (Match `Match`) = `Match`\n",
@@ -58,6 +59,8 @@ func TestEquationLayoutAndEscapes(t *testing.T) {
 		}
 	}
 	for _, source := range []string{
+		"rewrite value = go! { value\n",
+		"rewrite (go! { 1 }) = 0\n",
 		"rewrite value = require ready value\n",
 		"rewrite value = do\n  require ready value\n",
 		"rewrite value = do\n  require ready value\n    else false -> decline\n  value\n<|> 0\n",

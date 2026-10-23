@@ -51,7 +51,7 @@ comparison = sum, [ ( "==" | "!=" | "<" | "<=" | ">" | ">=" ), sum ] ;
 sum = product, { ( "+" | "-" ), product } ;
 product = application, { ( "*" | "/" | "%" ), application } ;
 application = atom, { atom }, [ "with", namedArguments ] ;
-atom = path | "^", path | literal | "_" | name, "@", atom
+atom = inlineGo | path | "^", path | literal | "_" | name, "@", atom
      | "not", atom
      | "if", disjunction, "then", expression, "else", expression
      | "(", expression, ")" | namedArguments | "(", ")"
@@ -76,3 +76,8 @@ literal = [ "-" ], ( integer | float ) | string | "true" | "false" | "nil" ;
 (* Lexical terminals use Unicode identifier letters/digits, Go numeric and
    quoted string literal spelling, and backtick-escaped identifiers. Negative
    numeric literals are a '-' followed by a numeric token. No raw strings. *)
+
+(* Go braces are balanced outside Go strings, rune literals and comments.
+   The body is opaque to Hyrule layout and parsed/type-checked as Go later.
+   Inline Go is an expression only, never a matcher pattern. *)
+inlineGo = "go", "!", "{", goBody, "}" ;
