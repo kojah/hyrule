@@ -89,45 +89,6 @@ targets:
 	}
 }
 
-func TestLegacyMigrationPreservesQueryFallback(t *testing.T) {
-	// Old spelling is intentional: only the migration API accepts it.
-	legacy := `signature total fallback outputs true;
- query ask; build fallback;
- rule First: inputs $value $host
- => query ask $host $value select true => outputs false
- <|> pure outputs (fallback $host);`
-	migrated, err := hyrule.Migrate("input.rules", []byte(legacy), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := hyrule.Format("input.rules", []byte(legacy)); err == nil {
-		t.Fatal("production formatter accepted legacy syntax")
-	}
-	again, err := hyrule.Format("input.rules", migrated)
-	if err != nil || string(again) != string(migrated) {
-		t.Fatalf("migration not canonical: %v", err)
-	}
-	root := fixture(t)
-	write(t, root, "bindings.go", `package fixture
- type Host struct {Calls int}
- type Signature func(bool,*Host)bool
- func ask(h *Host,value bool)bool{h.Calls++;return value}
- func fallback(h *Host)bool{h.Calls++;return true}
- `)
-	write(t, root, "input.rules", string(migrated))
-	c, a := compile(t, root)
-	if err := c.Publish(a, false); err != nil {
-		t.Fatal(err)
-	}
-	write(t, root, "behavior_test.go", `package fixture
- import "testing"
- func TestMigration(t *testing.T){for _,v:=range []bool{true,false}{
- h:=&Host{};got:=Rewrite(v,h);wantCalls:=2;if v {wantCalls=1}
- if got==v || h.Calls!=wantCalls{t.Fatalf("input %v: %v calls %d",v,got,h.Calls)}
- }}`)
-	runUnionFixture(t, root, "TestMigration")
-}
-
 func TestCaseFormattingPreservesFollowingCommentsOnce(t *testing.T) {
 	source := []byte("rewrite value =\n  case ask value of\n    true -> 1\n    false -> 0\n\n// Next rule.\n// Keep this evidence.\n@Next\nrewrite _ = 2\n")
 	first, err := hyrule.Format("comments.rules", source)

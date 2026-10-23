@@ -17,7 +17,7 @@ type parser struct {
 	family   string
 }
 
-// Parse reads equation syntax only. Legacy files must be explicitly migrated.
+// Parse reads equation syntax only.
 func Parse(name string, input io.Reader) (*File, error) {
 	tokens, err := lex(name, input)
 	if err != nil {

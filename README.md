@@ -259,16 +259,13 @@ functions use typed locals and direct branches, without runtime graphs, capture
 maps, boxing or reflection. Go is the only implemented backend. See
 [decision-graph measurements](DECISION_GRAPH.md) for the original benchmark scope.
 
-## Commands, configuration and migration
+## Commands and configuration
 
 ```sh
 go run ./tools/hyrule/cmd/hyrule check
 go run ./tools/hyrule/cmd/hyrule generate
 go run ./tools/hyrule/cmd/hyrule generate --check
 go run ./tools/hyrule/cmd/hyrule fmt --write path/to/pass.rules
-go run ./tools/hyrule/cmd/hyrule migrate --config hyrule.yaml
-go run ./tools/hyrule/cmd/hyrule migrate --config hyrule.yaml --write
-scripts/migrate-hyrule.sh /path/to/lockdoc /path/to/gohawk
 ```
 
 On Xenia prefix direct Go workloads with `agent-test`; Make targets already use
@@ -276,13 +273,6 @@ it. `check` validates without publication. `generate --check` checks freshness.
 Both accept `--config`, `--target`, `--format text|json`. `fmt FILE` prints one file;
 `--write FILES...` replaces files and `--check FILES...` checks canonical spelling.
 Formatting retains comments, moving internal comments to declaration boundaries.
-
-Migration imports the retired syntax into an AST and prints equation syntax.
-Configured migration uses each target's complete declarations, checks every
-converted file before writing, and rejects conflicting conversions of a shared
-file. The old parser exists only in `internal/legacy`, never as a production
-fallback. Already-converted sources are canonicalized. Conversion is not proof
-of behavioral equivalence; retain relevant public compiler and host regressions.
 
 Version 1 YAML declares explicit rule paths, package, binding file, signature,
 function and output. Paths remain inside the config directory; no globs/includes.
@@ -304,5 +294,5 @@ Run `make generate-go` before raw Go commands in a fresh checkout.
 Field-complete representation maintenance (snapshots, read-only views, keys,
 visitors and transforms) is not a semantic decision and belongs to
 [Boiler](../boiler/README.md), not to Hyrule schemas.
-The public library provides `Load`, `Compile`, `Publish`, `Format`, `Migrate` and
-configured `MigrateRules`; the CLI is an adapter over those APIs.
+The public library provides `Load`, `Compile`, `Publish` and `Format`; the CLI is
+an adapter over those APIs.

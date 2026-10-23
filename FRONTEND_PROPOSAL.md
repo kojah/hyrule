@@ -3,7 +3,7 @@
 Status: implemented, with Lockdoc and GoHawk rules migrated. The production parser
 uses equations. This document records the design rationale; the maintained
 [grammar](grammar.ebnf), [layout specification](LAYOUT.md) and [README](README.md)
-define current syntax. The legacy parser is retained only for the migration command.
+define current syntax. The legacy parser and migration command have since been removed.
 
 The direction is **compact pattern equations first, indentation for actual
 sequences and branches**. Keep `do` and `<|>`. Use whitespace application, guards
