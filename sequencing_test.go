@@ -49,21 +49,28 @@ rewrite (inputs input n host) = outputs (mark host 100) 6
 `
 
 func TestDoSequencingAndAlternatives(t *testing.T) {
-	for _, mode := range []string{"total", "partial"} {
+	for _, mode := range []string{"total", "partial", "total-require", "partial-require"} {
 		t.Run(mode, func(t *testing.T) {
 			root := fixture(t)
 			host := replaceFixture(t, nativeHost, `return name!="skip"`, `return name!="skip" && h.Offset.Value != -1`)
 			host += `func mark(h *Host,n int)int{h.Calls=append(h.Calls,"mark");return n}`
 			rules := doRules
-			if mode == "partial" {
+			if strings.HasPrefix(mode, "partial") {
 				host = replaceFixture(t, host, "(int, int)", "(int, int, bool)")
 				rules = replaceFixture(t, rules, `signature total = outputs 0 (-1)
 `, `signature partial
 `)
 			}
+			if strings.HasSuffix(mode, "-require") {
+				rules = replaceFixture(t, rules, "true <- ready host \"ok\"\n      else\n        false -> decline",
+					"require ready host \"ok\"\n    require n >= 0")
+			}
 			formatted, err := hyrule.Format("input.rules", []byte(rules))
 			if err != nil {
 				t.Fatal(err)
+			}
+			if strings.HasSuffix(mode, "-require") && !strings.Contains(string(formatted), "require ready host") {
+				t.Fatalf("formatter lost require spelling:\n%s", formatted)
 			}
 			again, err := hyrule.Format("input.rules", formatted)
 			if err != nil || string(again) != string(formatted) {
@@ -79,7 +86,7 @@ func TestDoSequencingAndAlternatives(t *testing.T) {
 				t.Fatal(err)
 			}
 			invoke, failure := "a,b:=Rewrite(nil,tt.n,h);ok:=tt.ok", "-1"
-			if mode == "partial" {
+			if strings.HasPrefix(mode, "partial") {
 				invoke, failure = "a,b,ok:=Rewrite(nil,tt.n,h)", "0"
 			}
 			write(t, root, "behavior_test.go", `package fixture
@@ -106,6 +113,7 @@ func TestBehavior(t *testing.T){
 
 func TestDoDiagnostics(t *testing.T) {
 	for _, tc := range []struct{ name, old, replacement, want string }{
+		{"require non-Boolean", "true <- ready host \"ok\"\n      else\n        false -> decline", "require 1", "pure decision requires a bool"},
 		{"missing outcome", "        Disproven() -> decline\n", "", "missing Disproven"},
 		{"duplicate outcome", "Disproven() -> decline", "Proven -> decline\n        Disproven() -> decline", "duplicate decision variant"},
 		{"refinement", "Proven (reason: first)", "Proven (reason: 7)", "fresh captures"},
@@ -316,5 +324,26 @@ func TestDoExpressionElseRequiresBooleanPattern(t *testing.T) {
 				t.Fatalf("want Boolean-only expression else error, got %v", err)
 			}
 		})
+	}
+}
+
+func TestRequireNeedsChoice(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", nativeHost)
+	write(t, root, "input.rules", `signature total = outputs 0 (-1)
+host
+  ready! = Ready
+rewrite (inputs _ n host) =
+  do
+    require ready host "ok"
+    outputs n 1
+`)
+	c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.Compile(context.Background(), "")
+	if err == nil || !strings.Contains(err.Error(), "decline requires an enclosing ordered alternative") {
+		t.Fatalf("want require choice context error, got %v", err)
 	}
 }

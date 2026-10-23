@@ -277,11 +277,18 @@ host
 
 resolve request =
   do
-    true <- ready request
-      else false -> decline
+    require ready request
     plan request
   <|> conservative request
 ```
+
+A `require expression` step inside `do` evaluates a Boolean query or pure
+Boolean expression once. True continues to the next step; false declines the
+current strategy. It is shorthand for `true <- expression` with
+`else false -> decline`, and requires an enclosing non-final `<|>`
+alternative. It does not retry another rule or undo earlier query effects.
+It has no `else` clause; use an explicit binding or `case` for other outcomes.
+A `do` block still needs a final result after its requirements.
 
 Queries execute once when reached, after a rule commits. A pattern bind explicitly
 handles other outcomes in `else` arms; a whole-result bind needs no else. A `do`

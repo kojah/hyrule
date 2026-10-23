@@ -46,6 +46,25 @@ func (p *parser) doBlock(start token) *Expr {
 	var steps []*Expr
 	var terminal *Expr
 	for !p.end() && p.peek().indent == level {
+		if p.take("require") {
+			if len(steps)+p.depth >= maxDepth {
+				p.fail("do sequencing exceeds nesting limit")
+				break
+			}
+			start := p.tokens[p.index-1]
+			call := p.expression(level, false, orRank)
+			steps = append(steps, &Expr{
+				Position: start.Position, Kind: Query, Sequential: true, Require: true,
+				Args: []*Expr{call},
+				Arms: []DecisionArm{
+					{Pattern: &Expr{Position: start.Position, Kind: Literal, Name: "true"}},
+					{Pattern: &Expr{Position: start.Position, Kind: Literal, Name: "false"},
+						Result: &Expr{Position: start.Position, Kind: Decline}},
+				},
+			})
+			p.skipLines()
+			continue
+		}
 		// Both bind patterns and terminal values share application syntax. A '|'
 		// inside parentheses is parsed as a pattern only when the line binds.
 		bind := p.hasOnLine("<-")

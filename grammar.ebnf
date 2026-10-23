@@ -38,11 +38,12 @@ where = "where", ( whereBinding | INDENT, whereBinding,
         { NEWLINE, whereBinding }, DEDENT ) ;
 whereBinding = name, "=", expression ;
 expression = strategy, { "<|>", strategy } ;
-strategy = "do", INDENT, { binding, NEWLINE }, expression, DEDENT
+strategy = "do", INDENT, { ( binding | requirement ), NEWLINE }, expression, DEDENT
          | "case", application, "of", INDENT, arm, { NEWLINE, arm }, DEDENT
          | "decline" | disjunction ;
 disjunction = conjunction, { "||", conjunction } ;
 conjunction = comparison, { "&&", comparison } ;
+requirement = "require", disjunction ;
 binding = patternExpression, "<-", application,
           [ INDENT, "else", ( arm | expression | INDENT, arm, { NEWLINE, arm }, DEDENT ), DEDENT ] ;
 arm = patternExpression, "->", expression ;

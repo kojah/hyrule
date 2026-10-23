@@ -125,7 +125,7 @@ func (p *parser) application(base int, pattern bool) *Expr {
 func (p *parser) atomStart() bool {
 	t := p.peek()
 	switch t.text {
-	case "of", "else", "with", "let", "do", "case", "decline", "if", "then", "not", "where":
+	case "of", "else", "with", "let", "require", "do", "case", "decline", "if", "then", "not", "where":
 		return false
 	}
 	return t.kind == scanner.Ident || t.kind == scanner.RawString || t.kind == scanner.Int || t.kind == scanner.Float || t.kind == scanner.String ||
@@ -161,6 +161,8 @@ func (p *parser) atom(base int, pattern bool) *Expr {
 	t := p.peek()
 	x := &Expr{Position: t.Position}
 	switch {
+	case p.take("require"):
+		p.fail("require is only allowed as a do step")
 	case !pattern && p.take("do"):
 		return p.doBlock(t)
 	case !pattern && p.take("case"):
@@ -239,7 +241,7 @@ func (p *parser) named(base int, pattern bool) []*Expr {
 // identifierText is used by the formatter to retain keyword captures.
 func identifierText(name string) string {
 	switch name {
-	case "do", "case", "of", "else", "decline", "with", "let", "otherwise", "true", "false", "nil",
+	case "require", "do", "case", "of", "else", "decline", "with", "let", "otherwise", "true", "false", "nil",
 		"if", "then", "not", "where":
 		return "`" + name + "`"
 	}

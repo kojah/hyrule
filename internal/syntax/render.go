@@ -129,6 +129,11 @@ func renderDo(x *Expr, indent int) string {
 	value := "do"
 	step := x.Args[0]
 	for step.Kind == Query && step.Sequential {
+		if step.Require {
+			value += "\n" + pad + "  require " + render(step.Args[0], indent+2)
+			step = step.Arms[0].Result
+			continue
+		}
 		value += "\n" + pad + "  " + render(step.Arms[0].Pattern, indent+2) + " <- " + render(step.Args[0], indent+2)
 		if len(step.Arms) > 1 {
 			value += "\n" + pad + "    else"

@@ -71,6 +71,8 @@ type Expr struct {
 	Unparenthesized bool
 	// Sequential marks a query produced by a do binding, preserving its formatting.
 	Sequential bool
+	// Require preserves the Boolean check shorthand for a declining do step.
+	Require bool
 	// ExpressionElse preserves a Boolean do step's single-expression else.
 	ExpressionElse bool
 	// Rest marks a list pattern whose final element matches the remaining suffix.

@@ -16,6 +16,9 @@ subsequent siblings align with it. A smaller indentation closes the block.
 A greater indentation continues a statement or begins an explicitly introduced
 child block. There are no braces or semicolons as alternative block delimiters.
 
+`require expression` is a standalone step aligned with other bindings inside
+a `do` block; it does not introduce a block or take an `else` clause.
+
 Equations may continue on indented lines. Guard bars belong to the equation;
 comma-separated guard qualifiers preserve written evaluation order. A `where`
 block follows the last alternative on an indented line; its bindings align with
