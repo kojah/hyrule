@@ -191,7 +191,7 @@ func (e *resolver) patternGuard(clause semantic.Clause) error {
 	}
 	output := e.cursor.Evaluate(&matchir.Evaluation{Kind: matchir.ForeignEvaluation, Type: e.tables.typeID(typ), Expression: e.storeValue(value)})
 	e.serial = max(e.serial, int(output))
-	e.remember(fmt.Sprintf("#%d", output), capture{id: output, typ: typ})
+	e.captures[fmt.Sprintf("#%d", output)] = capture{id: output, typ: typ}
 	return e.pattern(clause.Pattern, output, typ)
 }
 

@@ -526,39 +526,6 @@ Boiler, not to Hyrule schemas.
 The public library provides `Load`, `Compile`, `Publish` and `Format`; the CLI is
 an adapter over those APIs.
 
-## Readable, checked-in output
-
-Generated Go is intended to be read, reviewed and debugged. The compiler preserves
-capture and parameter names, chooses names within each lexical scope, and avoids
-collisions with Go keywords, imports and host declarations. Native APIs retain
-their declared signatures. Structural extraction omits unused fields; simple
-conditions use Go's short-circuit operators. Local output cleanup removes
-redundant copies and result carriers when their storage cannot be observed.
-
-These changes preserve first-match precedence, query order, captured read
-snapshots, typed assignment conversions and invalid-domain handling. A temporary
-remains when removing it could change those contracts. Embedded Go blocks retain
-their own scopes; only proven expression-only wrappers are simplified.
-
-Each file records the compiler release and a regeneration command relative to
-its configuration directory. Rule comments retain labels and source files without
-line numbers, so moving a labeled rule does not churn the generated output.
-Use explicit `@Labels` for rules whose names should survive source reorganization.
-
-Consumers may check generated `.go` files into Git. Their normal builds and
-`go install` then need only Go and the consumer's runtime dependencies, provided
-all required generated files are committed. Keep Hyrule in a separate pinned
-tool module when its Go version is newer than the consumer's supported version.
-CI should run `generate --check` before regenerating files to detect stale output.
-Hyrule's own generated examples remain local build artifacts.
-
-The small reviewed goldens in `testdata/readability` cover records, native APIs,
-and ordered queries. When output intentionally changes, regenerate the examples,
-run `go test -run 'TestReadable(Output|NativeQueries)$' -update-readability`,
-and review the corresponding `.golden` changes alongside the emitter change.
-On Xenia, prefix that command with `agent-test`. Behavioral regressions cover the semantic constraints as well;
-matching a golden is not evidence of semantic preservation by itself.
-
 ## Module and consumer integration
 
 The module is `github.com/kojah/hyrule`; the CLI is `cmd/hyrule`.

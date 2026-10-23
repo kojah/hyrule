@@ -154,7 +154,7 @@ func (e *resolver) resolveQuery(x *semantic.Expr, expected types.Type, inChoice 
 		}
 	}
 	if x.Name != "" {
-		e.remember(x.Name, capture{q.Capture, typ})
+		e.captures[x.Name] = capture{q.Capture, typ}
 	}
 	if err := e.resolveOutcomes(x, q, typ, expected, inChoice, boolean); err != nil {
 		return nil, err
@@ -235,7 +235,7 @@ func (e *resolver) resolveWholeQuery(x *semantic.Expr, expected types.Type, inCh
 	if _, exists := e.captures[pattern.Name]; exists || strings.Contains(pattern.Name, ".") || pattern.Bind != "" || pattern.Field != "" {
 		return nil, e.fail(pattern, "whole-result query binding requires a fresh capture")
 	}
-	e.remember(pattern.Name, capture{q.Capture, typ})
+	e.captures[pattern.Name] = capture{q.Capture, typ}
 	q.Next, err = e.resolveResult(x.Arms[0].Result, expected, inChoice)
 	return result, err
 }
@@ -290,7 +290,7 @@ func (e *resolver) resolveOutcomes(x *semantic.Expr, q *valueir.QueryPlan, typ, 
 				e.serial++
 				id := matchir.ValueID(e.serial)
 				field := variant.fields[indices[i]]
-				e.remember(arg.Name, capture{id, field.Type()})
+				e.captures[arg.Name] = capture{id, field.Type()}
 				outcome.Captures = append(outcome.Captures, valueir.FieldCapture{Field: matchir.FieldID(indices[i]), Value: id})
 			}
 		}

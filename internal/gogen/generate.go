@@ -4,10 +4,9 @@ package gogen
 
 import (
 	"fmt"
-	"github.com/kojah/hyrule/internal/goclean"
 	"github.com/kojah/hyrule/internal/goplan"
 	"github.com/kojah/hyrule/internal/hostapi"
-	"github.com/kojah/hyrule/internal/matchir"
+	"go/format"
 	"go/types"
 	"sort"
 	"strings"
@@ -26,22 +25,14 @@ type emitter struct {
 	established *goplan.Variant
 	serial      int
 	storage     int
-	used        map[matchir.ValueID]bool
-	native      *goplan.Native
-	inFallback  bool
-	helperNames map[string]string
 	out         strings.Builder
 }
 
 // Generate emits a resolved recognizer.
 func Generate(program *goplan.Program) ([]byte, error) {
 	h := program.Host
-	if program.Native != nil {
-		h.Function = program.Native.Function
-	}
 	sig := h.Signature
-	e := emitter{host: &h, tables: program.Tables, records: program.Records, unions: program.Unions, serial: program.Serial, native: program.Native, used: liveValues(program.Root, program.Tables.Expressions)}
-	e.assignValidatorNames()
+	e := emitter{host: &h, tables: program.Tables, records: program.Records, unions: program.Unions, serial: program.Serial}
 	output := h.TypeName(sig.Results().At(0).Type())
 	if h.Declare != "" {
 		function := h.Function
@@ -51,38 +42,31 @@ func Generate(program *goplan.Program) ([]byte, error) {
 		fmt.Fprintf(&e.out, "// %s is the API of %s, declared by its rule signature.\ntype %s func(%s) (%s)\n",
 			h.Declare, function, h.Declare, e.tupleText(h.Declared.Params()), e.tupleText(h.Declared.Results()))
 	}
-	if program.Native != nil {
-		e.emitSignature(program.Native)
-	} else {
-		var params []string
-		for i := 0; i < sig.Params().Len(); i++ {
-			params = append(params, fmt.Sprintf("harg%d %s", i, h.TypeName(sig.Params().At(i).Type())))
-		}
-		fmt.Fprintf(&e.out, "// %s applies rules in source order; false means no rule matched.\nfunc %s(%s) (%s, bool) {\n",
-			h.Function, h.Function, strings.Join(params, ", "), output)
+	var params []string
+	for i := 0; i < sig.Params().Len(); i++ {
+		params = append(params, fmt.Sprintf("harg%d %s", i, h.TypeName(sig.Params().At(i).Type())))
 	}
-
-	if program.Native != nil {
-		for index := range program.Native.Original.Params().Len() {
-			if validation := e.validation(program.Native.Original.Params().At(index).Type(), fmt.Sprintf("hparam%d", index)); validation != "" {
-				fmt.Fprintf(&e.out, "if !%s { %s }\n", validation, e.failure())
-			}
+	fmt.Fprintf(&e.out, "// %s applies rules in source order; false means no rule matched.\nfunc %s(%s) (%s, bool) {\n",
+		h.Function, h.Function, strings.Join(params, ", "), output)
+	if record := e.recordFor(sig.Params().At(0).Type()); record != nil {
+		if validation := e.validation(record.Type, "harg0"); validation != "" {
+			fmt.Fprintf(&e.out, "if !%s { var zero %s; return zero,false }\n", validation, output)
 		}
-	} else if validation := e.validation(sig.Params().At(0).Type(), "harg0"); validation != "" {
-		fmt.Fprintf(&e.out, "if !%s { %s }\n", validation, e.failure())
 	}
-
 	if err := e.emitDecisions(program.Root, nil); err != nil {
 		return nil, err
 	}
 	if !e.decisionReturns(program.Root) {
-		e.out.WriteString(e.failure())
+		fmt.Fprintf(&e.out, "var zero %s; return zero, false\n", output)
 	}
 	e.out.WriteString("}\n")
 	e.emitValidators()
-	return renderSource(&h, e.out.String(), nameSuggestions(program))
+	if program.Native != nil {
+		e.emitNativeAPI(program.Native)
+	}
+	return renderSource(&h, e.out.String())
 }
-func renderSource(h *Host, body string, suggestions map[string]string) ([]byte, error) {
+func renderSource(h *Host, body string) ([]byte, error) {
 	var source strings.Builder
 	source.WriteString(Header)
 	fmt.Fprintf(&source, "\npackage %s\n", h.Package.Name())
@@ -101,13 +85,12 @@ func renderSource(h *Host, body string, suggestions map[string]string) ([]byte, 
 		fmt.Fprintf(&source, "import %s %q\n", h.Imports[path], path)
 	}
 	source.WriteString(body)
-	reserved := append(h.Package.Scope().Names(), types.Universe.Names()...)
-	for _, name := range h.Imports {
-		reserved = append(reserved, name)
-	}
-	result, err := goclean.Source([]byte(source.String()), suggestions, reserved)
+	result, err := format.Source([]byte(source.String()))
 	if err != nil {
 		return nil, fmt.Errorf("format generated code: %w", err)
+	}
+	if strings.Count(string(result), "\n") > 500 {
+		return nil, fmt.Errorf("generated file exceeds 500 lines; split the target")
 	}
 	return result, nil
 }

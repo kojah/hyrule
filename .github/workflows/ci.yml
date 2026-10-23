@@ -11,4 +11,4 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make build generated-check vet
-      - run: go test -race -p=1 -parallel=4 ./... ./testdata/decisionbench
+      - run: go test -race -p=1 -parallel=4 ./...

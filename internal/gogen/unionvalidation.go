@@ -8,11 +8,11 @@ import (
 )
 
 func (e *emitter) validator(union *goplan.Union) string {
-	return e.helperNames[fmt.Sprintf("union:%d", union.Schema.ID)]
+	return fmt.Sprintf("hyrule%sUnion%dValid", e.host.Function, union.Schema.ID)
 }
 
 func (e *emitter) recordValidator(record *goplan.Record) string {
-	return e.helperNames[fmt.Sprintf("record:%d", record.Schema.ID)]
+	return fmt.Sprintf("hyrule%sRecord%dValid", e.host.Function, record.Schema.ID)
 }
 
 func (e *emitter) validation(typ types.Type, value string) string {
@@ -63,7 +63,7 @@ func (e *emitter) emitValidators() {
 		e.out.WriteString("}\nreturn false\n}\n")
 	}
 	for _, record := range e.records {
-		if record.View || e.native != nil && types.Identical(record.Type, e.native.Input) {
+		if record.View {
 			continue
 		}
 		checked := e.recordChecks(record, "value")

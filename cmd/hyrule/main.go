@@ -21,16 +21,9 @@ func main() {
 }
 func run(ctx context.Context, args []string, out, stderr io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: hyrule {check|generate|fmt|version} [options]")
+		return fmt.Errorf("usage: hyrule {check|generate|fmt} [options]")
 	}
 	cmd := args[0]
-	if cmd == "version" {
-		if len(args) != 1 {
-			return fmt.Errorf("version takes no arguments")
-		}
-		fmt.Fprintln(out, hyrule.Version)
-		return nil
-	}
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	if cmd == "fmt" {

@@ -14,7 +14,7 @@ func (e *emitter) emitDispatch(node *matchir.Node) error {
 		fmt.Fprintf(&e.out, "case %s:\n", variant.Tag.Name())
 		e.established = variant
 		if validation := e.activeValidation(variant, valueName(node.Input)); validation != "" {
-			fmt.Fprintf(&e.out, "if !(%s) { %s }\n", validation, e.failure())
+			fmt.Fprintf(&e.out, "if !(%s) { var zero %s; return zero,false }\n", validation, e.host.TypeName(e.host.Signature.Results().At(0).Type()))
 		}
 		if err := e.emitDecisions(alternative.Next, nil); err != nil {
 			return err
@@ -34,9 +34,6 @@ func (e *emitter) emitVariant(node *matchir.Node) error {
 		fmt.Fprintf(&e.out, "if %s.%s == %s {\n", valueName(node.Input), union.Tag.Name(), variant.Tag.Name())
 	}
 	for index, field := range variant.Fields {
-		if !e.used[node.Outputs[index]] {
-			continue
-		}
 		fmt.Fprintf(&e.out, "%s := %s.%s\n_ = %s\n", valueName(node.Outputs[index]), valueName(node.Input), field.Name(), valueName(node.Outputs[index]))
 	}
 	if err := e.emitDecisions(node.Next, node.Fallback); err != nil {
