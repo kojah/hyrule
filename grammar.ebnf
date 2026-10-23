@@ -2,9 +2,7 @@
    logical statements; INDENT/DEDENT describe block boundaries, not characters.
    Names are resolved after parsing against all files belonging to a target. *)
 file = { declaration, NEWLINE }, EOF ;
-declaration = host | schema | implementers | pattern | signature | equation ;
-(* Closes the concrete types derived views may assert from an interface. *)
-implementers = "implementers", storageType, "=", storageType, { ",", storageType } ;
+declaration = host | schema | pattern | function | equation ;
 host = "host", INDENT, hostBinding, { NEWLINE, hostBinding }, DEDENT ;
 hostBinding = name, [ "?" | "!" ], { name }, [ "=", application ] ;
 (* A type may omit "= hostType" when the Go type has the same name. A type
@@ -19,12 +17,17 @@ field = name, [ ":", storage ] ;
 storage = path | integer ;
 variant = name, [ "(", field, { ",", field }, ")" ], [ "=", path ] ;
 pattern = "pattern", name, { name }, "=", patternExpression ;
-(* Declared types infer the generated Go signature; without a mode they keep
-   the implicit func(Input[, Host]) (Output, bool) API. *)
-signature = "signature", ( "partial", [ signatureTypes ]
-                         | "total", [ signatureTypes ], "=", expression
-                         | signatureTypes ) ;
-signatureTypes = parameters, "->", parameters ;
+(* Functions may infer their API from a Go binding. Plain fn preserves the
+   implicit API; partial/total select native parameter/result lists. *)
+function = [ "partial" | "total" ], "fn", name,
+           [ "(", functionParameters, ")", [ "->", parameters ] ],
+           [ INDENT, ( "fallback", expression, [ NEWLINE, functionBody ] | functionBody ), DEDENT ] ;
+functionParameters = functionParameter, { ",", functionParameter } ;
+functionParameter = name, [ ":", goType ] ;
+functionBody = expression | "match", name, INDENT, functionArm,
+               { NEWLINE, functionArm }, DEDENT ;
+functionArm = [ "@", name, NEWLINE ], patternExpression,
+              [ "when", qualifier, { ",", qualifier } ], "->", expression, [ where ] ;
 parameters = parameter, { ",", parameter } ;
 parameter = [ name, ":" ], goType ;
 goType = "*", goType | "[", "]", goType | "map", "[", goType, "]", goType

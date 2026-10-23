@@ -25,17 +25,14 @@ func Print(file *File) []byte {
 			out.WriteByte('\n')
 		}
 		switch {
+		case item.Function != nil:
+			printFunction(&out, item.Function)
 		case item.Binding != nil:
 			printBinding(&out, item.Binding, continuedHost)
 		case item.Record != nil:
 			printRecord(&out, item.Record)
 		case item.Union != nil:
 			printUnion(&out, item.Union)
-		case item.API != nil:
-			printAPI(&out, item.API)
-		case item.Implementers != nil:
-			printComments(&out, item.Implementers.Comments)
-			out.WriteString("implementers " + item.Implementers.Interface + " = " + strings.Join(item.Implementers.Types, ", ") + "\n")
 		case item.Pattern != nil:
 			printPattern(&out, item.Pattern)
 		case item.Rule != nil:
@@ -135,24 +132,6 @@ func printUnion(out *strings.Builder, item *Union) {
 		}
 		out.WriteByte('\n')
 	}
-
-}
-
-func printAPI(out *strings.Builder, item *API) {
-
-	api := item
-	printComments(out, api.Comments)
-	out.WriteString("signature")
-	if api.Mode != "" {
-		out.WriteString(" " + api.Mode)
-	}
-	if len(api.Inputs) > 0 {
-		out.WriteString(" " + paramsText(api.Inputs) + " -> " + paramsText(api.Outputs))
-	}
-	if api.Fallback != nil {
-		out.WriteString(" = " + render(api.Fallback, 0))
-	}
-	out.WriteByte('\n')
 
 }
 

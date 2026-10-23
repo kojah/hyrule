@@ -38,7 +38,7 @@ func Split(n int) (int, int, bool) { return n, n, true }
 func Positive(n int) bool { return n > 0 }
 `
 
-const usefulnessPrelude = `signature Input -> int
+const usefulnessPrelude = `fn rewrite(arg0: Input) -> int
 
 host
   Split? = Split
@@ -285,7 +285,7 @@ type Event struct { Kind Tag; Capacity ChannelCapacity; Ready bool; Link *Link; 
 func Positive(n int) bool { return n > 0 }
 `
 
-const coverageSchema = `signature Event -> int
+const coverageSchema = `fn rewrite(arg0: Event) -> int
 
 host
   Positive = Positive

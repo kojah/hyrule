@@ -12,7 +12,8 @@ import (
 // Main matches nil inputs, which the behavior tests pass, so Later stays
 // reachable for other inputs while showing that a committed result never
 // retries a later equation.
-const doRules = `signature total = outputs 0 (-1)
+const doRules = `total fn rewrite(input)
+  fallback outputs 0 (-1)
 
 host
   ask! = Ask
@@ -57,8 +58,9 @@ func TestDoSequencingAndAlternatives(t *testing.T) {
 			rules := doRules
 			if strings.HasPrefix(mode, "partial") {
 				host = replaceFixture(t, host, "(int, int)", "(int, int, bool)")
-				rules = replaceFixture(t, rules, `signature total = outputs 0 (-1)
-`, `signature partial
+				rules = replaceFixture(t, rules, `total fn rewrite(input)
+  fallback outputs 0 (-1)
+`, `partial fn rewrite(input)
 `)
 			}
 			if strings.HasSuffix(mode, "-require") {
@@ -256,7 +258,8 @@ func Gate(h *Host,n,stage int)Flag {
  h.Calls=append(h.Calls,[]string{"first","second","last"}[stage])
  return Flag(n & (1<<stage) != 0)
 }`
-	rules := `signature total = outputs 0 (-1)
+	rules := `total fn rewrite(input)
+  fallback outputs 0 (-1)
 
 host
   gate! = Gate
@@ -330,7 +333,8 @@ func TestDoExpressionElseRequiresBooleanPattern(t *testing.T) {
 func TestRequireNeedsChoice(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", nativeHost)
-	write(t, root, "input.rules", `signature total = outputs 0 (-1)
+	write(t, root, "input.rules", `total fn rewrite(input)
+  fallback outputs 0 (-1)
 host
   ready! = Ready
 rewrite (inputs _ n host) =

@@ -1,3 +1,6 @@
+> Historical proposal. Current function-header syntax is documented in README.md;
+> standalone signature declarations shown below are retired.
+
 # A Haskell-inspired Hyrule frontend
 
 Status: implemented, with Lockdoc and GoHawk rules migrated. The production parser

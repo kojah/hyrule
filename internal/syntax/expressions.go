@@ -125,7 +125,7 @@ func (p *parser) application(base int, pattern bool) *Expr {
 func (p *parser) atomStart() bool {
 	t := p.peek()
 	switch t.text {
-	case "of", "else", "with", "let", "require", "do", "case", "decline", "if", "then", "not", "where":
+	case "of", "else", "with", "let", "require", "do", "case", "decline", "if", "then", "not", "where", "when":
 		return false
 	}
 	return t.kind == inlineGoToken || t.kind == scanner.Ident || t.kind == scanner.RawString || t.kind == scanner.Int || t.kind == scanner.Float || t.kind == scanner.String ||
@@ -248,7 +248,7 @@ func (p *parser) named(base int, pattern bool) []*Expr {
 func identifierText(name string) string {
 	switch name {
 	case "require", "do", "case", "of", "else", "decline", "with", "let", "otherwise", "true", "false", "nil",
-		"if", "then", "not", "where":
+		"if", "then", "not", "where", "when":
 		return "`" + name + "`"
 	}
 	return strings.TrimSpace(name)

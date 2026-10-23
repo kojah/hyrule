@@ -23,7 +23,8 @@ const (Yes Kind = iota; No; Unknown)
 func Ready(h *Host, name string) bool { h.Calls=append(h.Calls,"ready"); return name!="skip" }
 func Ask(h *Host,n,offset int)(Kind,int) { h.Calls=append(h.Calls,"ask");return Kind(n),offset+7 }
 `
-const nativeRules = `signature total = outputs 0 (-1)
+const nativeRules = `total fn rewrite(input)
+  fallback outputs 0 (-1)
 
 view Entry = *goast.Ident
   name: Name
@@ -60,8 +61,9 @@ func TestNativeHostInterfaces(t *testing.T) {
 			host, rules := nativeHost, nativeRules
 			if mode == "partial" {
 				host = replaceFixture(t, host, "(int, int)", "(int, int, bool)")
-				rules = replaceFixture(t, rules, `signature total = outputs 0 (-1)
-`, `signature partial
+				rules = replaceFixture(t, rules, `total fn rewrite(input)
+  fallback outputs 0 (-1)
+`, `partial fn rewrite(input)
 `)
 			}
 			formatted, err := hyrule.Format("input.rules", []byte(rules))
@@ -147,7 +149,8 @@ func TestNativeParametersAreNotQueryOutcomes(t *testing.T) {
  const (Yes Kind=iota;No)
  type Signature func(Kind,int) int
  `)
-	write(t, root, "input.rules", `signature total = outputs (-1)
+	write(t, root, "input.rules", `total fn rewrite(input)
+  fallback outputs (-1)
 
 type Proof = (Kind, int)
   tag 0
@@ -188,7 +191,8 @@ func TestNativeBooleanResultIsData(t *testing.T) {
  type Signature func(bool,*Host) bool
  func Observe(host *Host,value bool)bool{host.Calls++;return !value}
  `)
-	write(t, root, "input.rules", `signature total = outputs false
+	write(t, root, "input.rules", `total fn rewrite(input)
+  fallback outputs false
 
 host
   observe! value = Observe host value
@@ -220,7 +224,7 @@ func TestNativeExplicitReceiverMethods(t *testing.T) {
  func(h *Host) ready(n int)bool{h.Calls++;return n>0}
  func(h Host) adjusted(n int)int{return n+h.Offset}
  `)
-	write(t, root, "input.rules", `signature partial
+	write(t, root, "input.rules", `partial fn rewrite(input)
 
 host
   ready! n = Host.ready host n
@@ -258,7 +262,7 @@ func TestNativeWholeViewCaptureKeepsConcreteTypeAndIdentity(t *testing.T) {
  var Calls int
  func valid(node *goast.Ident)bool{Calls++;return node.Name!=""}
  `)
-	write(t, root, "input.rules", `signature partial
+	write(t, root, "input.rules", `partial fn rewrite(input)
 
 view Entry = *goast.Ident
   name: Name

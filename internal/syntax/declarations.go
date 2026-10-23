@@ -12,18 +12,10 @@ func (p *parser) declaration(file *File, comments []string) {
 		p.hostDeclarations(file, comments)
 	case p.at("type") || p.at("view") || p.at("exhaustive"):
 		p.schema(file, comments)
-	case p.take("implementers"):
-		closed := &Implementers{Position: pos, Interface: p.hostType(), Comments: comments}
-		p.expect("=")
-		closed.Types = append(closed.Types, p.hostType())
-		for p.take(",") {
-			closed.Types = append(closed.Types, p.hostType())
-		}
-		file.Items = append(file.Items, Item{Implementers: closed})
-		p.lineEnd()
-	case p.take("signature"):
-		file.Items = append(file.Items, Item{API: p.signature(pos, comments)})
-		p.lineEnd()
+	case p.at("fn") || p.at("partial") || p.at("total"):
+		file.Items = append(file.Items, Item{Function: p.function(comments)})
+	case p.at("signature") || p.at("implementers"):
+		p.fail("signature and implementers declarations are retired; use fn and concrete type patterns")
 	case p.take("pattern"):
 		pattern := &Pattern{Position: pos, Name: p.name(), Comments: comments}
 		for !p.end() && !p.at("=") {
@@ -134,7 +126,7 @@ func (p *parser) equation(file *File, comments []string) {
 			rule.Continued = true
 		}
 		if p.take("|") {
-			rule.Clauses = p.qualifiers()
+			rule.Clauses = p.qualifiers(0)
 		} else if ordinal > 0 {
 			break
 		}
@@ -158,19 +150,19 @@ func (p *parser) equation(file *File, comments []string) {
 }
 
 // qualifiers reads one guard's comma-separated lets, pattern guards and guards.
-func (p *parser) qualifiers() []Clause {
+func (p *parser) qualifiers(base int) []Clause {
 	var clauses []Clause
 	for !p.end() {
-		p.continuation(0)
+		p.continuation(base)
 		clause := Clause{}
 		if p.take("let") {
 			clause.Name = p.name()
 			p.expect("=")
 		} else if p.clauseBinds() {
-			clause.Pattern = p.expression(0, true, 0)
+			clause.Pattern = p.expression(base, true, 0)
 			p.expect("<-")
 		}
-		clause.Value = p.expression(0, false, 0)
+		clause.Value = p.expression(base, false, 0)
 		if clause.Name != "" || clause.Pattern != nil {
 			clauses = append(clauses, clause)
 		} else if !clause.Value.Bare || clause.Value.Name != "otherwise" {
@@ -206,7 +198,7 @@ func (p *parser) clauseBinds() bool {
 			if nesting == 0 {
 				return true
 			}
-		case ",", "=":
+		case ",", "=", "->":
 			if nesting == 0 {
 				return false
 			}

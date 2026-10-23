@@ -9,7 +9,8 @@ import (
 	"github.com/kojah/lockdoc/tools/hyrule"
 )
 
-const alternativesRules = `signature total = outputs 0 (-1)
+const alternativesRules = `total fn rewrite(input)
+  fallback outputs 0 (-1)
 
 view Entry = *goast.Ident
   name: Name
@@ -51,8 +52,9 @@ func mark(h *Host,n int)int{h.Calls=append(h.Calls,"mark");return n}
 			rules := alternativesRules
 			if mode == "partial" {
 				host = replaceFixture(t, host, "(int, int)", "(int, int, bool)")
-				rules = replaceFixture(t, rules, `signature total = outputs 0 (-1)
-`, `signature partial
+				rules = replaceFixture(t, rules, `total fn rewrite(input)
+  fallback outputs 0 (-1)
+`, `partial fn rewrite(input)
 `)
 			}
 			formatted, err := hyrule.Format("input.rules", []byte(rules))
@@ -209,7 +211,8 @@ type Host struct{ Calls int }
 func ask(h *Host,n int)bool{h.Calls++;return n==0}
 func fallback(h *Host)bool{h.Calls++;return true}
 `)
-	write(t, root, "input.rules", `signature total = outputs true
+	write(t, root, "input.rules", `total fn rewrite(input)
+  fallback outputs true
 
 host
   ask!
@@ -300,7 +303,8 @@ func TestNamedOrderedSelection(t *testing.T) {
 	root := fixture(t)
 	host := replaceFixture(t, nativeHost, "type Signature func(any, int, *Host) (int, int)", "type Signature func(int,*Host)(Kind,int)")
 	write(t, root, "bindings.go", host)
-	rules := `signature total = outputs ^No (-1)
+	rules := `total fn rewrite(input)
+  fallback outputs ^No (-1)
 
 host
   No
@@ -373,7 +377,8 @@ type Host struct{Calls int}
 func ask(h *Host,value bool)bool{h.Calls++;return value}
 func fallback(h *Host)bool{h.Calls++;return true}
 `)
-	write(t, root, "input.rules", `signature total = outputs true
+	write(t, root, "input.rules", `total fn rewrite(input)
+  fallback outputs true
 
 host
   ask!

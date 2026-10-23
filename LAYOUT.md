@@ -10,7 +10,7 @@ Blank lines and comments do not open or close blocks. `//` and `/* ... */`
 comments are preserved by formatting, including comments inside declarations.
 The formatter moves internal comments before their containing declaration.
 
-`host`, schema bodies, `do`, `case ... of`, and multiline
+`fn` bodies, `match` arms, `host`, schema bodies, `do`, `case ... of`, and multiline
 `else` introduce blocks. The first child establishes the block's indentation;
 subsequent siblings align with it. A smaller indentation closes the block.
 A greater indentation continues a statement or begins an explicitly introduced
@@ -48,3 +48,11 @@ inside the braces do not affect Hyrule indentation. The formatter preserves the
 body verbatim, including comments and raw string contents; generated Go is
 formatted normally. Hyrule resumes immediately after the closing brace.
 Embedded tokens count toward the file token limit.
+
+
+Function headers use `fn name(parameter: Type) -> Result`; `partial` and
+`total` precede `fn`. A total function puts `fallback expression` before its
+body. A `match parameter` body has aligned arms, each with an optional
+`@Label`, a pattern, optional `when` qualifiers, and `-> result`. The body
+may instead be a direct result expression. A header without a body can supply
+types for equation fragments in the target's other files.

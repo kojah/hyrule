@@ -93,20 +93,26 @@ func (s *patternSpace) pointerDomain(pointer types.Type) *usefulness.Domain {
 
 // interfaceDomain has nil and one head per dynamic type a view asserts. Other
 // dynamic types and typed nil pointers may occur, so the residual remains.
-// The closed implementer set names witnesses; it does not complete the domain.
+// Only asserted types name witnesses; the interface domain remains open.
 func (s *patternSpace) interfaceDomain(iface types.Type) *usefulness.Domain {
 	return s.domain("interface:"+types.TypeString(iface, nil), func() *usefulness.Domain {
 		domain := &usefulness.Domain{Residual: usefulness.Possible}
 		domain.Heads = []*usefulness.Head{{Key: "nil", Label: "nil", Empty: "nil", Domain: domain}}
-		for _, storage := range s.implementerTypes(iface) {
-			domain.Heads = append(domain.Heads, s.implementerHead(domain, storage))
-		}
+
 		return domain
 	})
 }
 
 func (s *patternSpace) implementer(iface, storage types.Type) *usefulness.Head {
-	return s.implementerHead(s.interfaceDomain(iface), storage)
+	domain := s.interfaceDomain(iface)
+	head := s.implementerHead(domain, storage)
+	for _, existing := range domain.Heads {
+		if existing == head {
+			return head
+		}
+	}
+	domain.Heads = append(domain.Heads, head)
+	return head
 }
 
 func (s *patternSpace) implementerHead(domain *usefulness.Domain, storage types.Type) *usefulness.Head {
@@ -119,37 +125,6 @@ func (s *patternSpace) implementerHead(domain *usefulness.Domain, storage types.
 		label := s.e.typeText(named)
 		return &usefulness.Head{Key: "view:" + text, Label: label, Empty: label + "()", Domain: domain}
 	})
-}
-
-// implementerTypes lists the storage types derived views may assert from an
-// interface: its declared implementer list, or by default the concrete types
-// of the interface's package, as the value or else the pointer type.
-func (s *patternSpace) implementerTypes(iface types.Type) []types.Type {
-	for _, set := range s.e.closed {
-		if types.Identical(set.iface, iface) {
-			return set.members
-		}
-	}
-	named, ok := types.Unalias(iface).(*types.Named)
-	if !ok || named.Obj().Pkg() == nil {
-		return nil
-	}
-	methods := iface.Underlying().(*types.Interface)
-	scope := named.Obj().Pkg().Scope()
-	var result []types.Type
-	for _, name := range scope.Names() {
-		object, ok := scope.Lookup(name).(*types.TypeName)
-		if !ok || object.IsAlias() || types.IsInterface(object.Type()) || genericStorage(object.Type()) {
-			continue
-		}
-		for _, storage := range []types.Type{object.Type(), types.NewPointer(object.Type())} {
-			if types.Implements(storage, methods) {
-				result = append(result, storage)
-				break
-			}
-		}
-	}
-	return result
 }
 
 // basicDomain holds literal and typed-constant values of a basic type.

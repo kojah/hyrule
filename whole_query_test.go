@@ -8,7 +8,8 @@ import (
 	"github.com/kojah/lockdoc/tools/hyrule"
 )
 
-const wholeQueryRules = `signature total = outputs 0 (-1)
+const wholeQueryRules = `total fn rewrite(input)
+  fallback outputs 0 (-1)
 
 host
   advance!

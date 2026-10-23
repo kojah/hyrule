@@ -5,29 +5,6 @@ import (
 	"text/scanner"
 )
 
-// signature parses "signature [partial | total] [inputs -> outputs] [= fallback]".
-// A signature without a mode must declare its types; total needs a fallback.
-func (p *parser) signature(pos Position, comments []string) *API {
-	api := &API{Position: pos, Comments: comments}
-	if p.at("partial") || p.at("total") {
-		api.Mode = p.next().text
-	}
-	if !p.end() && !p.at("\n") && !p.at("=") {
-		api.Inputs = p.parameters()
-		p.continuation(0)
-		p.expect("->")
-		api.Outputs = p.parameters()
-	}
-	if api.Mode == "" && len(api.Inputs) == 0 {
-		p.fail("expected partial, total or declared signature types")
-	}
-	if api.Mode == "total" {
-		p.expect("=")
-		api.Fallback = p.expression(0, false, 0)
-	}
-	return api
-}
-
 // parameters reads a comma-separated list of optionally named Go types, which
 // may continue on more deeply indented lines.
 func (p *parser) parameters() []Param {

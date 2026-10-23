@@ -15,7 +15,8 @@ import (
 // Haskell's evaluation order: && and || short-circuit, if evaluates one branch,
 // a pattern guard falls through on mismatch, and a where binding is evaluated
 // only where it is used.
-const languageRules = `signature total = outputs 0
+const languageRules = `total fn rewrite(input)
+  fallback outputs 0
 
 view First = *A
   n: N

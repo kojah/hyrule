@@ -1,7 +1,7 @@
 # Native Go host interfaces
 
 Hyrule uses existing Go signatures, fields and query results directly. Host code
-owns searches, mutable state and ownership. Without a `signature` declaration,
+owns searches, mutable state and ownership. Without function-header type annotations,
 the implicit API remains `func(Input[, Host]) (Output, bool)`.
 
 ## Boolean and tuple query outcomes
@@ -77,8 +77,9 @@ without adding implicit state or changing their execution phase.
 Declare the parameter and result types with the failure contract:
 
 ```text
-signature total evidence: *Evidence, probe: Probe, instruction: Instruction,
-  obligation: Obligation -> Status, Reason = outputs statusUnknown reasonNone
+total fn classify(evidence: *Evidence, probe: Probe, instruction: Instruction,
+  obligation: Obligation) -> Status, Reason
+  fallback outputs statusUnknown reasonNone
 ```
 
 Alternatively declare a named function type directly in the configured binding
@@ -89,7 +90,8 @@ type Signature func(*Evidence, Probe, Instruction, Obligation) (Status, Reason)
 ```
 
 ```text
-signature total = outputs statusUnknown reasonNone
+total fn classify
+  fallback outputs statusUnknown reasonNone
 
 classify (inputs evidence probe instruction obligation) =
   case transferred instruction obligation of
@@ -108,7 +110,7 @@ must construct outputs without rule captures or queries. It is distinct from
 retrying another equation after an effectful query. A final Boolean in a total
 API is ordinary data.
 
-`signature partial` instead reserves the last Go result as a success Boolean.
+`partial fn` instead reserves the last Go result as a success Boolean.
 Failure returns zero outputs and false; success returns outputs and true. At
 least one parameter and one output are required. Generic/variadic APIs are not
 supported. Native rules pass context explicitly; implicit host methods belong
@@ -148,16 +150,10 @@ pattern matches values of that type, pointers to it (nil never matches) and,
 on an interface input, the dynamic type that implements the interface: the
 value type when its method set suffices, otherwise the pointer type.
 
-An interface input has a closed implementer set: by default the concrete
-types declared in the interface's own package, so `ssa.Call` works on an
-`ssa.Instruction`. A rule file may instead list the set explicitly, which an
-interface from another package or `any` requires:
-
-```text
-implementers fmt.Stringer = *Name, Code
-```
-
-Naming a type outside the set is a compile error. At run time other dynamic
+An interface input accepts a concrete pattern type whenever its value or
+pointer type implements the interface. This includes foreign interfaces and
+`any`; no implementer list is required. An incompatible type is a compile error.
+Interfaces remain open for coverage checking. At run time other dynamic
 types, typed nil pointers and nil interfaces match no implementer, and
 consecutive implementer alternatives share one Go type switch. `Name()`
 with no fields tests the type alone. Pointer-typed fields match nested

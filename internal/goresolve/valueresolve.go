@@ -19,6 +19,18 @@ func (e *resolver) resolveValue(x *semantic.Expr, kind string, expected types.Ty
 		return nil, e.fail(x, "captures may only be bound in patterns")
 	}
 	switch x.Kind {
+	case semantic.InputParameter:
+		field, err := e.inputParameterField(x)
+		if err != nil {
+			return nil, err
+		}
+		base, err := e.resolveValue(x.Args[0], "build", nil)
+		if err != nil {
+			return nil, err
+		}
+		id := valueir.MemberID(len(e.tables.members))
+		e.tables.members = append(e.tables.members, field.Name())
+		return &valueir.Value{Kind: valueir.Project, Type: e.tables.typeID(field.Type()), Base: base, Member: id}, nil
 	case semantic.InlineGo:
 		return e.resolveInlineGo(x, expected)
 	case semantic.Variable:
@@ -240,4 +252,17 @@ func (e *resolver) inlineGo(x *semantic.Expr, expected types.Type) (*hostapi.Inl
 		return nil, e.fail(x, "go!: "+err.Error())
 	}
 	return inline, nil
+}
+
+// inputParameterField keeps the native input representation at the Go boundary.
+func (e *resolver) inputParameterField(x *semantic.Expr) (*types.Var, error) {
+	typ, err := e.expressionType(x.Args[0])
+	if err != nil {
+		return nil, err
+	}
+	product, ok := typ.Underlying().(*types.Struct)
+	if !ok || x.ParameterIndex < 0 || x.ParameterIndex >= product.NumFields() {
+		return nil, e.fail(x, "fn parameter is outside the Go input list")
+	}
+	return product.Field(x.ParameterIndex), nil
 }

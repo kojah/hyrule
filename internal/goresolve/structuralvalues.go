@@ -97,6 +97,24 @@ func (e *resolver) resolveResult(x *semantic.Expr, expected types.Type, inChoice
 		}
 		x = x.Args[0]
 	}
+	if e.functionAPI {
+		if output := e.recordNames["outputs"]; output != nil && types.Identical(expected, output.typ) && len(output.fields) == 1 {
+			explicit := x.Kind == semantic.Call && x.Name == "outputs"
+			if variant := e.constructors[x.Name]; x.Kind == semantic.Call && variant != nil && types.Identical(variant.union.typ, expected) {
+				explicit = true
+			}
+			if !explicit {
+				value, err := e.resolveValue(x, "build", output.fields[0].Type())
+				if err != nil {
+					return nil, err
+				}
+				result.Kind = valueir.Answer
+				result.Value = &valueir.Value{Kind: valueir.Product, Type: output.schema.Type, Record: output.schema,
+					Arguments: []valueir.Argument{{Value: value, Type: e.tables.typeID(output.fields[0].Type())}}}
+				return result, nil
+			}
+		}
+	}
 	value, err := e.resolveValue(x, "build", expected)
 	if err != nil {
 		return nil, err

@@ -18,6 +18,7 @@ type capture struct {
 	typ types.Type
 }
 type resolver struct {
+	functionAPI  bool
 	host         *Host
 	bindings     map[string]*semantic.Binding
 	captures     map[string]capture
@@ -31,7 +32,6 @@ type resolver struct {
 	constants    map[string]*boundConstant
 	records      []*boundRecord
 	recordNames  map[string]*boundRecord
-	closed       []closedSet
 }
 
 func Resolve(h Host, program *compiler.Program) (*goplan.Program, error) {
@@ -41,7 +41,7 @@ func Resolve(h Host, program *compiler.Program) (*goplan.Program, error) {
 		return nil, err
 	}
 	sig := h.Signature
-	e := resolver{host: &h, bindings: program.Bindings, constants: map[string]*boundConstant{}}
+	e := resolver{functionAPI: program.API != nil && program.API.Function, host: &h, bindings: program.Bindings, constants: map[string]*boundConstant{}}
 	if err := e.bindUnions(program.Unions); err != nil {
 		return nil, err
 	}
@@ -51,9 +51,7 @@ func Resolve(h Host, program *compiler.Program) (*goplan.Program, error) {
 	if native != nil {
 		e.bindNativeRecords(native)
 	}
-	if err := e.bindImplementers(program.Implementers); err != nil {
-		return nil, err
-	}
+
 	for _, binding := range program.BindingOrder {
 		object := e.host.Package.Scope().Lookup(binding.HostName)
 		if _, variable := object.(*types.Var); binding.Kind == "value" && variable {
@@ -70,7 +68,7 @@ func Resolve(h Host, program *compiler.Program) (*goplan.Program, error) {
 	}
 	rules, err := program.Expand(func(rule *semantic.Rule) error {
 		checker := resolver{host: e.host, bindings: e.bindings, constructors: e.constructors,
-			recordNames: e.recordNames, constants: e.constants, closed: e.closed, captures: map[string]capture{}, rule: rule.Name}
+			recordNames: e.recordNames, constants: e.constants, captures: map[string]capture{}, rule: rule.Name}
 		return checker.checkPattern(rule.Match, sig.Params().At(0).Type())
 	})
 	if err != nil {

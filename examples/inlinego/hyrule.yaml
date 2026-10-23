@@ -6,3 +6,9 @@ targets:
     bindings: bindings.go
     function: Rewrite
     out: hyrule_rewrite_gen.go
+  - name: resolve
+    package: .
+    rules: [resolve.rules]
+    bindings: bindings.go
+    function: Resolve
+    out: hyrule_resolve_gen.go

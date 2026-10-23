@@ -19,6 +19,12 @@ func untyped(typ types.Type) bool {
 func (e *resolver) expressionType(expression *semantic.Expr) (types.Type, error) {
 	expression = e.valueConstant(expression)
 	switch expression.Kind {
+	case semantic.InputParameter:
+		field, err := e.inputParameterField(expression)
+		if err != nil {
+			return nil, err
+		}
+		return field.Type(), nil
 	case semantic.InlineGo:
 		inline, err := e.inlineGo(expression, nil)
 		if err != nil {
@@ -124,7 +130,7 @@ func (e *resolver) prepareValue(expression *semantic.Expr, expected types.Type) 
 	// result. Do not lift work from those arms into the matching graph.
 	expression = e.valueConstant(expression)
 	switch expression.Kind {
-	case semantic.InlineGo, semantic.Query, semantic.OrderedAlternatives, semantic.Selection, semantic.Pure, semantic.Do, semantic.Decline, semantic.Conditional:
+	case semantic.InputParameter, semantic.InlineGo, semantic.Query, semantic.OrderedAlternatives, semantic.Selection, semantic.Pure, semantic.Do, semantic.Decline, semantic.Conditional:
 		return expression, nil
 	case semantic.Logic:
 		return e.prepareLazy(expression)

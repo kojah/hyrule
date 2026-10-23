@@ -16,6 +16,11 @@ import (
 // and copies every semantic value. The input remains usable by the formatter.
 // Equation where bindings are substituted at each use.
 func Lower(files []*syntax.File) ([]*semantic.File, error) {
+	var err error
+	files, err = functionFiles(files)
+	if err != nil {
+		return nil, err
+	}
 	constructors := map[string]bool{}
 	names := map[string]bool{}
 	for _, file := range files {
@@ -87,7 +92,7 @@ func (l lowering) expression(x *syntax.Expr) *semantic.Expr {
 		return substituted
 	}
 	result := &semantic.Expr{Position: position(x.Position), Kind: expressionKind(x.Kind), Name: x.Name, Bind: x.Bind, Field: x.Field,
-		Rest: x.Rest, Quoted: x.Quoted,
+		Rest: x.Rest, Quoted: x.Quoted, ParameterIndex: x.ParameterIndex,
 		BindResult: x.Sequential && len(x.Arms) > 0 && x.Arms[0].Pattern.Kind == syntax.Variable}
 	if x.Kind == syntax.InlineGo {
 		// Freeze lexical visibility here, including where's equation-only scope.
@@ -134,6 +139,8 @@ func (l lowering) expression(x *syntax.Expr) *semantic.Expr {
 
 func expressionKind(kind syntax.Kind) semantic.Kind {
 	switch kind {
+	case syntax.InputParameter:
+		return semantic.InputParameter
 	case syntax.InlineGo:
 		return semantic.InlineGo
 	case syntax.Call:
@@ -194,6 +201,11 @@ func (l lowering) item(item syntax.Item) semantic.Item {
 		l.captures = map[string]bool{}
 		l.capture(x.Match)
 		out.Rule = &semantic.Rule{Position: position(x.Position), Name: x.Name, Family: x.Family, Match: l.expression(x.Match)}
+		for _, clause := range x.Clauses {
+			if clause.Parameter {
+				l.captures[clause.Name] = true
+			}
+		}
 		l.where = l.bindWhere(x)
 		for _, clause := range x.Clauses {
 			lowered := semantic.Clause{Name: clause.Name, Value: l.expression(clause.Value)}
@@ -219,11 +231,8 @@ func (l lowering) item(item syntax.Item) semantic.Item {
 			out.Union.Variants = append(out.Union.Variants, &semantic.Variant{Position: position(v.Position), Name: v.Name, HostTag: v.GoTag, Fields: fields(v.Fields)})
 		}
 	}
-	if x := item.Implementers; x != nil {
-		out.Implementers = &semantic.Implementers{Position: position(x.Position), Interface: x.Interface, Types: slices.Clone(x.Types)}
-	}
 	if x := item.API; x != nil {
-		out.API = &semantic.API{Position: position(x.Position), Mode: x.Mode, Fallback: l.expression(x.Fallback),
+		out.API = &semantic.API{Position: position(x.Position), Mode: x.Mode, Function: x.Function, Fallback: l.expression(x.Fallback),
 			Inputs: params(x.Inputs), Outputs: params(x.Outputs)}
 	}
 	return out

@@ -12,7 +12,51 @@ Hyrule blocks have no braces or semicolons (embedded Go does). This is Haskell-i
 local decisions, without currying, lazy values, unrestricted recursion or loops in Hyrule itself.
 The explicit `go!` escape accepts ordinary Go expressions and statement blocks.
 
-## Equations and host bindings
+## Function declarations
+
+Types belong in the function header; arm captures and locals are inferred:
+
+```text
+fn rewrite(value: Request) -> Plan
+  match value
+    @Positive
+    Request(count: count) when count > 0 ->
+      go! { Plan{Count: count} }
+    _ ->
+      go! { Plan{} }
+```
+
+A body may instead be a direct expression, including `do`, `case` and
+strategy choice. `match` at the function boundary accepts structural patterns;
+`case` handles exhaustive query outcomes inside results.
+
+Plain `fn` retains the implicit `func(Input[, Host]) (Output, bool)` API.
+`partial fn` supports native parameter/result lists with a final success Boolean.
+`total fn` returns its declared results without a success flag and requires a
+fallback before the body:
+
+```text
+total fn classify(value: Request) -> Plan
+  fallback go! { Plan{} }
+  match value
+    Request(count: count) when count > 0 ->
+      go! { Plan{Count: count} }
+```
+
+For a single native output, result expressions can return that value directly;
+`outputs` remains available, and assembles multiple native results.
+`match inputs` matches the complete native parameter bundle using `inputs`
+patterns. Other match subjects must name a function parameter.
+
+A Go binding may supply the types: write `fn rewrite(value)`, or omit the
+parameter list entirely and use `match inputs`. The latter retains the Go
+binding's parameter/result names and exposes captures through the arm patterns.
+Use `partial fn` or `total fn` for multiple explicit parameters.
+A header without a body supplies API types for equation fragments in other
+files of the same target. Fragments keep the ordered equation form below.
+Standalone `signature` and `implementers` declarations are no longer accepted.
+
+## Equation fragments and host bindings
 
 ```text
 host
@@ -127,7 +171,7 @@ Use `go! { expression }` for a Go expression, or `go! { statements; return value
 for a result block. Existing Hyrule expression syntax remains available.
 
 ```text
-signature Request -> Plan
+fn rewrite(input: Request) -> Plan
 
 rewrite (Request (Text: text, A: a, B: b))
   | go! { a >= 0 && b >= 0 }
@@ -288,7 +332,7 @@ pattern definitions, and a target reports all of its findings together:
   (capacity: ChannelCapacity (Kind: UnboundedCapacity))`; `_` stands for values
   outside the listed ones, and omitted fields are unconstrained. An input that
   only guards, host matchers, accessors or repeated captures might cover is
-  reported as `unproven` rather than missing. `signature total` declares its own
+  reported as `unproven` rather than missing. `total fn` declares its own
   fallback and partial APIs return false, so neither requires coverage; `case`
   and `do` decisions are complete by construction.
 
@@ -304,8 +348,7 @@ as possibly matching anything:
 - Open domains leave a residual, so a fallback after all of their heads stays
   reachable: integer, float and string literals; typed Go constants, since Go
   admits other values of the type (the declared constants only name witnesses);
-  interface inputs, whose closed implementer set limits what patterns may name
-  but not what values hold, such as other dynamic types and typed nil pointers;
+  interface inputs, which remain open to other dynamic types and typed nil pointers;
   unions reached through views or host matchers, which are not validated; and
   host sequences, whose `Len` may be negative.
 - Opaque tests never cover or subsume other rows: guards and pattern guards (a
@@ -366,26 +409,21 @@ Declare the generated API's types in the rules, or a named function type
 directly in the configured binding file:
 
 ```text
-signature ssa.Instruction -> Copy
-signature Event, *Host -> []Effect
-signature partial value: ssa.Value, kind: Kind -> ImmediateKind
-signature total TransferRequest -> TransferPlan = outputs TransferMissing()
+fn rewrite(value: ssa.Instruction) -> Copy
+partial fn classify(value: ssa.Value, kind: Kind) -> ImmediateKind
+total fn transfer(request: TransferRequest) -> TransferPlan
+  fallback outputs TransferMissing()
 ```
 
 Types use Go syntax (`*T`, `[]T`, `map[K]V`, `pkg.T`, `pkg.T[A]`) with the
-binding file's import names. A signature without a mode keeps the implicit API
-`func(Input[, Host]) (Output, bool)`; `partial` appends the success Boolean;
-`total` returns the outputs alone. `name: T` names a native input or output
-field. With declared types the target's `signature:` setting is optional: when
-named and absent from the binding file, the generator declares that function
-type; when the binding file declares it, it must be identical. Without
-declared types, the binding file must declare the named signature. Native `signature partial`
-or `signature total = outputs ...` supports multiple parameters/results; see
-[host interfaces](HOST_INTERFACES.md). Generic/variadic signatures and hooks are
-unsupported. Imported names use the binding file's import aliases, then names
-other handwritten files of the package import unambiguously; dot imports are
-unsupported. Queries may return Boolean, struct-union or tuple
-outcomes. Ordinary pure functions return one value.
+binding file's import names. The target's YAML `signature:` setting remains
+optional when a header declares types; it names a Go function type, not a rule
+declaration. If both are present their types must agree. If annotations are
+omitted, the binding file supplies the signature. Generic/variadic generated
+APIs and hooks remain unsupported. Imported names use binding-file imports,
+then unambiguous imports from other handwritten files. Dot imports are
+unsupported. Queries may return Boolean, struct-union or tuple outcomes;
+ordinary pure functions return one value. See [host interfaces](HOST_INTERFACES.md).
 
 Matchers and guards must not mutate inputs, host state or externally observable
 state. Equal arguments against the same stable snapshot give equal answers.

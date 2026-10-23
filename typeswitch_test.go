@@ -10,7 +10,8 @@ import (
 // Consecutive concrete view assertions share one type switch. Alternatives of
 // one type keep source order, typed nil pointers never match, a non-view rule
 // still ends the run, and identical binding-free cases share a clause.
-const typeSwitchRules = `signature total = outputs 0
+const typeSwitchRules = `total fn rewrite(input)
+  fallback outputs 0
 
 view First = *A
   n: N

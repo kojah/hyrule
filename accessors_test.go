@@ -43,7 +43,7 @@ func TestAccessorProjections(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", accessorHost)
 	accessorConfig(t, root, accessorViews)
-	write(t, root, "input.rules", `signature Input -> string
+	write(t, root, "input.rules", `fn rewrite(arg0: Input) -> string
 
 @Exported
 rewrite (Input (Expr: ast.Ident (Name: name, IsExported(): true))) = name
@@ -91,7 +91,7 @@ func TestAccessorDiagnostics(t *testing.T) {
 			root := fixture(t)
 			write(t, root, "bindings.go", accessorHost)
 			accessorConfig(t, root, test.views)
-			write(t, root, "input.rules", "signature Input -> string\n\n@Check\nrewrite "+test.pattern+" = \"\"\n")
+			write(t, root, "input.rules", "fn rewrite(arg0: Input) -> string\n\n@Check\nrewrite "+test.pattern+" = \"\"\n")
 			expectUnionCompile(t, root, test.want)
 		})
 	}

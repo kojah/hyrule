@@ -32,7 +32,7 @@ type patternSpace struct {
 // reaches, and inputs of an exhaustive input union that no rule surely covers.
 func (e *resolver) checkUsefulness(rules []*semantic.Rule, input types.Type) error {
 	checker := &resolver{host: e.host, bindings: e.bindings, constructors: e.constructors, unions: e.unions,
-		records: e.records, recordNames: maps.Clone(e.recordNames), constants: maps.Clone(e.constants), closed: e.closed}
+		records: e.records, recordNames: maps.Clone(e.recordNames), constants: maps.Clone(e.constants)}
 	space := &patternSpace{e: checker, domains: map[string]*usefulness.Domain{}, heads: map[string]*usefulness.Head{},
 		fields: map[*usefulness.Head][]string{}, occurrences: map[*usefulness.Pattern][]string{}}
 	rows := make([]usefulness.Row, len(rules))

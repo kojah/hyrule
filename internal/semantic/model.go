@@ -53,11 +53,15 @@ const (
 	Conditional
 	// InlineGo carries an opaque Go expression or result block in Name.
 	InlineGo
+	// InputParameter projects a native input slot introduced by a fn header.
+	InputParameter
 )
 
 // Expr is a pattern or construction expression. Bind names an entire matched
 // operation; a variable without children binds or reuses an operand.
 type Expr struct {
+	// ParameterIndex is the zero-based slot for InputParameter.
+	ParameterIndex int
 	Position
 	Kind Kind
 	Name string
@@ -122,16 +126,6 @@ type Item struct {
 	Record  *Record
 	Rule    *Rule
 	API     *API
-	// Implementers closes an interface's implementer set for derived views.
-	Implementers *Implementers
-}
-
-// Implementers lists the concrete Go types derived views may assert from an
-// interface; without a list, types declared in the interface's package apply.
-type Implementers struct {
-	Position
-	Interface string
-	Types     []string
 }
 
 // File holds semantic declarations. Files combine in lexical filename
@@ -182,6 +176,8 @@ type Record struct {
 // Declared Inputs and Outputs let the generator infer the Go signature; an
 // empty Mode with declared types keeps the implicit func(Input[, Host]) API.
 type API struct {
+	// Function marks an API declared by a function header.
+	Function bool
 	Position
 	Mode            string
 	Inputs, Outputs []Param

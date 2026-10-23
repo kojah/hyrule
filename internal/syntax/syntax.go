@@ -52,11 +52,15 @@ const (
 	Conditional
 	// InlineGo carries an opaque Go expression or result block in Name.
 	InlineGo
+	// InputParameter projects a native input slot introduced by a fn header.
+	InputParameter
 )
 
 // Expr is a pattern or construction expression. Bind names an entire matched
 // operation; a variable without children binds or reuses an operand.
 type Expr struct {
+	// ParameterIndex is the zero-based slot for InputParameter.
+	ParameterIndex int
 	Position
 	Kind Kind
 	// Bare marks a name whose capture/constructor meaning needs target declarations.
@@ -114,9 +118,11 @@ type Rule struct {
 // local; a Pattern matches the pure Value (a pattern guard); otherwise Value
 // must establish a true Boolean guard.
 type Clause struct {
-	Name    string
-	Pattern *Expr
-	Value   *Expr
+	// Parameter marks an inferred function-parameter alias, visible to where.
+	Parameter bool
+	Name      string
+	Pattern   *Expr
+	Value     *Expr
 }
 
 // Pattern declares a reusable match with explicit, hygienic capture parameters.
@@ -130,23 +136,13 @@ type Pattern struct {
 
 // Item preserves declaration order for formatting.
 type Item struct {
-	Binding *Binding
-	Pattern *Pattern
-	Union   *Union
-	Record  *Record
-	Rule    *Rule
-	API     *API
-	// Implementers closes an interface's implementer set for derived views.
-	Implementers *Implementers
-}
-
-// Implementers lists the concrete types a derived view may assert from an
-// interface. Types use Go spelling with an optional pointer prefix.
-type Implementers struct {
-	Position
-	Interface string
-	Types     []string
-	Comments  []string
+	Function *Function
+	Binding  *Binding
+	Pattern  *Pattern
+	Union    *Union
+	Record   *Record
+	Rule     *Rule
+	API      *API
 }
 
 // File retains declarations and comments. Files combine in lexical filename
@@ -207,6 +203,8 @@ type Record struct {
 // An empty Mode with declared types keeps the implicit func(Input[, Host])
 // (Output, bool) API.
 type API struct {
+	// Function marks an API declared by a function header.
+	Function bool
 	Position
 	Mode            string
 	Inputs, Outputs []Param
@@ -218,4 +216,17 @@ type API struct {
 // Type is Go type syntax over the binding file's import names.
 type Param struct {
 	Name, Type string
+}
+
+// Function joins an API declaration to ordered match arms or a result.
+// Parameters may omit types when a Go binding supplies the API.
+type Function struct {
+	Position
+	Name       string
+	API        *API
+	Parameters []Param
+	Subject    string
+	Rules      []*Rule
+	Body       *Expr
+	Comments   []string
 }

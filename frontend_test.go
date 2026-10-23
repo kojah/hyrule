@@ -17,7 +17,8 @@ func TestEquationBranchesAndArithmetic(t *testing.T) {
  type Signature func(int) int
  func identity(n int)int{return n}
  `)
-	write(t, root, "input.rules", `signature total = outputs (-99)
+	write(t, root, "input.rules", `total fn rewrite(input)
+  fallback outputs (-99)
 host
   identity
 @classify

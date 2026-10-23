@@ -33,7 +33,7 @@ func nativeAPI(h *Host, api *semantic.API) (*nativeSignature, error) {
 	}
 	if !api.Native() {
 		if sig.Params().Len() > 2 || sig.Results().Len() != 2 || !types.Identical(sig.Results().At(1).Type(), types.Typ[types.Bool]) {
-			return nil, fmt.Errorf("signature must be func(Input[, Host]) (Output, bool); use signature partial or total fallback for a native API")
+			return nil, fmt.Errorf("signature must be func(Input[, Host]) (Output, bool); use partial fn or total fn with a fallback for a native API")
 		}
 		return nil, nil
 	}
@@ -56,7 +56,7 @@ func nativeAPI(h *Host, api *semantic.API) (*nativeSignature, error) {
 	// ordinary function arguments before any rule or query runs.
 	inputFields := make([]*types.Var, sig.Params().Len())
 	for i := range inputFields {
-		inputFields[i] = types.NewVar(token.NoPos, h.Package, fmt.Sprintf("P%d", i), sig.Params().At(i).Type())
+		inputFields[i] = types.NewField(token.NoPos, h.Package, fmt.Sprintf("P%d", i), sig.Params().At(i).Type(), false)
 	}
 	native := &nativeSignature{declaration: api, original: sig, function: h.Function,
 		input: types.NewStruct(inputFields, nil), output: hostapi.Tuple(h.Package, types.NewTuple(results...))}

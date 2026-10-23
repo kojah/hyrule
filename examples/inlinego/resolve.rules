@@ -1,0 +1,8 @@
+total fn resolve(request: Request) -> Plan
+  fallback go! { Plan{Text: "invalid"} }
+  match request
+    @ResolvePositive
+    Request (A: a, B: b)
+      when a >= 0
+      , b >= 0 ->
+      go! { Plan{Text: request.Text, Total: a + b} }

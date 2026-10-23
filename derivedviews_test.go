@@ -47,7 +47,7 @@ func TestDerivedViews(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", derivedViewHost)
 	derivedViewConfig(t, root)
-	write(t, root, "nodes.rules", `signature Node -> int
+	write(t, root, "nodes.rules", `fn rewrite(arg0: Node) -> int
 
 @Leaf
 rewrite (Leaf (Value: value)) = value
@@ -61,7 +61,7 @@ host
 @Pair
 rewrite pair@(Pair ()) = Width pair
 `)
-	write(t, root, "snapshots.rules", `signature Snapshot -> int
+	write(t, root, "snapshots.rules", `fn rewrite(arg0: Snapshot) -> int
 
 @Next
 rewrite (Snapshot (Next: Snapshot (Fill: fill))) = fill * 100
@@ -116,8 +116,8 @@ func TestDerivedViewDiagnostics(t *testing.T) {
 			root := fixture(t)
 			write(t, root, "bindings.go", derivedViewHost)
 			derivedViewConfig(t, root)
-			write(t, root, "nodes.rules", "signature Node -> int\n\nrewrite _ = 0\n")
-			write(t, root, "snapshots.rules", "signature Snapshot -> int\n\n@Check\nrewrite "+test.pattern+" = 0\n")
+			write(t, root, "nodes.rules", "fn rewrite(arg0: Node) -> int\n\nrewrite _ = 0\n")
+			write(t, root, "snapshots.rules", "fn rewrite(arg0: Snapshot) -> int\n\n@Check\nrewrite "+test.pattern+" = 0\n")
 			expectUnionCompile(t, root, test.want)
 		})
 	}
@@ -146,7 +146,7 @@ func TestTypedConstantPatterns(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", constantHost)
 	signatureConfig(t, root, "")
-	write(t, root, "input.rules", `signature Request -> int
+	write(t, root, "input.rules", `fn rewrite(arg0: Request) -> int
 
 @FiniteSend
 rewrite (Request (Action: Send, Capacity: FiniteCapacity (Bound: bound))) = bound
@@ -193,7 +193,7 @@ func TestTypedConstantDiagnostics(t *testing.T) {
 			root := fixture(t)
 			write(t, root, "bindings.go", constantHost)
 			signatureConfig(t, root, "")
-			write(t, root, "input.rules", "signature Request -> int\n\n@Check\nrewrite "+test.pattern+" = 0\n")
+			write(t, root, "input.rules", "fn rewrite(arg0: Request) -> int\n\n@Check\nrewrite "+test.pattern+" = 0\n")
 			expectUnionCompile(t, root, test.want)
 		})
 	}
@@ -210,16 +210,14 @@ type Other struct{}
 func (Other) String() string { return "other" }
 `
 
-// Interface inputs assert members of a closed implementer set. A foreign
-// interface or any needs an explicit list; other dynamic types and typed nil
-// fall through, and consecutive alternatives share one type switch.
-func TestClosedImplementerSets(t *testing.T) {
+// Interface patterns admit compatible concrete types without a separate list.
+// Other dynamic types and typed nil fall through; adjacent alternatives share
+// one type switch.
+func TestInterfacePatternsWithoutImplementerLists(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", closedHost)
 	signatureConfig(t, root, "")
-	write(t, root, "input.rules", `signature fmt.Stringer -> string
-
-implementers fmt.Stringer = *Name, Code
+	write(t, root, "input.rules", `fn rewrite(arg0: fmt.Stringer) -> string
 
 @Name
 rewrite (Name (Text: text)) = text
@@ -246,26 +244,22 @@ func TestClosed(t *testing.T) {
  }
 }`)
 	runUnionFixture(t, root, "TestClosed")
-	if formatted, err := hyrule.Format("input.rules", []byte("implementers  fmt.Stringer =  *Name,Code\n\nrewrite x = x\n")); err != nil ||
-		!strings.HasPrefix(string(formatted), "implementers fmt.Stringer = *Name, Code\n") {
-		t.Fatalf("implementers formatting: %v\n%s", err, formatted)
-	}
 }
 
-func TestClosedImplementerDiagnostics(t *testing.T) {
-	for _, test := range []struct{ name, declaration, rule, want string }{
-		{"foreign interface needs a list", "", "(Name (Text: t)) = t", "not in the closed implementer set of fmt.Stringer"},
-		{"unlisted type", "implementers fmt.Stringer = *Name\n\n", "(Code ()) = \"\"", "not in the closed implementer set"},
-		{"not an implementer", "implementers fmt.Stringer = Name\n\n", "_ = \"\"", "not a concrete implementer"},
-		{"duplicate list", "implementers fmt.Stringer = Code\n\nimplementers fmt.Stringer = Other\n\n", "_ = \"\"", "duplicate implementers"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			root := fixture(t)
-			write(t, root, "bindings.go", closedHost)
-			signatureConfig(t, root, "")
-			write(t, root, "input.rules", "signature fmt.Stringer -> string\n\n"+test.declaration+"@Check\nrewrite "+test.rule+"\n")
-			expectUnionCompile(t, root, test.want)
-		})
+func TestInterfacePatternRejectsIncompatibleType(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", closedHost+"\ntype Plain struct{ Text string }\n")
+	signatureConfig(t, root, "")
+	write(t, root, "input.rules", `fn rewrite(value: fmt.Stringer) -> string
+  match value
+    Plain(Text: text) -> text
+`)
+	expectUnionCompile(t, root, "does not match input type")
+}
+
+func TestRetiredImplementersDeclaration(t *testing.T) {
+	if _, err := hyrule.Format("input.rules", []byte("implementers fmt.Stringer = Code\n")); err == nil {
+		t.Fatal("accepted retired implementers declaration")
 	}
 }
 
@@ -276,7 +270,7 @@ func TestPackageImportNames(t *testing.T) {
 	write(t, root, "bindings.go", "package fixture\n")
 	write(t, root, "other.go", "package fixture\nimport \"go/token\"\ntype Op struct{ Kind token.Token }\n")
 	signatureConfig(t, root, "")
-	write(t, root, "input.rules", "signature Op -> bool\n\n@Add\nrewrite (Op (Kind: token.ADD)) = true\n")
+	write(t, root, "input.rules", "fn rewrite(arg0: Op) -> bool\n\n@Add\nrewrite (Op (Kind: token.ADD)) = true\n")
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {
 		t.Fatal(err)
