@@ -267,11 +267,140 @@ rewrite (Input (Count: 1)) = 1
 	}
 }
 
-// Root dispatch validates the input union, so its declared variants are the
-// whole domain. A union reached through a
-// view is unvalidated: an undeclared tag still reaches a later fallback.
-func TestUnionReachability(t *testing.T) {
+const coverageHost = `package fixture
+type Tag uint8
+const (
+ ChannelTag Tag = iota
+ ClosedTag
+)
+type CapacityKind uint8
+const (
+ NilCapacity CapacityKind = iota
+ FiniteCapacity
+ UnboundedCapacity
+)
+type ChannelCapacity struct { Kind CapacityKind; Bound int }
+type Link struct { ID int }
+type Event struct { Kind Tag; Capacity ChannelCapacity; Ready bool; Link *Link; Items []int }
+func Positive(n int) bool { return n > 0 }
+`
+
+const coverageSchema = `signature Event -> int
+
+host
+  Positive = Positive
+
+exhaustive type Event = Event
+  tag Kind
+  Channel (capacity: Capacity, ready: Ready, link: Link, items: Items) = ChannelTag
+  Closed = ClosedTag
+
+@Closed
+rewrite Closed = 9
+
+`
+
+// An exhaustive input union must be covered by unguarded rules. Missing
+// inputs are reported with a witness; inputs covered only under guards or
+// host tests are reported as unproven rather than missing.
+func TestNonExhaustiveWitnesses(t *testing.T) {
 	for _, test := range []struct{ name, rules, want string }{
+		{"typed constant", `@Nil
+rewrite (Channel (capacity: NilCapacity ())) = 0
+
+@Finite
+rewrite (Channel (capacity: FiniteCapacity ())) = 1
+`, "non-exhaustive union Event: missing Channel (capacity: ChannelCapacity (Kind: UnboundedCapacity))"},
+		{"typed constants are open", `@Nil
+rewrite (Channel (capacity: NilCapacity ())) = 0
+
+@Finite
+rewrite (Channel (capacity: FiniteCapacity ())) = 1
+
+@Unbounded
+rewrite (Channel (capacity: UnboundedCapacity ())) = 2
+`, "missing Channel (capacity: ChannelCapacity (Kind: _))"},
+		{"Booleans", `@Ready
+rewrite (Channel (ready: true)) = 0
+
+@Waiting
+rewrite (Channel (ready: false)) = 1
+`, ""},
+		{"missing Boolean", `@Ready
+rewrite (Channel (ready: true, link: nil)) = 0
+
+@Waiting
+rewrite (Channel (ready: false)) = 1
+`, "missing Channel (ready: true, link: Link())"},
+		{"pointers", `@None
+rewrite (Channel (link: nil)) = 0
+
+@Some
+rewrite (Channel (link: Link ())) = 1
+`, ""},
+		{"lists", `@Empty
+rewrite (Channel (items: [])) = 0
+
+@One
+rewrite (Channel (items: [_])) = 1
+`, "missing Channel (items: [_, _, .._])"},
+		{"list rest", `@Empty
+rewrite (Channel (items: [])) = 0
+
+@More
+rewrite (Channel (items: [_, ..rest])) = 1
+`, ""},
+		{"literal", `@Zero
+rewrite (Channel (capacity: ChannelCapacity (Bound: 0))) = 0
+`, "missing Channel (capacity: ChannelCapacity (Bound: _))"},
+		{"guard", `@Positive
+rewrite (Channel (capacity: capacity))
+  | Positive capacity.Bound
+  = 0
+`, "non-exhaustive union Event: unproven Channel (guards, host matchers"},
+		{"repeated capture", `@Same
+rewrite (Channel (capacity: ChannelCapacity (Bound: bound, Kind: _), items: [bound])) = 0
+
+@Empty
+rewrite (Channel (items: [])) = 1
+
+@More
+rewrite (Channel (items: [_, _, .._])) = 2
+`, "unproven Channel (items: [_])"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := fixture(t)
+			write(t, root, "bindings.go", coverageHost)
+			signatureConfig(t, root, "")
+			write(t, root, "input.rules", coverageSchema+test.rules)
+			expectUnionCompile(t, root, test.want)
+		})
+	}
+}
+
+// Root dispatch validates the input union and its active union fields, so
+// their declared variants are the whole domain. A union reached through a
+// view is unvalidated: an undeclared tag still reaches a later fallback.
+func TestUnionReachabilityAndCoverage(t *testing.T) {
+	for _, test := range []struct{ name, rules, want string }{
+		{"nested union", `@Number
+rewrite Number = Empty()
+
+@Empty
+rewrite Empty = Empty()
+
+@Wrapped
+rewrite (Wrapped (atom: AtomNumber)) = Empty()
+`, "non-exhaustive union Value: missing Wrapped (atom: AtomEmpty)"},
+		{"nested or covers", `@Number
+rewrite Number = Empty()
+
+@Empty
+rewrite Empty = Empty()
+
+@Wrapped
+rewrite (Wrapped (atom: (AtomNumber | AtomEmpty))) = Empty()
+`, ""},
 		{"fallback after every variant", `@Number
 rewrite Number = Empty()
 

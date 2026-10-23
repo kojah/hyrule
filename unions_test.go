@@ -109,7 +109,7 @@ rewrite Number() = Empty()
 `, ""},
 		{"missing variant", unionSchema, `@One
 rewrite Number() = Empty()
-`, "missing unconditional variants Empty, Wrapped"},
+`, "non-exhaustive union Value: missing Empty, Wrapped"},
 		{"guard is not coverage", unionSchema, `host
   Positive = Positive
 
@@ -121,13 +121,13 @@ rewrite (Number (value: n))
 
 @Rest
 rewrite (Empty() | Wrapped()) = Empty()
-`, "missing unconditional variants Number"},
+`, "non-exhaustive union Value: unproven Number"},
 		{"literal is not coverage", unionSchema, `@One
 rewrite (Number (value: 1)) = Empty()
 
 @Rest
 rewrite (Empty() | Wrapped()) = Empty()
-`, "missing unconditional variants Number"},
+`, "non-exhaustive union Value: missing Number (value: _)"},
 		{"unconditional fallback", unionSchema, `@Any
 rewrite _ = Empty()
 `, ""},
@@ -139,7 +139,7 @@ rewrite _
   | Positive 1
   =
   Empty()
-`, "missing unconditional variants"},
+`, "non-exhaustive union Value: unproven Number, Empty, Wrapped"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)

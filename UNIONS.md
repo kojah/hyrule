@@ -94,16 +94,19 @@ Use `exhaustive type` instead of `type` to require input coverage. This is an
 explicit requirement because partial recognizers are useful. It applies to the
 target's input schema, not to every nested payload schema.
 
-Only an unguarded constructor with unrestricted fields proves that variant
-covered. Wildcards and distinct captures are unrestricted; literals, nested
-patterns, repeated captures and guards are conservative gaps. An unguarded
-whole-input wildcard/capture covers every declared variant. OR and reusable
-patterns are expanded before this check, so their proven coverage composes.
-Unknown tags are outside the closed domain and never count as a missing variant.
+Coverage is decided by the usefulness check described in the
+[README](README.md#unreachable-rules-and-coverage) over the unguarded rules, so
+nested constructors, literals, lists and OR alternatives compose:
+`Wrapped (atom: (AtomNumber | AtomEmpty))` covers `Wrapped` because root dispatch
+validates active union fields. Guards, host matchers, refutable accessors and
+repeated captures never prove coverage; inputs only they might cover are
+reported as `unproven`. Other gaps name a witness, such as
+`missing Wrapped (atom: AtomEmpty)`. Unknown tags are outside the closed domain
+and never count as a missing variant.
 
-This check does not prove reachability, payload constraints or arbitrary host
-guard tautologies. Unsupported proofs produce a missing-variant diagnostic
-rather than a false claim of exhaustiveness.
+This check does not prove payload constraints or arbitrary host guard
+tautologies. Unsupported proofs produce a diagnostic rather than a false claim
+of exhaustiveness.
 
 ## Portable graph
 

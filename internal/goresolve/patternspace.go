@@ -29,7 +29,7 @@ type patternSpace struct {
 }
 
 // checkUsefulness reports rules and written OR alternatives that no input
-// reaches.
+// reaches, and inputs of an exhaustive input union that no rule surely covers.
 func (e *resolver) checkUsefulness(rules []*semantic.Rule, input types.Type) error {
 	checker := &resolver{host: e.host, bindings: e.bindings, constructors: e.constructors, unions: e.unions,
 		records: e.records, recordNames: maps.Clone(e.recordNames), constants: maps.Clone(e.constants), closed: e.closed}
@@ -62,6 +62,11 @@ func (e *resolver) checkUsefulness(rules []*semantic.Rule, input types.Type) err
 		}
 		diagnostics = append(diagnostics, diagnostic)
 	}
+	if union := e.unionFor(input); union != nil && union.declaration.Exhaustive {
+		if diagnostic := space.coverage(union, rows); diagnostic != nil {
+			diagnostics = append(diagnostics, diagnostic)
+		}
+	}
 	if len(diagnostics) == 1 {
 		return diagnostics[0]
 	}
@@ -72,6 +77,35 @@ func (e *resolver) checkUsefulness(rules []*semantic.Rule, input types.Type) err
 // always evaluate; guards and pattern guards may fall through.
 func guarded(rule *semantic.Rule) bool {
 	return slices.ContainsFunc(rule.Clauses, func(clause semantic.Clause) bool { return clause.Name == "" })
+}
+
+// coverage checks every declared variant of an exhaustive input union. Root
+// dispatch rejects undeclared tags, so the variants are the whole domain.
+func (s *patternSpace) coverage(union *boundUnion, rows []usefulness.Row) error {
+	var missing, unproven []string
+	for _, head := range s.unionDomain(union, true).Heads {
+		gap, open := usefulness.Missing(rows, &usefulness.Pattern{Kind: usefulness.Constructor, Head: head, Args: wildcards(head.Arity)})
+		switch {
+		case !open:
+		case gap.Definite:
+			missing = append(missing, usefulness.Render(gap.Witness))
+		default:
+			unproven = append(unproven, usefulness.Render(gap.Witness))
+		}
+	}
+	if len(missing) == 0 && len(unproven) == 0 {
+		return nil
+	}
+	var parts []string
+	if len(missing) != 0 {
+		parts = append(parts, "missing "+strings.Join(missing, ", "))
+	}
+	if len(unproven) != 0 {
+		parts = append(parts, "unproven "+strings.Join(unproven, ", ")+
+			" (guards, host matchers, accessors and repeated captures are not coverage)")
+	}
+	message := "non-exhaustive union " + union.declaration.Name + ": " + strings.Join(parts, "; ")
+	return &semantic.Diagnostic{Position: union.declaration.Position, Message: message}
 }
 
 // pattern abstracts x at type t. Closed values are the root input and the

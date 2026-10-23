@@ -102,3 +102,31 @@ func deadAlternatives(group []Row, live []bool) []Finding {
 	}
 	return findings
 }
+
+// Gap is an input that no unguarded row surely matches.
+type Gap struct {
+	Witness *Pattern
+	// Definite is set when no row can match the witness, even guarded rows
+	// whose guards succeed or opaque tests that accept it.
+	Definite bool
+}
+
+// Missing reports whether rows leave an input matching query unmatched.
+// Query must not contain opaque tests.
+func Missing(rows []Row, query *Pattern) (Gap, bool) {
+	var strict, loose [][]*Pattern
+	for _, row := range rows {
+		loose = append(loose, []*Pattern{row.Pattern})
+		if !row.Guarded {
+			strict = append(strict, []*Pattern{row.Pattern})
+		}
+	}
+	witness, ok := newSolver(possibly).useful(strict, []*Pattern{query})
+	if !ok {
+		return Gap{}, false
+	}
+	if definite, ok := newSolver(surely).useful(loose, []*Pattern{query}); ok {
+		return Gap{Witness: definite[0], Definite: true}, true
+	}
+	return Gap{Witness: witness[0]}, true
+}

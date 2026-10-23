@@ -160,10 +160,10 @@ instead declares a closed variant domain. Constructors expose only active fields
 and zero inactive storage on construction. Whole-value copies retain existing
 storage. Include provenance explicitly where constructors must preserve it.
 
-`exhaustive type` requires conservative input-variant coverage. An unguarded
-unrestricted constructor or whole-input fallback proves coverage; guards,
-refinements and repeated captures do not. Query decisions independently require
-all outcomes. Undeclared runtime tags fail conservatively, even before catchalls.
+`exhaustive type` requires unguarded rules to cover every input variant; see
+[unreachable rules and coverage](#unreachable-rules-and-coverage). Query
+decisions independently require all outcomes. Undeclared runtime tags fail
+conservatively, even before catchalls.
 See [union contracts](UNIONS.md) and [native views/tuple schemas](HOST_INTERFACES.md).
 Patterns may also name Go types directly, `ChannelSnapshot (Fill: fill)`, as
 derived read-only views over exact Go field names, and typed Go constants by
@@ -218,23 +218,32 @@ indexing, and any type with `Len() int` and `At(int) E` value methods, such as
 returning the same type. Those methods are host matchers: they must be pure
 reads. A rest suffix aliases the input. A nil slice matches `[]`.
 
-## Unreachable rules
+## Unreachable rules and coverage
 
 Every target's equations are checked with the usefulness algorithm of Maranget,
 "Warnings for pattern matching" (JFP 2007), over the resolved, OR-expanded
 patterns. The checks report diagnostics only; they never change generated code.
-Hyrule has no warnings, so findings are compile errors, like unused pattern
-definitions, and a target reports all of its findings together.
+Hyrule has no warnings, so both findings are compile errors, like unused
+pattern definitions, and a target reports all of its findings together:
 
-An equation, guarded branch or OR alternative written in the rule is
-*unreachable* when earlier unguarded rules, and earlier alternatives of the same
-equation, match every input it matches:
-`rule Late: unreachable rule: rule First matches every input it matches`.
-Alternatives of reusable pattern definitions are judged only as part of the
-whole rule, since other uses may need them.
+- An equation, guarded branch or OR alternative written in the rule is
+  *unreachable* when earlier unguarded rules, and earlier alternatives of the
+  same equation, match every input it matches:
+  `rule Late: unreachable rule: rule First matches every input it matches`.
+  Alternatives of reusable pattern definitions are judged only as part of the
+  whole rule, since other uses may need them.
+- An `exhaustive type` input must be covered by unguarded rules. Each uncovered
+  variant is named with a witness, `non-exhaustive union Event: missing Channel
+  (capacity: ChannelCapacity (Kind: UnboundedCapacity))`; `_` stands for values
+  outside the listed ones, and omitted fields are unconstrained. An input that
+  only guards, host matchers, accessors or repeated captures might cover is
+  reported as `unproven` rather than missing. `signature total` declares its own
+  fallback and partial APIs return false, so neither requires coverage; `case`
+  and `do` decisions are complete by construction.
 
-The analysis is sound: it never reports a reachable rule. Patterns it cannot
-see through count as covering nothing and as possibly matching anything:
+The analysis is sound in both directions: it never reports a reachable rule or
+a covered input. Patterns it cannot see through count as covering nothing and
+as possibly matching anything:
 
 - Closed domains can be covered: Booleans; nil and non-nil pointers; products
   (records, and views over their own struct input); union variants where the
