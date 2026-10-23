@@ -1,0 +1,16 @@
+version: 1
+targets:
+  - name: lift
+    package: examples/pipeline
+    rules: [examples/pipeline/lift.rules]
+    bindings: examples/pipeline/bindings.go
+    signature: LiftSignature
+    function: Lift
+    out: examples/pipeline/hyrule_lift_gen.go
+  - name: lower
+    package: examples/pipeline
+    rules: [examples/pipeline/lower.rules]
+    bindings: examples/pipeline/bindings.go
+    signature: LowerSignature
+    function: Lower
+    out: examples/pipeline/hyrule_lower_gen.go

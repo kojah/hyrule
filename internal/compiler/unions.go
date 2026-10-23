@@ -1,6 +1,6 @@
 package compiler
 
-import "github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+import "github.com/kojah/hyrule/internal/semantic"
 
 func (program *Program) collectUnions() error {
 	names := map[string]struct{}{}

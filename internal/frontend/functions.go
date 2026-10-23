@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/hyrule/internal/syntax"
 )
 
 // functionFiles lowers function parameters and arm subjects to the existing

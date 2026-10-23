@@ -3,9 +3,9 @@
 package goplan
 
 import (
-	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/valueir"
+	"github.com/kojah/hyrule/internal/hostapi"
+	"github.com/kojah/hyrule/internal/matchir"
+	"github.com/kojah/hyrule/internal/valueir"
 	"go/types"
 )
 

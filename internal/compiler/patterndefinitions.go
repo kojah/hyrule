@@ -1,6 +1,6 @@
 package compiler
 
-import "github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+import "github.com/kojah/hyrule/internal/semantic"
 
 // validateDefinition checks the entire declaration graph, including unused
 // definitions, without expansion. Every capture is an explicit parameter.

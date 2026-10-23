@@ -1,6 +1,6 @@
 package compiler
 
-import "github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
+import "github.com/kojah/hyrule/internal/matchir"
 
 // Arithmetic resolves language operations independently of host callbacks.
 func Arithmetic(name string) (matchir.Arithmetic, bool) {

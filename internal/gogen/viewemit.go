@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/goplan"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
+	"github.com/kojah/hyrule/internal/goplan"
+	"github.com/kojah/hyrule/internal/matchir"
 )
 
 // viewFor returns inline extraction data when a match is a structural view.

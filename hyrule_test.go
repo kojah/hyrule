@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kojah/lockdoc/tools/hyrule"
+	"github.com/kojah/hyrule"
 )
 
 func write(t *testing.T, root, path, text string) {

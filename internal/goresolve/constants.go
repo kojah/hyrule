@@ -5,8 +5,8 @@ import (
 	"go/types"
 	"strings"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/matchir"
+	"github.com/kojah/hyrule/internal/semantic"
 )
 
 type boundConstant struct {

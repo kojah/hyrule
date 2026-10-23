@@ -5,9 +5,9 @@ import (
 	"go/types"
 	"strings"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
+	"github.com/kojah/hyrule/internal/hostapi"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/semantic"
 )
 
 // implicitView resolves a pattern that names a Go type without a view

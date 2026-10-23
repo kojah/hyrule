@@ -4,8 +4,8 @@ package gogen
 
 import (
 	"fmt"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/goplan"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
+	"github.com/kojah/hyrule/internal/goplan"
+	"github.com/kojah/hyrule/internal/hostapi"
 	"go/format"
 	"go/types"
 	"sort"

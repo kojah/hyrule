@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/gogen"
+	"github.com/kojah/hyrule/internal/gogen"
 )
 
 type ownedOutput struct {

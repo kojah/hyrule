@@ -3,7 +3,7 @@ package usefulness
 import (
 	"slices"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/semantic"
 )
 
 // Row is one OR-free rule expansion, in source order. Consecutive rows with

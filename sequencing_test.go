@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kojah/lockdoc/tools/hyrule"
+	"github.com/kojah/hyrule"
 )
 
 // Main matches nil inputs, which the behavior tests pass, so Later stays

@@ -2,9 +2,9 @@ package hyrule
 
 import (
 	"fmt"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/compiler"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/frontend"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
+	"github.com/kojah/hyrule/internal/compiler"
+	"github.com/kojah/hyrule/internal/frontend"
+	"github.com/kojah/hyrule/internal/hostapi"
 	"path/filepath"
 )
 

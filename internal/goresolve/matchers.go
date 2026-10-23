@@ -6,7 +6,7 @@ import (
 	"go/types"
 	"strings"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/semantic"
 )
 
 // matcher resolves child positions once for both contract checking and emission.

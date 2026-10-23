@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/kojah/lockdoc/tools/hyrule/examples/transitions"
+	"github.com/kojah/hyrule/examples/transitions"
 )
 
 func TestPlanPreservesUnknownAndSkipsUnneededQueries(t *testing.T) {

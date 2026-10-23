@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/syntax"
 )
 
 // Lower resolves names and lexical scopes across all input declarations

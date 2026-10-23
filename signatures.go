@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/semantic"
 	"golang.org/x/tools/go/packages"
 )
 

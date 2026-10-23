@@ -5,11 +5,11 @@ import (
 	"go/types"
 	"strings"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/compiler"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/valueir"
+	"github.com/kojah/hyrule/internal/compiler"
+	"github.com/kojah/hyrule/internal/hostapi"
+	"github.com/kojah/hyrule/internal/matchir"
+	"github.com/kojah/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/valueir"
 )
 
 // resolveValue performs name, schema and argument resolution before any value

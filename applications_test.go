@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kojah/lockdoc/tools/hyrule"
+	"github.com/kojah/hyrule"
 )
 
 func TestOptionalApplicationParentheses(t *testing.T) {

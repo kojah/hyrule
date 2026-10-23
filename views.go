@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
+	"github.com/kojah/hyrule/internal/hostapi"
 	"golang.org/x/tools/go/packages"
 )
 

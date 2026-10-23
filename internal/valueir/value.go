@@ -3,7 +3,7 @@
 // supply storage names for the opaque IDs and execute arguments in written order.
 package valueir
 
-import "github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
+import "github.com/kojah/hyrule/internal/matchir"
 
 // Kind identifies a value operation, independently of any surface syntax.
 type Kind uint8

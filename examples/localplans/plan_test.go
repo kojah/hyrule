@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/kojah/lockdoc/tools/hyrule/examples/localplans"
+	"github.com/kojah/hyrule/examples/localplans"
 )
 
 func TestAppendDecisionPreservesSnapshotAndOrdersEffects(t *testing.T) {

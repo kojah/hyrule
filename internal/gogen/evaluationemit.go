@@ -3,7 +3,7 @@ package gogen
 import (
 	"fmt"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
+	"github.com/kojah/hyrule/internal/matchir"
 )
 
 // emitEvaluation scopes immutable locals to the ordered continuation. Arithmetic

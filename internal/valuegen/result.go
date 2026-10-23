@@ -2,8 +2,8 @@ package valuegen
 
 import (
 	"fmt"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/valueir"
+	"github.com/kojah/hyrule/internal/matchir"
+	"github.com/kojah/hyrule/internal/valueir"
 	"strconv"
 	"strings"
 )

@@ -3,7 +3,7 @@ package matchir_test
 import (
 	"testing"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
+	"github.com/kojah/hyrule/internal/matchir"
 )
 
 const integerType matchir.TypeID = 1

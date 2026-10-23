@@ -5,7 +5,7 @@ package compiler
 
 import (
 	"fmt"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/semantic"
 	"slices"
 )
 

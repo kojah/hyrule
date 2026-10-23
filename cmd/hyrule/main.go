@@ -10,7 +10,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/kojah/lockdoc/tools/hyrule"
+	"github.com/kojah/hyrule"
 )
 
 func main() {

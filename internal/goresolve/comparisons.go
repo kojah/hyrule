@@ -4,8 +4,8 @@ import (
 	"go/token"
 	"go/types"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/matchir"
+	"github.com/kojah/hyrule/internal/semantic"
 )
 
 func (e *resolver) comparisonOperand(expression *semantic.Expr) (matchir.Operand, types.Type, error) {

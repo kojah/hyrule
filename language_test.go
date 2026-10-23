@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kojah/lockdoc/tools/hyrule"
+	"github.com/kojah/hyrule"
 )
 
 // Boolean operators, pattern guards, if/then/else and where bindings keep

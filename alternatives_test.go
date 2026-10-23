@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kojah/lockdoc/tools/hyrule"
+	"github.com/kojah/hyrule"
 )
 
 const alternativesRules = `total fn rewrite(input)

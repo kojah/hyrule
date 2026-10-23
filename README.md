@@ -490,10 +490,10 @@ maps, boxing or reflection. Go is the only implemented backend. See
 ## Commands and configuration
 
 ```sh
-go run ./tools/hyrule/cmd/hyrule check
-go run ./tools/hyrule/cmd/hyrule generate
-go run ./tools/hyrule/cmd/hyrule generate --check
-go run ./tools/hyrule/cmd/hyrule fmt --write path/to/pass.rules
+go run ./cmd/hyrule check
+go run ./cmd/hyrule generate
+go run ./cmd/hyrule generate --check
+go run ./cmd/hyrule fmt --write path/to/pass.rules
 ```
 
 On Xenia prefix direct Go workloads with `agent-test`; Make targets already use
@@ -516,12 +516,26 @@ Publication is atomic per file, not per batch. Do not publish concurrently for
 the same config. `targets: []` retires previously owned outputs.
 
 Inputs are bounded to 4 MiB, 100,000 tokens and 64 nesting levels. Generated files
-are limited to 500 lines. `make hyrule-check`, `make hyrule-generate` and
-`make hyrule-generated-check` include the production/example configurations.
-Run `make generate-go` before raw Go commands in a fresh checkout.
+are limited to 500 lines. `make generate` generates all standalone examples;
+`make generated-check` verifies their freshness. Run `make build` to generate
+and compile, and `make test` for compiler and example regressions.
 
 Field-complete representation maintenance (snapshots, read-only views, keys,
 visitors and transforms) is not a semantic decision and belongs to
-[Boiler](../boiler/README.md), not to Hyrule schemas.
+Boiler, not to Hyrule schemas.
 The public library provides `Load`, `Compile`, `Publish` and `Format`; the CLI is
 an adapter over those APIs.
+
+## Module and consumer integration
+
+The module is `github.com/kojah/hyrule`; the CLI is `cmd/hyrule`.
+This repository preserves the history of `tools/hyrule` extracted from Lockdoc.
+
+Clone it beside a consumer and add `../hyrule` to that consumer's local
+`go.work`. A `tools/hyrule -> ../../hyrule` symlink provides convenient source
+access. Consumers should pin the compiler as a Go tool dependency for clean
+clones and CI, and run the compiled command from the consumer directory.
+Hyrule needs Go 1.27; a separate tool module can keep that requirement out of
+a consumer supporting an older Go version. Generated code has no Hyrule runtime
+dependency. Consumer rules and integration regressions stay with the consumer;
+language tests and standalone examples live here.

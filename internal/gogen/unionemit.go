@@ -2,7 +2,7 @@ package gogen
 
 import (
 	"fmt"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
+	"github.com/kojah/hyrule/internal/matchir"
 )
 
 func (e *emitter) emitDispatch(node *matchir.Node) error {

@@ -4,8 +4,8 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/syntax"
 )
 
 // whereScope holds one equation's where bindings. Bodies are lowered at each

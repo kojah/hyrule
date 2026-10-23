@@ -1,6 +1,6 @@
 package valueir
 
-import "github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
+import "github.com/kojah/hyrule/internal/matchir"
 
 // ResultKind distinguishes returned values, committed queries and ordered choice.
 type ResultKind uint8

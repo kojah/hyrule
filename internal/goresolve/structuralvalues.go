@@ -1,8 +1,8 @@
 package goresolve
 
 import (
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/valueir"
+	"github.com/kojah/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/valueir"
 	"go/types"
 )
 

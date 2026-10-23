@@ -1,12 +1,12 @@
 package goresolve
 
 import (
-	"github.com/kojah/lockdoc/tools/hyrule/internal/goplan"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/valueir"
+	"github.com/kojah/hyrule/internal/goplan"
+	"github.com/kojah/hyrule/internal/valueir"
 	"go/types"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/matchir"
+	"github.com/kojah/hyrule/internal/semantic"
 )
 
 // decisionTables belongs to the Go adapter. The shared IR knows only its opaque

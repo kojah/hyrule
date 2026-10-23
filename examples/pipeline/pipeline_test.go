@@ -1,7 +1,7 @@
 package pipeline_test
 
 import (
-	"github.com/kojah/lockdoc/tools/hyrule/examples/pipeline"
+	"github.com/kojah/hyrule/examples/pipeline"
 	"testing"
 )
 

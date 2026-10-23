@@ -3,11 +3,11 @@
 package goresolve
 
 import (
-	"github.com/kojah/lockdoc/tools/hyrule/internal/compiler"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/goplan"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/compiler"
+	"github.com/kojah/hyrule/internal/goplan"
+	"github.com/kojah/hyrule/internal/hostapi"
+	"github.com/kojah/hyrule/internal/matchir"
+	"github.com/kojah/hyrule/internal/semantic"
 	"go/types"
 )
 

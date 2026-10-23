@@ -1,0 +1,7 @@
+/bin/
+/go.work
+/go.work.sum
+*_gen.go
+*_generated.go
+.hyrule-manifest.json
+/testdata/decisionbench/legacy_test.go

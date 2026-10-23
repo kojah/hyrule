@@ -2,7 +2,7 @@ package gogen
 
 import (
 	"fmt"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/goplan"
+	"github.com/kojah/hyrule/internal/goplan"
 	"strings"
 )
 

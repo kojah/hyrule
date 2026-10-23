@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kojah/lockdoc/tools/hyrule"
+	"github.com/kojah/hyrule"
 )
 
 // Guarded equations must preserve strict qualifier order and isolate each

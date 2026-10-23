@@ -3,8 +3,8 @@ package goresolve
 import (
 	"go/types"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/matchir"
+	"github.com/kojah/hyrule/internal/semantic"
 )
 
 func (e *resolver) decisions(rules []*semantic.Rule, input types.Type) (*matchir.Node, error) {

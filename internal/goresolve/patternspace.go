@@ -10,8 +10,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/usefulness"
+	"github.com/kojah/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/usefulness"
 )
 
 // patternSpace abstracts typed rule patterns for the usefulness checks. It

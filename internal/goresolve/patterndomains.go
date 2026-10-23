@@ -5,7 +5,7 @@ import (
 	"go/constant"
 	"go/types"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/usefulness"
+	"github.com/kojah/hyrule/internal/usefulness"
 )
 
 // Value domains of the usefulness space, one per Go type and validation

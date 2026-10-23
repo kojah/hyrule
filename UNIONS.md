@@ -119,7 +119,7 @@ spellings or `go/types` objects. Those belong to the Go adapter. Hook/expression
 IDs still reference frontend-owned tables; Go remains the only implemented
 backend.
 
-The example has its own configuration. From `tools/hyrule`, compile/generate it
+The example has its own configuration. From the repository root, compile/generate it
 with `go run ./cmd/hyrule generate --config examples/unions/hyrule.yaml` (under
 `agent-test` on Xenia). This does not alter the repository's root target list.
 

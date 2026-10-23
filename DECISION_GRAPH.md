@@ -56,7 +56,7 @@ workload. On the development EPYC 9645 it measured approximately 151 microsecond
 not generated runtime behavior. Reproduce with:
 
 ```sh
-agent-test go test ./tools/hyrule/internal/matchir -run '^TestHashCons' \
+agent-test go test ./internal/matchir -run '^TestHashCons' \
   -bench BenchmarkHashConsRepeatedSuffix -benchtime=100ms
 ```
 
@@ -104,8 +104,8 @@ Run from the repository root, through `agent-test` on Xenia:
 
 ```sh
 make generate-go
-go test -p=1 -parallel=4 ./tools/hyrule/... ./tools/hyrule/testdata/decisionbench
-go test -p=1 -parallel=4 -run '^$' -bench BenchmarkDecisions -benchtime=200ms -count=3 ./tools/hyrule/testdata/decisionbench
+go test -p=1 -parallel=4 ./... ./testdata/decisionbench
+go test -p=1 -parallel=4 -run '^$' -bench BenchmarkDecisions -benchtime=200ms -count=3 ./testdata/decisionbench
 go test -p=1 -parallel=4 -run '^$' -bench 'Benchmark(Header|Map)RulePlans' -benchtime=200ms -count=3 ./internal/lower/memory/sliceheader ./internal/lower/mapstate
 ```
 

@@ -4,7 +4,7 @@ import (
 	"iter"
 	"sort"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/semantic"
 )
 
 // Reuse is bounded independently of OR variants: ordinary nested matchers can

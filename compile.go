@@ -10,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/gogen"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/goresolve"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/syntax"
+	"github.com/kojah/hyrule/internal/gogen"
+	"github.com/kojah/hyrule/internal/goresolve"
+	"github.com/kojah/hyrule/internal/syntax"
 	"golang.org/x/tools/go/packages"
 )
 

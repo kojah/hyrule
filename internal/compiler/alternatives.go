@@ -3,7 +3,7 @@ package compiler
 import (
 	"iter"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
+	"github.com/kojah/hyrule/internal/semantic"
 )
 
 // maxAlternatives bounds code growth before allocating expanded pattern trees.

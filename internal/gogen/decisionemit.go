@@ -3,8 +3,8 @@ package gogen
 import (
 	"fmt"
 
-	"github.com/kojah/lockdoc/tools/hyrule/internal/matchir"
-	"github.com/kojah/lockdoc/tools/hyrule/internal/valuegen"
+	"github.com/kojah/hyrule/internal/matchir"
+	"github.com/kojah/hyrule/internal/valuegen"
 )
 
 func valueName(value matchir.ValueID) string {
