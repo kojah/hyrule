@@ -12,16 +12,7 @@ import (
 // matcher resolves child positions once for both contract checking and emission.
 // Named fields refer to Go result names; the final success bool is never a child.
 func (e *resolver) matcher(x *semantic.Expr, input types.Type) (string, *types.Signature, []int, error) {
-	var name string
-	var sig *types.Signature
-	var err error
-	if x.Kind == semantic.List {
-		name, sig, err = e.listMatcher(x, input)
-	} else if record := e.recordNames[x.Name]; record != nil && record.declaration.View {
-		name, sig, err = e.viewMatcher(x, record, input)
-	} else {
-		name, sig, err = e.matchSignature(x)
-	}
+	name, sig, err := e.matcherHook(x, input)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -33,7 +24,7 @@ func (e *resolver) matcher(x *semantic.Expr, input types.Type) (string, *types.S
 		return "", nil, nil, e.fail(x, "matcher input type mismatch")
 	}
 	children := n - 1
-	if e.capturedView(x) != nil {
+	if view, _ := e.capturedView(x, input); view != nil {
 		children--
 	}
 	indices := make([]int, len(x.Args))
@@ -68,12 +59,33 @@ func (e *resolver) matcher(x *semantic.Expr, input types.Type) (string, *types.S
 	return name, sig, indices, nil
 }
 
+// matcherHook selects a list extraction, a declared or derived view, or a
+// declared matcher, constructor or record schema.
+func (e *resolver) matcherHook(x *semantic.Expr, input types.Type) (string, *types.Signature, error) {
+	if x.Kind == semantic.List {
+		return e.listMatcher(x, input)
+	}
+	if record := e.recordNames[x.Name]; record != nil && record.declaration.View {
+		return e.viewMatcher(x, record, input)
+	}
+	implicit, err := e.implicitView(x, input)
+	if err != nil {
+		return "", nil, err
+	}
+	if implicit != nil {
+		return e.viewMatcher(x, implicit, input)
+	}
+	return e.matchSignature(x)
+}
+
 // checkPattern joins capture contracts at each OR, before later siblings can
 // hide a missing binding. It never invokes a host hook or constructs effects.
 func (e *resolver) checkPattern(x *semantic.Expr, input types.Type) error {
 	if x.Bind != "" {
 		captured := input
-		if view := e.capturedView(x); view != nil {
+		if view, err := e.capturedView(x, input); err != nil {
+			return err
+		} else if view != nil {
 			captured = view.typ
 		}
 		if err := e.bind(x, x.Bind, 0, captured); err != nil {

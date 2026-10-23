@@ -165,6 +165,8 @@ unrestricted constructor or whole-input fallback proves coverage; guards,
 refinements and repeated captures do not. Query decisions independently require
 all outcomes. Undeclared runtime tags fail conservatively, even before catchalls.
 See [union contracts](UNIONS.md) and [native views/tuple schemas](HOST_INTERFACES.md).
+Patterns may also name Go types directly, `ChannelSnapshot (Fill: fill)`, as
+derived read-only views over exact Go field names.
 
 Guard qualifiers are strict and ordered. Commas or `&&` separate requirements;
 `let` binds an immutable value at its exact position:

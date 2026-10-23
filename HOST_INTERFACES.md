@@ -133,6 +133,26 @@ Views cannot construct or update values. They introduce
 no mutation, recursive traversal or implicit semantic evidence. Pure extraction
 may be shared by the matching graph; ordered queries remain separate.
 
+### Derived views
+
+A pattern may name a Go type directly, without a `view` declaration:
+
+```text
+rewrite (ChannelSnapshot (Capacity: ChannelCapacity (Bound: bound), Fill: fill)) = ...
+rewrite source@(ssa.Lookup (X: map, Index: key, CommaOk: commaOK)) = ...
+```
+
+Labels are exact Go field names, including fields promoted from structs
+embedded by value; other packages' types expose only exported fields. The
+pattern matches values of that type, pointers to it (nil never matches) and,
+on an interface input, the dynamic type that implements the interface: the
+value type when its method set suffices, otherwise the pointer type. `Name()`
+with no fields tests the type alone. Pointer-typed fields match nested
+patterns through the same nil check, while a field promoted through an
+embedded pointer is an error; match the embedded field explicitly. A derived
+view introduces no runtime registry and shares the inline extraction and type
+switch of declared views. Declare a `view` to rename fields.
+
 A whole view capture, `deferred@Deferred`, retains the concrete storage type that
 passed the assertion. A hook requiring `*ssa.Defer` can consume it even when the
 original input was `ssa.Instruction`. Identity is preserved and no extra field

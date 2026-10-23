@@ -48,7 +48,10 @@ func (e *resolver) pattern(x *semantic.Expr, value matchir.ValueID, t types.Type
 	if x.Kind == semantic.Variable && strings.Contains(x.Name, ".") {
 		return e.fail(x, "field projections are read-only values, not capture patterns")
 	}
-	view := e.capturedView(x)
+	view, err := e.capturedView(x, t)
+	if err != nil {
+		return err
+	}
 	if x.Bind != "" && view == nil {
 		if err := e.bind(x, x.Bind, value, t); err != nil {
 			return err

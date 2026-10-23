@@ -166,6 +166,7 @@ func (e *resolver) viewMatcher(x *semantic.Expr, record *boundRecord, input type
 		view.Fields = append(view.Fields, field.Name())
 	}
 	_, view.Pointer = record.typ.Underlying().(*types.Pointer)
+	view.Pointer = view.Pointer || types.IsInterface(record.typ)
 	_, abstract := record.typ.Underlying().(*types.Interface)
 	view.Concrete = !abstract
 	var extraction string
@@ -177,7 +178,7 @@ func (e *resolver) viewMatcher(x *semantic.Expr, record *boundRecord, input type
 	} else {
 		return "", nil, e.fail(x, "view input must be its storage type or a compatible interface")
 	}
-	if _, pointer := record.typ.Underlying().(*types.Pointer); pointer {
+	if _, pointer := record.typ.Underlying().(*types.Pointer); pointer || types.IsInterface(record.typ) {
 		extraction += "if hvalue == nil { hok = false; return }\n"
 	}
 	extraction += "_ = hvalue\n"
@@ -192,12 +193,12 @@ func (e *resolver) viewMatcher(x *semantic.Expr, record *boundRecord, input type
 // A whole view capture is the successfully asserted storage value, rather than
 // its wider input interface. It has the same identity and is usable by hooks
 // requiring that concrete Go type. The extra matcher output is not a field.
-func (e *resolver) capturedView(x *semantic.Expr) *boundRecord {
+func (e *resolver) capturedView(x *semantic.Expr, input types.Type) (*boundRecord, error) {
 	if x.Kind != semantic.Call || x.Bind == "" {
-		return nil
+		return nil, nil
 	}
 	if record := e.recordNames[x.Name]; record != nil && record.declaration.View {
-		return record
+		return record, nil
 	}
-	return nil
+	return e.implicitView(x, input)
 }
