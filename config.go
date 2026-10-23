@@ -20,8 +20,9 @@ type Config struct {
 	Version int      `yaml:"version"`
 	Targets []Target `yaml:"targets"`
 	// Views lists .views files naming accessor methods patterns may project.
-	Views []string `yaml:"views"`
-	root  string
+	Views      []string `yaml:"views"`
+	root       string
+	configFile string
 }
 
 // Target connects one ordered ruleset with a Go host signature. Signature is
@@ -56,6 +57,7 @@ func Load(path string) (*Config, error) {
 	if c.Version != 1 {
 		return nil, fmt.Errorf("config requires version 1")
 	}
+	c.configFile = filepath.Base(path)
 	c.root, err = filepath.Abs(filepath.Dir(path))
 	if err != nil {
 		return nil, err

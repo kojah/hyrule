@@ -148,7 +148,7 @@ func (e *resolver) prepareValue(expression *semantic.Expr, expected types.Type) 
 		output := e.cursor.Evaluate(evaluation)
 		e.serial = max(e.serial, int(output))
 		name := fmt.Sprintf("#%d", output)
-		e.captures[name] = capture{id: output, typ: typ}
+		e.remember(name, capture{id: output, typ: typ})
 		return &semantic.Expr{Position: expression.Position, Kind: semantic.Variable, Name: name, Field: expression.Field}, nil
 	}
 	if expression.Kind == semantic.Call {
@@ -160,7 +160,7 @@ func (e *resolver) prepareValue(expression *semantic.Expr, expected types.Type) 
 			output := e.cursor.Evaluate(evaluation)
 			e.serial = max(e.serial, int(output))
 			name := fmt.Sprintf("#%d", output)
-			e.captures[name] = capture{id: output, typ: typ}
+			e.remember(name, capture{id: output, typ: typ})
 			return &semantic.Expr{Position: expression.Position, Kind: semantic.Variable, Name: name, Field: expression.Field}, nil
 		}
 	}
@@ -301,12 +301,12 @@ func (e *resolver) local(clause semantic.Clause) error {
 		return err
 	}
 	if prepared.Kind == semantic.Variable && !strings.Contains(prepared.Name, ".") {
-		e.captures[clause.Name] = e.captures[prepared.Name]
+		e.remember(clause.Name, e.captures[prepared.Name])
 		return nil
 	}
 	evaluation := &matchir.Evaluation{Kind: matchir.ForeignEvaluation, Type: e.tables.typeID(typ), Expression: e.storeValue(value)}
 	output := e.cursor.Evaluate(evaluation)
 	e.serial = max(e.serial, int(output))
-	e.captures[clause.Name] = capture{id: output, typ: typ}
+	e.remember(clause.Name, capture{id: output, typ: typ})
 	return nil
 }

@@ -16,9 +16,14 @@ func (e *emitter) emitEvaluation(node *matchir.Node) error {
 	}
 	name := valueName(node.Outputs[0])
 	typ := e.tables.Types[node.Evaluation.Type]
-	fmt.Fprintf(&e.out, "var %s %s = %s\n_ = %s\n", name, e.host.TypeName(typ), value, name)
+	if e.inferredEvaluation(node.Evaluation) {
+		fmt.Fprintf(&e.out, "%s := %s\n", name, value)
+	} else {
+		fmt.Fprintf(&e.out, "var %s %s = %s\n", name, e.host.TypeName(typ), value)
+	}
+	fmt.Fprintf(&e.out, "_ = %s\n", name)
 	if validation := e.validation(typ, name); validation != "" {
-		fmt.Fprintf(&e.out, "if !%s { var zero %s; return zero,false }\n", validation, e.host.TypeName(e.host.Signature.Results().At(0).Type()))
+		fmt.Fprintf(&e.out, "if !%s { %s }\n", validation, e.failure())
 	}
 	if err := e.emitDecisions(node.Next, node.Fallback); err != nil {
 		return err
@@ -41,6 +46,10 @@ func (e *emitter) evaluationValue(expression *matchir.Evaluation) (string, error
 			if err != nil {
 				return "", err
 			}
+			if argument.Kind == matchir.OperandEvaluation && argument.Operand.Kind == matchir.ValueOperand {
+				operands[index] = value
+				continue
+			}
 			e.serial++
 			operands[index] = fmt.Sprintf("hv%d", e.serial)
 			fmt.Fprintf(&e.out, "var %s %s = %s\n", operands[index], e.host.TypeName(e.tables.Types[expression.Type]), value)
@@ -50,4 +59,20 @@ func (e *emitter) evaluationValue(expression *matchir.Evaluation) (string, error
 	default:
 		return "", fmt.Errorf("unsupported evaluation kind %d", expression.Kind)
 	}
+}
+
+func (e *emitter) inferredEvaluation(expression *matchir.Evaluation) bool {
+	switch expression.Kind {
+	case matchir.OperandEvaluation:
+		return expression.Operand.Kind == matchir.ValueOperand
+	case matchir.ArithmeticEvaluation:
+		for _, argument := range expression.Arguments {
+			if argument.Type == expression.Type && e.inferredEvaluation(argument) {
+				return true
+			}
+		}
+	case matchir.ForeignEvaluation:
+		return e.tables.Expressions[expression.Expression].Value.Type == expression.Type
+	}
+	return false
 }

@@ -86,6 +86,10 @@ func (c *Config) compileTarget(pkg *packages.Package, selected preparedTarget, a
 	if err != nil {
 		return nil, err
 	}
+	data = provenance(data, c.configFile, t.Name)
+	if bytes.Count(data, []byte("\n")) > 500 {
+		return nil, fmt.Errorf("generated file exceeds 500 lines; split the target")
+	}
 	return data, nil
 }
 

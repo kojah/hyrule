@@ -12,9 +12,9 @@ import (
 	"github.com/kojah/hyrule/internal/semantic"
 )
 
-// Native APIs reuse the ordered recognizer internally. Only the generated
-// boundary packs values: callers and host hooks retain their original Go APIs.
-// A total boundary must explicitly say what failed recognition means.
+// Native APIs reuse the ordered recognizer's product model internally. Emission
+// retains the original Go API and removes non-escaping products. A total API
+// explicitly states what failed recognition means.
 type nativeSignature struct {
 	declaration   *semantic.API
 	fallback      *valueir.Result

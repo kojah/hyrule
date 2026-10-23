@@ -24,6 +24,8 @@ type resolver struct {
 	captures     map[string]capture
 	rule         string
 	serial       int
+	names        map[matchir.ValueID]string
+	hints        map[matchir.ValueID]string
 	cursor       *matchir.Cursor
 	graph        *matchir.Graph
 	tables       decisionTables
@@ -117,7 +119,7 @@ func bindingKindMatches(declared, required string) bool {
 // publish drops all source declarations, scopes and symbol lookup maps. The
 // returned graph and values refer only to resolved IDs and immutable bindings.
 func (e *resolver) publish(root *matchir.Node, native *nativeSignature) *goplan.Program {
-	result := &goplan.Program{Host: *e.host, Root: root, Serial: e.serial,
+	result := &goplan.Program{Host: *e.host, Root: root, Serial: e.serial, Names: e.names, Hints: e.hints,
 		Tables: goplan.Tables{Types: e.tables.types, Members: e.tables.members, Hooks: e.tables.hooks, Literals: e.tables.literals}}
 	for _, hook := range e.tables.hooks {
 		result.Tables.Views = append(result.Tables.Views, e.tables.views[hook])

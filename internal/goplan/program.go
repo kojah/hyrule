@@ -20,6 +20,10 @@ type Program struct {
 	Unions  []*Union
 	Native  *Native
 	Serial  int
+	// Names suggests source capture names without coupling emission to source syntax.
+	Names map[matchir.ValueID]string
+	// Hints supplies lower-priority names from typed host extraction signatures.
+	Hints map[matchir.ValueID]string
 }
 
 // Tables gives host meanings to compiler-owned IDs. Views is parallel to
@@ -75,7 +79,8 @@ type Variant struct {
 	Fields []*types.Var
 }
 
-// Native describes the optional parameter/result adapter around a recognizer.
+// Native describes the declared Go API and the internal parameter/result products.
+// Emission exposes Original directly; these products do not require public wrappers.
 type Native struct {
 	Original      *types.Signature
 	Function      string

@@ -11,7 +11,7 @@ generated-check:
 	@set -e; for config in $(CONFIGS); do $(RUN) $(GO) run ./cmd/hyrule generate --check --config "$$config"; done
 	cmp testdata/decisionbench/legacy_test.go.txt testdata/decisionbench/legacy_test.go
 test: generate
-	$(RUN) $(GO) test -p=1 -parallel=4 ./...
+	$(RUN) $(GO) test -p=1 -parallel=4 ./... ./testdata/decisionbench
 vet: generate
 	$(RUN) $(GO) vet ./...
 

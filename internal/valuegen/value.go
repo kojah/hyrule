@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/kojah/hyrule/internal/matchir"
 	"github.com/kojah/hyrule/internal/valueir"
+	"go/token"
 	"io"
 	"strings"
 )
@@ -14,12 +15,13 @@ import (
 type Bindings interface {
 	ValueType(matchir.TypeID) string
 	ValueOperand(matchir.Operand) string
+	ValueUsed(matchir.ValueID) bool
 	ValueHook(matchir.HookID) string
 	ValueMember(valueir.MemberID) string
 	ValueRecordFields(matchir.RecordID) []string
 	ValueUnionFields(matchir.UnionID, matchir.VariantID) (tag, variant string, fields []string)
 	ValueValidation(matchir.TypeID, string) string
-	ValueFailureType() string
+	ValueFailure() string
 }
 
 // Emitter writes statement prerequisites and returns the final Go expression.
@@ -50,14 +52,7 @@ func (e *Emitter) Value(value *valueir.Value) string {
 	if value.Kind == valueir.Product {
 		size = len(e.Bindings.ValueRecordFields(value.Record.ID))
 	}
-	arguments := make([]string, size)
-	for _, argument := range value.Arguments {
-		text := e.Value(argument.Value)
-		if argument.Materialize {
-			text = e.temporary(argument.Type, text, argument.Validate)
-		}
-		arguments[argument.Position] = text
-	}
+	arguments := e.arguments(value.Arguments, size)
 	switch value.Kind {
 	case valueir.Invoke:
 		return e.Bindings.ValueHook(value.Hook) + "(" + strings.Join(arguments, ", ") + ")"
@@ -84,24 +79,50 @@ func (e *Emitter) aggregate(typ matchir.TypeID, fields, values, prefix []string)
 	return e.Bindings.ValueType(typ) + "{" + strings.Join(prefix, ", ") + "}"
 }
 
-func (e *Emitter) temporary(typ matchir.TypeID, value string, validate bool) string {
+func (e *Emitter) temporary(typ matchir.TypeID, value string, validate, inferred bool) string {
+	if inferred && token.IsIdentifier(value) && (!validate || e.Bindings.ValueValidation(typ, value) == "") {
+		return value
+	}
 	*e.Serial++
 	name := fmt.Sprintf("hv%d", *e.Serial)
-	fmt.Fprintf(e.Out, "var %s %s = %s\n", name, e.Bindings.ValueType(typ), value)
+	if inferred {
+		fmt.Fprintf(e.Out, "%s := %s\n", name, value)
+	} else {
+		fmt.Fprintf(e.Out, "var %s %s = %s\n", name, e.Bindings.ValueType(typ), value)
+	}
 	if validate {
 		if check := e.Bindings.ValueValidation(typ, name); check != "" {
-			fmt.Fprintf(e.Out, "if !%s { var zero %s; return zero,false }\n", check, e.Bindings.ValueFailureType())
+			fmt.Fprintf(e.Out, "if !%s { %s }\n", check, e.Bindings.ValueFailure())
 		}
 	}
 	return name
 }
 
 func (e *Emitter) update(value *valueir.Value) string {
-	base := e.temporary(value.Type, e.Value(value.Base), true)
+	base := e.temporary(value.Type, e.Value(value.Base), true, value.Type == value.Base.Type)
 	fields := e.Bindings.ValueRecordFields(value.Record.ID)
 	for _, argument := range value.Arguments {
 		text := e.Value(argument.Value)
 		fmt.Fprintf(e.Out, "%s.%s = %s\n", base, fields[argument.Position], text)
 	}
 	return base
+}
+
+// stableValue can be delayed within one construction without observing a new
+// read or changing callback/panic order. Calls, projections and arithmetic keep
+// their existing evaluation points; established captures are immutable values.
+func stableValue(value *valueir.Value) bool {
+	switch value.Kind {
+	case valueir.Operand:
+		return true
+	case valueir.Product, valueir.Tagged, valueir.Collection:
+		for _, argument := range value.Arguments {
+			if !stableValue(argument.Value) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }

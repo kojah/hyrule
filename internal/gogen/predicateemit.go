@@ -14,12 +14,18 @@ func (e *emitter) emitMatch(node *matchir.Node) error {
 	}
 	outputs := make([]string, 0, len(node.Outputs)+1)
 	for _, output := range node.Outputs {
-		outputs = append(outputs, valueName(output))
+		name := "_"
+		if e.used[output] {
+			name = valueName(output)
+		}
+		outputs = append(outputs, name)
 	}
 	outputs = append(outputs, "hok")
 	fmt.Fprintf(&e.out, "{\n%s := %s(%s)\n", strings.Join(outputs, ", "), e.tables.Hooks[node.Hook], valueName(node.Input))
 	for _, output := range node.Outputs {
-		fmt.Fprintf(&e.out, "_ = %s\n", valueName(output))
+		if e.used[output] {
+			fmt.Fprintf(&e.out, "_ = %s\n", valueName(output))
+		}
 	}
 	e.out.WriteString("if hok {\n")
 	if err := e.emitDecisions(node.Next, node.Fallback); err != nil {

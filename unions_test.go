@@ -2,6 +2,9 @@ package hyrule_test
 
 import (
 	"context"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -78,9 +81,31 @@ rewrite Empty() = Empty()
 	runUnionFixture(t, root, "TestUnions")
 	// A checked root dispatch reads the root discriminator once; nested union
 	// validation and matching refer to their own fields and preserve correlation.
-	if count := strings.Count(string(artifacts[0].Data), "harg0.Kind"); count != 1 {
+	file, err := parser.ParseFile(token.NewFileSet(), "generated.go", artifacts[0].Data, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	count := 0
+	for _, declaration := range file.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Name.Name != "Rewrite" {
+			continue
+		}
+		parameter := function.Type.Params.List[0].Names[0].Obj
+		ast.Inspect(function.Body, func(node ast.Node) bool {
+			if selector, ok := node.(*ast.SelectorExpr); ok && selector.Sel.Name == "Kind" {
+				if input, ok := selector.X.(*ast.Ident); ok && input.Obj == parameter {
+					count++
+				}
+			}
+			return true
+		})
+	}
+	if count != 1 {
 		t.Fatalf("root discriminator inspected %d times", count)
 	}
+
 }
 
 func TestTaggedUnionFallbackKeepsClosedDomain(t *testing.T) {

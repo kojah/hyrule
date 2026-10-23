@@ -97,14 +97,16 @@ func (e *emitter) emitBuild(node, stop *matchir.Node) error {
 	if err := e.emitDeadSuffix(node.Fallback, stop); err != nil {
 		return err
 	}
-	fmt.Fprintf(&e.out, "// Rule %s (%s:%d).\n", node.Origin.Rule, node.Origin.File, node.Origin.Line)
+	fmt.Fprintf(&e.out, "// Rule %s — %s.\n", node.Origin.Rule, node.Origin.File)
 	build := e.decisionValue(node, "build")
-	if validation := e.validation(e.host.Signature.Results().At(0).Type(), "hresult"); validation != "" {
-		fmt.Fprintf(&e.out, "hresult := %s\nif !%s { var zero %s; return zero,false }\nreturn hresult,true\n",
-			build, validation, e.host.TypeName(e.host.Signature.Results().At(0).Type()))
+
+	if validation := e.validation(sigOutput(e), "hresult"); validation != "" {
+		fmt.Fprintf(&e.out, "hresult := %s\nif !%s { %s }\n", build, validation, e.failure())
+		e.returnValue("hresult", true)
 	} else {
-		fmt.Fprintf(&e.out, "return %s, true\n", build)
+		e.returnValue(build, true)
 	}
+
 	return nil
 }
 
@@ -124,6 +126,9 @@ func (e *emitter) emitRecord(node *matchir.Node) error {
 	record := e.records[node.Record.ID]
 	e.out.WriteString("{\n")
 	for index, field := range record.Fields {
+		if !e.used[node.Outputs[index]] {
+			continue
+		}
 		fmt.Fprintf(&e.out, "%s := %s.%s\n_ = %s\n", valueName(node.Outputs[index]), valueName(node.Input), field.Name(), valueName(node.Outputs[index]))
 	}
 	if err := e.emitDecisions(node.Next, node.Fallback); err != nil {

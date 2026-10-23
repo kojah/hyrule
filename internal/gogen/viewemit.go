@@ -25,7 +25,7 @@ func (e *emitter) storageName() string {
 // scoped to the successful continuation, exactly as the hook literal did.
 func (e *emitter) emitViewMatch(node *matchir.Node, view *goplan.ViewHook) error {
 	input, name := valueName(node.Input), "_"
-	if len(node.Outputs) > 0 || view.Pointer {
+	if e.liveOutputs(node) || view.Pointer {
 		name = e.storageName()
 	}
 	switch {
@@ -50,6 +50,9 @@ func (e *emitter) emitViewMatch(node *matchir.Node, view *goplan.ViewHook) error
 
 func (e *emitter) emitViewOutputs(node *matchir.Node, view *goplan.ViewHook, storage string) {
 	for index, output := range node.Outputs {
+		if !e.used[output] {
+			continue
+		}
 		source := storage
 		if index < len(view.Fields) {
 			source += "." + view.Fields[index]
@@ -96,7 +99,7 @@ func (e *emitter) emitTypeSwitch(run []*matchir.Node) error {
 			clauses = append(clauses, clause)
 		}
 		clause.nodes = append(clause.nodes, node)
-		clause.binds = clause.binds || len(node.Outputs) > 0
+		clause.binds = clause.binds || e.liveOutputs(node)
 	}
 	input, name := valueName(run[0].Input), e.storageName()
 	binds := false
@@ -176,4 +179,13 @@ func (e *emitter) capture(emit func() error) (string, error) {
 	text := e.out.String()
 	e.out = saved
 	return text, err
+}
+
+func (e *emitter) liveOutputs(node *matchir.Node) bool {
+	for _, output := range node.Outputs {
+		if e.used[output] {
+			return true
+		}
+	}
+	return false
 }

@@ -35,9 +35,11 @@ func (e *emitter) ValueUnionFields(id matchir.UnionID, variant matchir.VariantID
 func (e *emitter) ValueValidation(id matchir.TypeID, value string) string {
 	return e.validation(e.tables.Types[id], value)
 }
-func (e *emitter) ValueFailureType() string { return e.host.TypeName(sigOutput(e)) }
+func (e *emitter) ValueFailure() string { return e.failure() }
 
 func (e *emitter) emitResult(result *valueir.Result) string {
 	renderer := valuegen.Emitter{Bindings: e, Out: &e.out, Serial: &e.serial}
 	return renderer.Result(result, "")
 }
+
+func (e *emitter) ValueUsed(id matchir.ValueID) bool { return e.used[id] }

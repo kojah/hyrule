@@ -1,6 +1,7 @@
 package goresolve
 
 import (
+	"go/token"
 	"go/types"
 	"strings"
 
@@ -23,7 +24,7 @@ func (e *resolver) bind(x *semantic.Expr, name string, value matchir.ValueID, t 
 			e.cursor.Test(matchir.Value(old.id), matchir.Value(value))
 		}
 	} else {
-		e.captures[name] = capture{value, t}
+		e.remember(name, capture{value, t})
 	}
 	return nil
 }
@@ -104,8 +105,16 @@ func (e *resolver) callPattern(x *semantic.Expr, value matchir.ValueID, t types.
 	} else {
 		outputs = e.cursor.Match(e.tables.hookID(name), value, outputTypes)
 	}
-	for _, id := range outputs {
+	for index, id := range outputs {
 		e.serial = max(e.serial, int(id))
+		if hint := sig.Results().At(index).Name(); hint != "" && hint != "_" {
+			if e.hints == nil {
+				e.hints = map[matchir.ValueID]string{}
+			}
+			if e.hints[id] == "" {
+				e.hints[id] = hint
+			}
+		}
 	}
 	if view != nil {
 		if err := e.bind(x, x.Bind, outputs[len(outputs)-1], view.typ); err != nil {
@@ -119,4 +128,18 @@ func (e *resolver) callPattern(x *semantic.Expr, value matchir.ValueID, t types.
 		}
 	}
 	return nil
+}
+
+// remember keeps the first useful spelling of a shared value for source emission.
+func (e *resolver) remember(name string, value capture) {
+	e.captures[name] = value
+	if !token.IsIdentifier(name) || name == "_" {
+		return
+	}
+	if e.names == nil {
+		e.names = map[matchir.ValueID]string{}
+	}
+	if e.names[value.id] == "" {
+		e.names[value.id] = name
+	}
 }
