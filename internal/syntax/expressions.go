@@ -147,6 +147,9 @@ func (p *parser) namedAhead() bool {
 		return false
 	}
 	i++
+	if i+1 < len(p.tokens) && p.tokens[i].text == "(" && p.tokens[i+1].text == ")" {
+		i += 2 // An accessor label, Name(): pattern.
+	}
 	for i < len(p.tokens) && (p.tokens[i].text == "\n" || p.tokens[i].kind == scanner.Comment) {
 		i++
 	}
@@ -214,6 +217,11 @@ func (p *parser) named(base int, pattern bool) []*Expr {
 	var args []*Expr
 	for !p.end() && !p.at(")") {
 		name := p.name()
+		if pattern && p.at("(") && p.index+1 < len(p.tokens) && p.tokens[p.index+1].text == ")" {
+			p.next()
+			p.next()
+			name += "()" // Accessor projections are pattern-only labels.
+		}
 		p.expect(":")
 		x := p.expression(base, pattern, 0)
 		x.Field = name

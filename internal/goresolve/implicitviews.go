@@ -3,6 +3,9 @@ package goresolve
 import (
 	"go/token"
 	"go/types"
+	"strings"
+
+	"github.com/kojah/lockdoc/tools/hyrule/internal/hostapi"
 
 	"github.com/kojah/lockdoc/tools/hyrule/internal/semantic"
 )
@@ -132,6 +135,9 @@ func (e *resolver) closedMember(iface, candidate types.Type) bool {
 // structs. Promotion through an embedded pointer is rejected because reading
 // it could dereference nil; match the embedded field with a nested view.
 func (e *resolver) viewMember(argument *semantic.Expr, storage types.Type) (*types.Var, error) {
+	if method, ok := strings.CutSuffix(argument.Field, "()"); ok {
+		return e.viewMethod(argument, storage, method)
+	}
 	object, index, _ := types.LookupFieldOrMethod(storage, true, e.host.Package, argument.Field)
 	field, ok := object.(*types.Var)
 	if !ok || !field.IsField() {
@@ -140,6 +146,13 @@ func (e *resolver) viewMember(argument *semantic.Expr, storage types.Type) (*typ
 	if !field.Exported() && field.Pkg() != e.host.Package {
 		return nil, e.fail(argument, "inaccessible Go field "+argument.Field)
 	}
+	if err := e.promotion(argument, storage, index); err != nil {
+		return nil, err
+	}
+	return field, nil
+}
+
+func (e *resolver) promotion(argument *semantic.Expr, storage types.Type, index []int) error {
 	current := storage
 	if pointer, ok := current.Underlying().(*types.Pointer); ok {
 		current = pointer.Elem()
@@ -147,11 +160,34 @@ func (e *resolver) viewMember(argument *semantic.Expr, storage types.Type) (*typ
 	for _, step := range index[:len(index)-1] {
 		embedded := current.Underlying().(*types.Struct).Field(step)
 		if _, ok := embedded.Type().Underlying().(*types.Pointer); ok {
-			return nil, e.fail(argument, "field "+argument.Field+" is promoted through embedded pointer "+embedded.Name()+"; match "+embedded.Name()+" explicitly")
+			return e.fail(argument, argument.Field+" is promoted through embedded pointer "+embedded.Name()+"; match "+embedded.Name()+" explicitly")
 		}
 		current = embedded.Type()
 	}
-	return field, nil
+	return nil
+}
+
+// viewMethod resolves an accessor projection, Name(): pattern. Only methods
+// opted in through a .views file or a //hyrule:view comment qualify: they must
+// be pure reads taking no arguments and returning one value. The result is a
+// synthetic member whose name spells the call in generated extraction.
+func (e *resolver) viewMethod(argument *semantic.Expr, storage types.Type, name string) (*types.Var, error) {
+	object, index, _ := types.LookupFieldOrMethod(storage, true, e.host.Package, name)
+	function, ok := object.(*types.Func)
+	if !ok {
+		return nil, e.fail(argument, "unknown Go method "+name)
+	}
+	if !e.host.Accessors[hostapi.MethodKey(function)] {
+		return nil, e.fail(argument, "method "+name+" is not an opted-in accessor; list it in a .views file or mark it //hyrule:view")
+	}
+	signature := function.Type().(*types.Signature)
+	if signature.Params().Len() != 0 || signature.Results().Len() != 1 || signature.Variadic() {
+		return nil, e.fail(argument, "accessor "+name+" must take no arguments and return one value")
+	}
+	if err := e.promotion(argument, storage, index); err != nil {
+		return nil, err
+	}
+	return types.NewField(token.NoPos, e.host.Package, argument.Field, signature.Results().At(0).Type(), false), nil
 }
 
 // typeText spells a Go type for diagnostics with source package names.

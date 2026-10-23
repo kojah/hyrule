@@ -166,6 +166,27 @@ embedded pointer is an error; match the embedded field explicitly. A derived
 view introduces no runtime registry and shares the inline extraction and type
 switch of declared views. Declare a `view` to rename fields.
 
+### Accessor methods
+
+A derived view label may call a method, `Name(): "copy"`, when the method is
+opted in as a pure accessor: a configured `.views` file lists methods of
+packages the repository does not own, and a `//hyrule:view` comment marks a
+method in its own source. Accessors take no arguments and return one value.
+
+```text
+// hyrule.views, named by the top-level "views:" list in hyrule.yaml.
+golang.org/x/tools/go/ssa
+  Builtin.Name
+  Value.Type
+```
+
+An unindented line names an import path; indented `Type.Method` lines name
+methods, including interface methods. Every entry must resolve in a loaded
+package. Any other method in a pattern is an error. Calls share the view's
+nil checks: nil pointers and nil interfaces never reach them, but an accessor
+must tolerate whatever else its receiver can hold, such as a typed nil inside
+an interface. Accessors are matchers: they must not change state.
+
 ### Typed Go constants and tagged structs
 
 A constant of a named Go type is usable by name without a host alias. As a

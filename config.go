@@ -19,7 +19,9 @@ import (
 type Config struct {
 	Version int      `yaml:"version"`
 	Targets []Target `yaml:"targets"`
-	root    string
+	// Views lists .views files naming accessor methods patterns may project.
+	Views []string `yaml:"views"`
+	root  string
 }
 
 // Target connects one ordered ruleset with a Go host signature. Signature is
@@ -58,6 +60,9 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err = c.checkViews(); err != nil {
+		return nil, err
+	}
 	names, outputs := map[string]bool{}, map[string]bool{}
 	for _, t := range c.Targets {
 		validSignature := t.Signature == "" || token.IsIdentifier(t.Signature) && t.Signature != "_"
@@ -86,4 +91,13 @@ func Load(path string) (*Config, error) {
 		}
 	}
 	return &c, nil
+}
+
+func (c *Config) checkViews() error {
+	for _, p := range c.Views {
+		if filepath.IsAbs(p) || !filepath.IsLocal(p) || filepath.Ext(p) != ".views" {
+			return fmt.Errorf("views file must be a .views path inside the config directory: %s", p)
+		}
+	}
+	return nil
 }

@@ -39,6 +39,10 @@ func (c *Config) Compile(ctx context.Context, target string) ([]Artifact, error)
 	if err != nil {
 		return nil, err
 	}
+	accessors, err := c.accessors(loaded)
+	if err != nil {
+		return nil, err
+	}
 	artifacts := []Artifact{}
 	for _, selected := range prepared.targets {
 		t := selected.target
@@ -46,7 +50,7 @@ func (c *Config) Compile(ctx context.Context, target string) ([]Artifact, error)
 		if pkg == nil {
 			return nil, fmt.Errorf("target %s: package not loaded", t.Name)
 		}
-		data, err := c.compileTarget(pkg, selected)
+		data, err := c.compileTarget(pkg, selected, accessors)
 		if err != nil {
 			return nil, fmt.Errorf("target %s: %w", t.Name, err)
 		}
@@ -62,7 +66,7 @@ func (c *Config) Compile(ctx context.Context, target string) ([]Artifact, error)
 
 // compileTarget resolves one prepared program against an already loaded host,
 // then emits its typed dispatcher.
-func (c *Config) compileTarget(pkg *packages.Package, selected preparedTarget) ([]byte, error) {
+func (c *Config) compileTarget(pkg *packages.Package, selected preparedTarget, accessors map[string]bool) ([]byte, error) {
 	t := selected.target
 	program := selected.program
 	sig, declare, err := c.targetSignature(pkg, t, program.API)
@@ -84,7 +88,7 @@ func (c *Config) compileTarget(pkg *packages.Package, selected preparedTarget) (
 			}
 		}
 	}
-	host := goresolve.Host{Package: pkg.Types, Signature: sig, Function: t.Function, ImportNames: names}
+	host := goresolve.Host{Package: pkg.Types, Signature: sig, Function: t.Function, ImportNames: names, Accessors: accessors}
 	if declare != "" {
 		host.Declare, host.Declared = declare, sig
 	}

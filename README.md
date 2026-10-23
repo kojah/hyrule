@@ -168,6 +168,7 @@ See [union contracts](UNIONS.md) and [native views/tuple schemas](HOST_INTERFACE
 Patterns may also name Go types directly, `ChannelSnapshot (Fill: fill)`, as
 derived read-only views over exact Go field names, and typed Go constants by
 name, `SendChannel` or the tagged variant `FiniteCapacity (Bound: bound)`.
+Opted-in accessor methods project as `Name(): pattern` labels.
 
 Guard qualifiers are strict and ordered. Commas or `&&` separate requirements;
 `let` binds an immutable value at its exact position:
@@ -328,7 +329,8 @@ Both accept `--config`, `--target`, `--format text|json`. `fmt FILE` prints one 
 Formatting retains comments, moving internal comments to declaration boundaries.
 
 Version 1 YAML declares explicit rule paths, package, binding file, function,
-output and, unless the rules declare their types, signature. Paths remain inside the config directory; no globs/includes.
+output and, unless the rules declare their types, signature. An optional
+top-level `views:` list names `.views` accessor files. Paths remain inside the config directory; no globs/includes.
 Outputs must be `.go` files in their package. Hosts load with in-memory signature
 stubs, permitting handwritten callers before first generation. Stubs are never
 published. Generated packages are type-checked before any output writes.

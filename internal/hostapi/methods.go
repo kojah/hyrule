@@ -30,3 +30,17 @@ func (h *Host) methodExpression(receiver types.Type, name string) (string, *type
 	explicit := types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), sig.Results(), false)
 	return "(" + h.TypeName(receiver) + ")." + name, explicit, nil
 }
+
+// MethodKey identifies a method by its declaring receiver type, as
+// "import/path.Type.Method", for accessor opt-in checks.
+func MethodKey(function *types.Func) string {
+	receiver := function.Type().(*types.Signature).Recv().Type()
+	if pointer, ok := receiver.(*types.Pointer); ok {
+		receiver = pointer.Elem()
+	}
+	named, ok := types.Unalias(receiver).(*types.Named)
+	if !ok || named.Obj().Pkg() == nil {
+		return ""
+	}
+	return named.Obj().Pkg().Path() + "." + named.Obj().Name() + "." + function.Name()
+}

@@ -125,6 +125,8 @@ type Host struct {
 	ImportNames map[string]*types.Package
 	Declare     string
 	Declared    *types.Signature
+	// Accessors holds the method keys (see MethodKey) patterns may project.
+	Accessors map[string]bool
 }
 
 // TypeName renders a type and records its generated imports.

@@ -55,6 +55,7 @@ atom = path | "^", path | literal | "_" | name, "@", atom
      | "if", disjunction, "then", expression, "else", expression
      | "(", expression, ")" | namedArguments | "(", ")"
      | "[", [ expression, { ",", expression } ], "]" ;
+(* In patterns, a label may be an opted-in accessor call, Name(). *)
 namedArguments = "(", name, ":", expression,
                  { ",", name, ":", expression }, [ "," ], ")" ;
 patternExpression = patternApplication ;
