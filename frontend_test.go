@@ -19,14 +19,20 @@ func TestEquationBranchesAndArithmetic(t *testing.T) {
  `)
 	write(t, root, "input.rules", `total fn rewrite(input)
   fallback outputs (-99)
+
 host
   identity
+
 @classify
 classify (inputs value)
-  | value < 0 = outputs (-1)
+  | value < 0
+  =
+  outputs (-1)
   | let remainder = value % 2
-  , remainder == 0 = outputs (identity value)
-  | otherwise = outputs 1
+  , remainder == 0
+  =
+  outputs (identity value)
+classify (inputs value) = outputs 1
 `)
 	c, a := compile(t, root)
 	if err := c.Publish(a, false); err != nil {
@@ -42,12 +48,12 @@ classify (inputs value)
 
 func TestEquationLayoutAndEscapes(t *testing.T) {
 	good := []string{
-		"rewrite value\n  | go!{let}\n  = go!{require}\n",
-		"rewrite value = do\n  require ready value\n  require value > 0\n  value\n<|> 0\n",
-		"rewrite `require` = `require`\n",
-		"host\n  Match?\n@Escaped\nrewrite (Match `Match`) = `Match`\n",
-		"rewrite (Header (length: length,\n capacity: capacity)) = [length,\n capacity]\n",
-		"rewrite value = do\n  true <- ready value\n    else false -> decline\n  value\n<|> 0\n",
+		"@rewrite_L1_Fdecd027b\nrewrite value\n  | go! {let}\n  =\n  go! {require}\n",
+		"@rewrite_L1_Fdecd027b\nrewrite value =\n  do\n    require ready value\n    require value > 0\n    value\n  <|> 0\n",
+		"@rewrite_L1_Fdecd027b\nrewrite `require` = `require`\n",
+		"host\n  Match?\n\n@Escaped\nrewrite (Match `Match`) = `Match`\n",
+		"@rewrite_L1_Fdecd027b\nrewrite (Header { length, capacity }) = [length, capacity]\n",
+		"@rewrite_L1_Fdecd027b\nrewrite value =\n  do\n    true <- ready value\n      else\n        false -> decline\n    value\n  <|> 0\n",
 	}
 	for _, source := range good {
 		formatted, err := hyrule.Format("layout.rules", []byte(source))
@@ -99,7 +105,7 @@ targets:
 }
 
 func TestCaseFormattingPreservesFollowingCommentsOnce(t *testing.T) {
-	source := []byte("rewrite value =\n  case ask value of\n    true -> 1\n    false -> 0\n\n// Next rule.\n// Keep this evidence.\n@Next\nrewrite _ = 2\n")
+	source := []byte("@rewrite_L1_Fdecd027b\nrewrite value =\n  case ask value of\n    true -> 1\n    false -> 0\n\n// Next rule.\n// Keep this evidence.\n@Next\nrewrite _ = 2\n")
 	first, err := hyrule.Format("comments.rules", source)
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +122,7 @@ func TestCaseFormattingPreservesFollowingCommentsOnce(t *testing.T) {
 }
 
 func TestHostFormattingKeepsBindingComments(t *testing.T) {
-	source := []byte("host\n  first!\n  // Evidence belongs to second.\n  second!\nrewrite _ = 0\n")
+	source := []byte("host\n  first!\n// Evidence belongs to second.\n  second!\n\n@rewrite_L5_Fdecd027b\nrewrite _ = 0\n")
 	first, err := hyrule.Format("host.rules", source)
 	if err != nil {
 		t.Fatal(err)

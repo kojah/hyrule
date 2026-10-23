@@ -41,7 +41,7 @@ type Proof = (Kind, int)
   Unavailable (reason: 1) = Unknown
 
 @Main
-rewrite (inputs (Entry (name: name)) n host)
+rewrite (inputs (Entry { name }) n host)
   | let offset = host.Offset.Value
   , offset >= 0
   , named name
@@ -49,9 +49,9 @@ rewrite (inputs (Entry (name: name)) n host)
   case ready name of
     false -> outputs 10 20
     true -> case ask n host of
-      Proven (reason: why) -> outputs why 1
+      Proven { reason: why } -> outputs why 1
       Disproven() -> outputs 0 2
-      Unavailable (reason: why) -> outputs why 3
+      Unavailable { reason: why } -> outputs why 3
 `
 
 func TestNativeHostInterfaces(t *testing.T) {
@@ -122,7 +122,7 @@ func TestNativeInterfaceDiagnostics(t *testing.T) {
 		{"tuple slot", replaceFixture(t, nativeRules, "reason: 1", "reason: 9"), "missing or invalid direct variant"},
 		{"projection", replaceFixture(t, nativeRules, "Offset.Value", "Missing.Value"), "missing or inaccessible field"},
 		{"view field", replaceFixture(t, nativeRules, "name: Name", "name: Missing"), "missing or inaccessible direct record field"},
-		{"view construction", replaceFixture(t, nativeRules, "outputs 10 20", "Entry (name: 1)"), "read-only"},
+		{"view construction", replaceFixture(t, nativeRules, "outputs 10 20", "Entry { name: 1 }"), "read-only"},
 		{"nested forwarding", replaceFixture(t, nativeRules, "Ready host name", "Ready host (Ready host name)"), "captures, constants or literals"},
 		{"typed forwarding", replaceFixture(t, nativeRules, "Ready host name", "Ready host 99"), "cannot use"},
 	} {
@@ -271,7 +271,7 @@ host
   valid!
 
 @Same
-rewrite (inputs node@(Entry (name: name)) node@(Entry())) =
+rewrite (inputs (Entry { name } as node) (Entry() as node)) =
   case valid node of
     true -> outputs node
     false -> outputs nil

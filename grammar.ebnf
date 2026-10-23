@@ -54,22 +54,24 @@ comparison = sum, [ ( "==" | "!=" | "<" | "<=" | ">" | ">=" ), sum ] ;
 sum = product, { ( "+" | "-" ), product } ;
 product = application, { ( "*" | "/" | "%" ), application } ;
 application = atom, { atom }, [ "with", namedArguments ] ;
-atom = inlineGo | path | "^", path | literal | "_" | name, "@", atom
+atom = inlineGo | path, [ namedArguments ] | "^", path | literal | "_"
      | "not", atom
      | "if", disjunction, "then", expression, "else", expression
-     | "(", expression, ")" | namedArguments | "(", ")"
+     | "(", expression, ")" | "(", ")"
      | "[", [ expression, { ",", expression } ], "]" ;
-(* In patterns, a label may be an opted-in accessor call, Name(). *)
-namedArguments = "(", name, ":", expression,
-                 { ",", name, ":", expression }, [ "," ], ")" ;
+(* Bare fields expand to field: field, preserving written order. Accessor
+   labels require an explicit pattern and are pattern-only. *)
+namedArguments = "{", [ namedArgument, { ",", namedArgument }, [ "," ] ], "}" ;
+namedArgument = name, [ ":", expression ] ;
 patternExpression = patternApplication ;
 patternApplication = patternAtom, { patternAtom } ;
-patternAtom = path | "^", path | literal | "_" | name, "@", patternAtom
-            | "(", patternApplication, { "|", patternApplication }, ")"
-            | "(", name, ":", patternExpression,
-              { ",", name, ":", patternExpression }, [ "," ], ")"
-            | "(", ")"
-            | "[", [ listElements ], "]" ;
+patternAtom = patternPrimary, [ "as", name ] ;
+patternPrimary = path, [ patternFields ] | "^", path | literal | "_"
+               | "(", patternApplication, { "|", patternApplication }, ")"
+               | "(", ")" | "[", [ listElements ], "]" ;
+patternFields = "{", [ patternField, { ",", patternField }, [ "," ] ], "}" ;
+patternField = name, [ ":", patternExpression ]
+             | name, "(", ")", ":", patternExpression ;
 (* A list pattern matches exactly its elements, or at least them with a rest. *)
 listElements = patternExpression, { ",", patternExpression }, [ ",", "..", patternAtom ], [ "," ]
              | "..", patternAtom, [ "," ] ;

@@ -4,7 +4,7 @@ import "strings"
 
 func operand(x *Expr, indent int) string {
 	value := render(x, indent)
-	if x.Kind == Call && len(x.Args) > 0 && x.Bind == "" || x.Kind == Comparison || x.Kind == Update ||
+	if x.Bind != "" || x.Kind == Call && len(x.Args) > 0 || x.Kind == Comparison || x.Kind == Update ||
 		x.Kind == Logic || x.Kind == Conditional ||
 		x.Kind == OrderedAlternatives || x.Kind == Query || x.Kind == Do || x.Kind == Pure ||
 		x.Kind == Literal && strings.HasPrefix(x.Name, "-") {
@@ -13,6 +13,19 @@ func operand(x *Expr, indent int) string {
 	return value
 }
 func render(x *Expr, indent int) string {
+	if x != nil && x.Bind != "" {
+		unbound := *x
+		unbound.Bind = ""
+		value := render(&unbound, indent)
+		if x.Kind == Call && len(x.Args) > 0 && x.Args[0].Field == "" {
+			value = "(" + value + ")"
+		}
+		return value + " as " + identifierText(x.Bind)
+	}
+	return renderValue(x, indent)
+}
+
+func renderValue(x *Expr, indent int) string {
 	if x == nil {
 		return ""
 	}
@@ -66,7 +79,7 @@ func render(x *Expr, indent int) string {
 		for i, a := range x.Args {
 			parts[i] = render(a, indent)
 		}
-		return bindPrefix(x) + "(" + strings.Join(parts, " | ") + ")"
+		return "(" + strings.Join(parts, " | ") + ")"
 	case List, Effects:
 		parts := make([]string, len(x.Args))
 		for i, a := range x.Args {
@@ -75,18 +88,12 @@ func render(x *Expr, indent int) string {
 		if x.Rest {
 			parts[len(parts)-1] = ".." + operand(x.Args[len(x.Args)-1], indent)
 		}
-		return bindPrefix(x) + "[" + strings.Join(parts, ", ") + "]"
+		return "[" + strings.Join(parts, ", ") + "]"
 	case Update:
 		return render(x.Args[0], indent) + " with " + namedText(x.Args[1:], indent)
 	default:
 		return renderCall(x, indent)
 	}
-}
-func bindPrefix(x *Expr) string {
-	if x.Bind != "" {
-		return identifierText(x.Bind) + "@"
-	}
-	return ""
 }
 func infix(name string) string {
 	switch name {
@@ -107,8 +114,14 @@ func namedText(args []*Expr, indent int) string {
 	fields := make([]string, len(args))
 	for i, a := range args {
 		fields[i] = identifierText(a.Field) + ": " + render(a, indent)
+		if a.Bind == "" && a.Name == a.Field && (a.Kind == Variable || a.Kind == Symbol && a.Bare) {
+			fields[i] = render(a, indent)
+		}
 	}
-	return "(" + strings.Join(fields, ", ") + ")"
+	if len(fields) == 0 {
+		return "{}"
+	}
+	return "{ " + strings.Join(fields, ", ") + " }"
 }
 func renderCase(x *Expr, indent int) string {
 	pad := strings.Repeat(" ", indent)
@@ -154,16 +167,17 @@ func renderCall(x *Expr, indent int) string {
 	}
 	value := identifierText(x.Name)
 	if len(x.Args) == 0 {
-		value += "()"
+		if x.Braced {
+			value += " {}"
+		} else {
+			value += "()"
+		}
 	} else if x.Args[0].Field != "" {
 		value += " " + namedText(x.Args, indent)
 	} else {
 		for _, arg := range x.Args {
 			value += " " + operand(arg, indent)
 		}
-	}
-	if x.Bind != "" {
-		value = bindPrefix(x) + "(" + value + ")"
 	}
 	return value
 }

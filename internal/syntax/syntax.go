@@ -65,6 +65,8 @@ type Expr struct {
 	Kind Kind
 	// Bare marks a name whose capture/constructor meaning needs target declarations.
 	Bare bool
+	// Braced preserves an empty named-field record expression.
+	Braced bool
 	// Quoted distinguishes an escaped capture from a declared constructor.
 	Quoted bool
 	Name   string

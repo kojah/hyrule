@@ -34,27 +34,28 @@ host
   Suffix
 
 @Empty
-rewrite (Input (slice: [], count: 0)) = "empty"
+rewrite (Input { slice: [], count: 0 }) = "empty"
 
 @Literal
-rewrite (Input (slice: [1])) = "one"
+rewrite (Input { slice: [1] }) = "one"
 
 @Same
-rewrite (Input (slice: [a, a])) = "same"
+rewrite (Input { slice: [a, a] }) = "same"
 
 @Nested
-rewrite (Input (slice: [_, _, ..rest@[_, _]])) = Suffix rest
+rewrite (Input { slice: [_, _, ..([_, _] as rest)] }) = Suffix rest
 
 @Ascending
-rewrite (Input (seq: [x, y]))
+rewrite (Input { seq: [x, y] })
   | x < y
-  = "ascending"
+  =
+  "ascending"
 
 @SequenceRest
-rewrite (Input (seq: [x, ..tail])) = Describe x tail
+rewrite (Input { seq: [x, ..tail] }) = Describe x tail
 
 @FixedSequence
-rewrite (Input (fixed: whole@[_])) = "fixed"
+rewrite (Input { fixed: [_] as whole }) = "fixed"
 
 @Other
 rewrite _ = "other"
@@ -90,9 +91,9 @@ func TestLists(t *testing.T) {
 
 func TestListPatternDiagnostics(t *testing.T) {
 	for _, test := range []struct{ name, pattern, want string }{
-		{"not a sequence", `(Input (count: [x]))`, "list pattern requires a slice"},
-		{"rest needs Sub", `(Input (fixed: [x, ..rest]))`, "Sub(int, int)"},
-		{"arity is fixed", `(Input (slice: [x, ..rest, y]))`, `expected "]"`},
+		{"not a sequence", `Input { count: [x] }`, "list pattern requires a slice"},
+		{"rest needs Sub", `(Input { fixed: [x, ..rest] })`, "Sub(int, int)"},
+		{"arity is fixed", `(Input { slice: [x, ..rest, y] })`, `expected "]"`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
@@ -104,12 +105,12 @@ func TestListPatternDiagnostics(t *testing.T) {
 }
 
 func TestListPatternFormatting(t *testing.T) {
-	input := "rewrite (Wrap whole@[a,  b,..rest]) = a\n\nrewrite (Wrap []) = 0\n"
+	input := "@rewrite_L1_Fdecd027b\nrewrite (Wrap ([a, b, ..rest] as whole)) = a\n\n@rewrite_L3_Fdecd027b\nrewrite (Wrap []) = 0\n"
 	formatted, err := hyrule.Format("lists.rules", []byte(input))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(formatted), "whole@[a, b, ..rest]") || !strings.Contains(string(formatted), "(Wrap [])") {
+	if !strings.Contains(string(formatted), "[a, b, ..rest] as whole") || !strings.Contains(string(formatted), "(Wrap [])") {
 		t.Fatalf("list pattern formatting:\n%s", formatted)
 	}
 	again, err := hyrule.Format("lists.rules", formatted)

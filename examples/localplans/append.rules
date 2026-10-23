@@ -19,14 +19,14 @@ host
   Refused = Refused
 
 @Fits
-rewrite request@(Request (header: header@(Header (length: length, capacity: capacity)), count: count))
+rewrite (Request { header: Header { length, capacity } as header, count } as request)
   | length >= 0
   , count >= 0
   , let end = length + count
   , end >= length
   , end <= capacity
   =
-  request with (header: header with (length: end), outcome: ^Reuse, copies: [Copy (offset: length, count: count)])
+  request with { header: header with { length: end }, outcome: ^Reuse, copies: [Copy { offset: length, count }] }
 
 @Decline
-rewrite request = request with (outcome: ^Refused, copies: [])
+rewrite request = request with { outcome: ^Refused, copies: [] }

@@ -120,7 +120,7 @@ func Render(p *Pattern) string {
 		return head.Empty
 	}
 	if named {
-		return head.Label + " (" + strings.Join(parts, ", ") + ")"
+		return head.Label + " { " + strings.Join(parts, ", ") + " }"
 	}
 	return head.Label + " " + strings.Join(parts, " ")
 }

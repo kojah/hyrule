@@ -4,4 +4,4 @@ host
 
 // Lower the semantic operation to a complete bundle before applying effects.
 @MapRead
-rewrite (Read origin map key tuple) = Plan (origin: origin, m: map, key: key, tuple: tuple)
+rewrite (Read origin map key tuple) = Plan { origin, m: map, key, tuple }

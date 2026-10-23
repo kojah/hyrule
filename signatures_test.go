@@ -47,7 +47,7 @@ type Node struct { A, B int }
 func Pair(n Node)(int,int,bool){return n.A,n.B,true}
 func Sum(a,b int)int{return a+b}
 `+test.host+"\n")
-			write(t, root, "input.rules", "fn rewrite(arg0: Node) -> int\n\n"+signatureRules)
+			write(t, root, "input.rules", "fn rewrite(arg0: Node) -> int\n"+signatureRules)
 			signatureConfig(t, root, test.signature)
 			config, artifacts := compile(t, root)
 			generated := string(artifacts[0].Data)
@@ -80,9 +80,10 @@ host
   Positive
 
 @Positive
-rewrite (inputs (left: a, right: b))
+rewrite (inputs { left: a, right: b })
   | Positive a
-  = outputs (sum: a + b, fits: a + b > a)
+  =
+  outputs { sum: a + b, fits: (a + b) > a }
 `)
 	write(t, root, "hyrule.yaml", `version: 1
 targets:
@@ -109,7 +110,8 @@ host
 @Valid
 rewrite (inputs n)
   | Positive n
-  = outputs true
+  =
+  outputs true
 `)
 	config, artifacts := compile(t, root)
 	if !strings.Contains(string(artifacts[0].Data), "type Adder func(left int, right int) (sum int, fits bool, _ bool)") {
@@ -131,11 +133,11 @@ func TestNative(t *testing.T) {
 
 func TestInferredSignatureDiagnostics(t *testing.T) {
 	for _, test := range []struct{ name, signature, host, rules, want string }{
-		{"mismatched handwritten type", "Signature", "type Signature func(Node)(Node,bool)", "fn rewrite(arg0: Node) -> int\n\n",
+		{"mismatched handwritten type", "Signature", "type Signature func(Node)(Node,bool)", "fn rewrite(arg0: Node) -> int\n",
 			"but its rules declare func(arg0 Node) (int, bool)"},
 		{"no signature", "", "", "", "signature requires declared rule types or a Go signature type"},
-		{"unknown type", "", "", "fn rewrite(arg0: Missing) -> int\n\n", "undefined: Missing"},
-		{"implicit arity", "", "", "fn rewrite(arg0: Node, arg1: Node, arg2: Node) -> int\n\n", "signature must be func(Input[, Host]) (Output, bool)"},
+		{"unknown type", "", "", "fn rewrite(arg0: Missing) -> int\n", "undefined: Missing"},
+		{"implicit arity", "", "", "fn rewrite(arg0: Node, arg1: Node, arg2: Node) -> int\n", "signature must be func(Input[, Host]) (Output, bool)"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
@@ -152,7 +154,7 @@ func Sum(a,b int)int{return a+b}
 }
 
 func TestSignatureTypeFormatting(t *testing.T) {
-	input := "partial fn rewrite(value:ssa.Value, arg1: []*Kind, arg2: readonly.Slice[ssa.Value]) -> map[string]Kind\n\nrewrite x = x\n"
+	input := "partial fn rewrite(value: ssa.Value, arg1: []*Kind, arg2: readonly.Slice[ssa.Value]) -> map[string]Kind\n\n@rewrite_L3_Fdecd027b\nrewrite x = x\n"
 	formatted, err := hyrule.Format("signature.rules", []byte(input))
 	if err != nil {
 		t.Fatal(err)
@@ -161,7 +163,7 @@ func TestSignatureTypeFormatting(t *testing.T) {
 	if !strings.HasPrefix(string(formatted), want) {
 		t.Fatalf("signature formatting:\n%s", formatted)
 	}
-	wrapped := "total fn rewrite(left: int,\n  right: int)\n  -> int\n  fallback outputs 0\n\nrewrite x = x\n"
+	wrapped := "total fn rewrite(left: int, right: int) -> int\n  fallback outputs 0\n\n@rewrite_L6_Fdecd027b\nrewrite x = x\n"
 	if formatted, err := hyrule.Format("signature.rules", []byte(wrapped)); err != nil ||
 		!strings.HasPrefix(string(formatted), "total fn rewrite(left: int, right: int) -> int\n  fallback outputs 0\n") {
 		t.Fatalf("continued signature: %v\n%s", err, formatted)
@@ -189,7 +191,7 @@ func TestFunctionHeadersAndMatchBodies(t *testing.T) {
 			rules := prefix + `fn rewrite(request: Node) -> int
 ` + fallback + `  match request
     @Positive
-    Node(A: left, B: right) when left > 0 ->
+    Node { A: left, B: right } when left > 0 ->
       go! { request.A + right }
     @Other
     _ -> 0

@@ -27,7 +27,7 @@ host
   Probe
 
 @SmallFirst
-rewrite (inputs (First (n: n)) host)
+rewrite (inputs (First { n }) host)
   | Small host n
   =
   outputs 1
@@ -36,7 +36,7 @@ rewrite (inputs (First (n: n)) host)
 rewrite (inputs (Second() | Third()) host) = outputs 2
 
 @LargeFirst
-rewrite (inputs (First (n: n)) host) = outputs n
+rewrite (inputs (First { n }) host) = outputs n
 
 @Probe
 rewrite (inputs shape host)
@@ -45,7 +45,7 @@ rewrite (inputs shape host)
   outputs 4
 
 @AfterProbe
-rewrite (inputs (Fourth()) host) = outputs 5
+rewrite (inputs Fourth() host) = outputs 5
 `
 
 const typeSwitchHost = `package fixture
@@ -115,7 +115,7 @@ func TestInfallibleViewPassesVet(t *testing.T) {
   a: A
 
 @First
-rewrite (Point (a: a)) = a
+rewrite (Point { a }) = a
 `)
 	c, artifacts := compile(t, root)
 	if err := c.Publish(artifacts, false); err != nil {

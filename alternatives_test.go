@@ -27,16 +27,16 @@ type Proof = (Kind, int)
   Unavailable (reason: 1) = Unknown
 
 @Main
-rewrite (inputs (Entry (name: name)) n host) =
+rewrite (inputs (Entry { name }) n host) =
   case ask n of
-    Proven (reason: why) -> outputs (mark host why) 1
+    Proven { reason: why } -> outputs (mark host why) 1
     Disproven() -> decline
     Unavailable() -> decline
   <|> case ready name of
     false -> outputs (mark host 10) 2
     true -> decline
   <|> case ask host.Offset.Value of
-    Unavailable (reason: why) -> outputs (mark host why) 3
+    Unavailable { reason: why } -> outputs (mark host why) 3
     Proven() -> decline
     Disproven() -> decline
   <|> outputs (mark host 20) 4
@@ -99,9 +99,9 @@ func TestOrderedAlternativeDiagnostics(t *testing.T) {
 	for _, tt := range []struct{ name, old, replacement, want string }{
 		{"fallback required", "  <|> outputs (mark host 20) 4", "", "final pure fallback"},
 		{"early answer", "case ready name of\n    false -> outputs (mark host 10) 2\n    true -> decline", "outputs 0 0", "ordered alternative requires"},
-		{"fresh payload", "Proven (reason: why)", "Proven (reason: n)", "fresh captures"},
-		{"no refinement", "Proven (reason: why)", "Proven (reason: 7)", "fresh captures"},
-		{"wrong variant", "Proven (reason: why)", "Missing (reason: why)", "decision arm must name a variant"},
+		{"fresh payload", "Proven { reason: why }", "Proven { reason: n }", "fresh captures"},
+		{"no refinement", "Proven { reason: why }", "Proven { reason: 7 }", "fresh captures"},
+		{"wrong variant", "Proven { reason: why }", "Missing { reason: why }", "decision arm must name a variant"},
 		{"bool selection", "false -> outputs (mark host 10) 2", "_ -> outputs (mark host 10) 2", "Boolean decision arms"},
 		{"scope", "outputs (mark host 20) 4", "outputs why 4", "unbound capture"},
 		{"typed answers", "outputs (mark host 10) 2", "outputs true 2", "cannot use"},
@@ -143,7 +143,7 @@ type Observation = Observation
 @Main
 rewrite (Pair x y) =
   case Observe x y of
-    Known (value: proof) -> [Mark 7]
+    Known { value: proof } -> [Mark 7]
     Skipped() -> decline
   <|> [Mark 99]
 
@@ -173,12 +173,11 @@ func TestBehavior(t *testing.T){
 func TestOrderedAlternativesInDecisionArms(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", queryHost)
-	write(t, root, "input.rules", queryDeclarations+`
-@Main
+	write(t, root, "input.rules", queryDeclarations+`@Main
 rewrite (Pair x y) =
   case Ask x of
     Proven() -> case Ask y of
-      Unavailable (reason: why) -> [Mark why]
+      Unavailable { reason: why } -> [Mark why]
       Proven() -> decline
       Disproven() -> decline
     <|> [Mark 7]
@@ -243,7 +242,7 @@ func TestBehavior(t *testing.T){
 func TestOrderedSelectionAlternation(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", nativeHost+`func mark(h *Host,n int)int{h.Calls=append(h.Calls,"mark");return n}`)
-	rules := replaceFixture(t, alternativesRules, "Proven (reason: why)", "(Proven (reason: why) | Unavailable (reason: why))")
+	rules := replaceFixture(t, alternativesRules, "Proven { reason: why }", "(Proven { reason: why } | Unavailable { reason: why })")
 	rules = replaceFixture(t, rules, "    Unavailable() -> decline\n", "")
 	formatted, err := hyrule.Format("input.rules", []byte(rules))
 	if err != nil {
@@ -277,16 +276,16 @@ func TestBehavior(t *testing.T){
 
 func TestOrderedSelectionAlternationDiagnostics(t *testing.T) {
 	for _, tt := range []struct{ name, selection, want string }{
-		{"duplicate", "(Proven (reason: why) | Proven (reason: why))", "duplicate decision variant"},
-		{"capture names", "(Proven (reason: why) | Unavailable (reason: other))", "same captures with identical types"},
-		{"missing capture", "(Proven (reason: why) | Unavailable())", "same captures with identical types"},
-		{"refinement", "(Proven (reason: why) | Unavailable (reason: 7))", "fresh captures"},
-		{"nested", "(Proven (reason: why) | (Unavailable (reason: why) | Disproven()))", "decision arm must name a variant"},
+		{"duplicate", "(Proven { reason: why } | Proven { reason: why })", "duplicate decision variant"},
+		{"capture names", "(Proven { reason: why } | Unavailable { reason: other })", "same captures with identical types"},
+		{"missing capture", "(Proven { reason: why } | Unavailable())", "same captures with identical types"},
+		{"refinement", "(Proven { reason: why } | Unavailable { reason: 7 })", "fresh captures"},
+		{"nested", "(Proven { reason: why } | (Unavailable { reason: why } | Disproven()))", "decision arm must name a variant"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := fixture(t)
 			write(t, root, "bindings.go", nativeHost+"\nfunc mark(h *Host,n int)int{return n}\n")
-			write(t, root, "input.rules", replaceFixture(t, alternativesRules, "Proven (reason: why)", tt.selection))
+			write(t, root, "input.rules", replaceFixture(t, alternativesRules, "Proven { reason: why }", tt.selection))
 			c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 			if err != nil {
 				t.Fatal(err)
@@ -357,7 +356,7 @@ func TestOrderedSelectionCaptureTypes(t *testing.T) {
 	write(t, root, "bindings.go", host+"\nfunc mark(h *Host,n int)int{return n}\n")
 	rules := replaceFixture(t, alternativesRules, "(Kind, int)", "(Kind, int, string)")
 	rules = replaceFixture(t, rules, "Unavailable (reason: 1) = Unknown", "Unavailable (reason: 2) = Unknown")
-	rules = replaceFixture(t, rules, "Proven (reason: why)", "(Proven (reason: why) | Unavailable (reason: why))")
+	rules = replaceFixture(t, rules, "Proven { reason: why }", "(Proven { reason: why } | Unavailable { reason: why })")
 	write(t, root, "input.rules", rules)
 	c, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 	if err != nil {

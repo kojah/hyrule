@@ -8,6 +8,7 @@ host
   integer?
   GroupAdd
 
+@rewrite_L6_Fbfb35ae9
 rewrite (addCall receiver (integer delta)) = GroupAdd receiver delta true
 ```
 
@@ -18,15 +19,16 @@ Go arity to guess grouping. Nullary host calls use `Name()`.
 Named groups are argument syntax, not tuples:
 
 ```text
-Header (backing: backing, length: length, capacity: capacity)
+Header { backing, length, capacity }
 ```
 
-Parentheses and brackets allow cosmetic line wrapping. Calls bind tighter than
+Parentheses, record braces and brackets allow cosmetic line wrapping. Calls bind tighter than
 `* / %`, then `+ -`, comparisons, then `<|>`. Arithmetic is left-associative.
 Use `f (-1)` for a negative argument; `f x - 1` subtracts from the call result.
-Guard qualifiers use comma or `&&` in written order. Boolean `||` is unsupported.
+Guard qualifiers use comma or `&&` in written order. Boolean `&&` and `||`
+short-circuit; `&&` binds more tightly than `||`.
 
-`whole@Pattern` binds the whole matched value. In patterns, bare names are
+`Pattern as whole` binds the whole matched value. In patterns, bare names are
 captures unless declared as constructors/matchers/reusable patterns. An escaped
 name such as `` `instruction` `` forces a capture when that spelling also names
 a matcher. `^Limit` is an explicit constant. Result references prefer lexical
@@ -34,12 +36,13 @@ captures; declared value aliases refer to constants, and constructors retain
 their declared identity. Host functions are not implicitly called as values.
 
 ```text
-rewrite whole@(Pair left right) = sum (sum left 1) right
+@rewrite_L1_F287e625c
+rewrite ((Pair left right) as whole) = sum (sum left 1) right
 ```
 
 Fields are explicit: `request.Header.Length`. A record update is
-`header with (length: end)`. Parenthesize it when passing it as an argument:
-`use (header with (length: end))`.
+`header with { length: end }`. Parenthesize it when passing it as an argument:
+`use (header with { length: end })`.
 
 Pattern `|` requires parentheses, equation `|` introduces guards, and `<|>`
 combines committed result strategies. See [layout](LAYOUT.md) for block endings,

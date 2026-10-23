@@ -39,19 +39,19 @@ func TestTaggedUnionMatchingConstructionAndGuardFallback(t *testing.T) {
   Positive = Positive
   Increment = Increment
 
-pattern Numeric number = (Number (value: number) | Wrapped (atom: AtomNumber (value: number)))
+pattern Numeric number = (Number { value: number } | Wrapped { atom: AtomNumber { value: number } })
 
 @Positive
 rewrite (Numeric number)
   | Positive number
   =
-  Number (value: Increment number)
+  Number { value: Increment number }
 
 @Number
-rewrite (Number (value: number)) = Number (value: number)
+rewrite (Number { value: number }) = Number { value: number }
 
 @Wrapped
-rewrite (Wrapped (atom: atom)) = Wrapped (atom: atom)
+rewrite (Wrapped { atom }) = Wrapped { atom }
 
 @Empty
 rewrite Empty() = Empty()
@@ -114,7 +114,7 @@ rewrite Number() = Empty()
   Positive = Positive
 
 @One
-rewrite (Number (value: n))
+rewrite (Number { value: n })
   | Positive n
   =
   Empty()
@@ -123,11 +123,11 @@ rewrite (Number (value: n))
 rewrite (Empty() | Wrapped()) = Empty()
 `, "non-exhaustive union Value: unproven Number"},
 		{"literal is not coverage", unionSchema, `@One
-rewrite (Number (value: 1)) = Empty()
+rewrite (Number { value: 1 }) = Empty()
 
 @Rest
 rewrite (Empty() | Wrapped()) = Empty()
-`, "non-exhaustive union Value: missing Number (value: _)"},
+`, "non-exhaustive union Value: missing Number { value: _ }"},
 		{"unconditional fallback", unionSchema, `@Any
 rewrite _ = Empty()
 `, ""},
@@ -200,7 +200,7 @@ type V = Atom
   tag Kind
   B = EmptyTag
 `, `_`, "duplicate union"},
-		{"wrong child type", unionSchema, `(Wrapped (atom: Number()))`, "matcher input type mismatch"},
+		{"wrong child type", unionSchema, `Wrapped { atom: Number() }`, "matcher input type mismatch"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
@@ -261,13 +261,13 @@ func TestEmptyVariantAliasOptional(t *testing.T) {
 	write(t, root, "bindings.go", unionHost)
 	schema := replaceFixture(t, unionSchema, "\n  Empty = EmptyTag", "\n  EmptyTag = EmptyTag")
 	rules := `@Number
-rewrite (Number (value: n)) = Number (value: n)
+rewrite (Number { value: n }) = Number { value: n }
 
 @Empty
 rewrite EmptyTag = EmptyTag
 
 @Wrapped
-rewrite (Wrapped (atom: atom)) = Wrapped (atom: atom)
+rewrite (Wrapped { atom }) = Wrapped { atom }
 `
 	write(t, root, "input.rules", schema+rules)
 	_, expected := compile(t, root)

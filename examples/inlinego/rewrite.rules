@@ -1,7 +1,7 @@
 fn rewrite(input: Request) -> Plan
   match input
     @Positive
-    Request (Text: text, A: a, B: b)
+    Request { Text: text, A: a, B: b }
       when go! { a >= 0 && b >= 0 }
       , let total = go! { a + b } ->
       go! {

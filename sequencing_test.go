@@ -29,14 +29,14 @@ type Proof = (Kind, int)
 @Main
 rewrite (inputs nil n host) =
   do
-    Proven (reason: first) <- ask host n 0
+    Proven { reason: first } <- ask host n 0
       else
         Disproven() -> decline
-        Unavailable (reason: why) -> outputs why 3
-    Proven (reason: second) <- ask host host.Offset.Value first
+        Unavailable { reason: why } -> outputs why 3
+    Proven { reason: second } <- ask host host.Offset.Value first
       else
         Disproven() -> decline
-        Unavailable (reason: why) -> outputs why 4
+        Unavailable { reason: why } -> outputs why 4
     outputs (mark host second) 1
   <|> do
     true <- ready host "ok"
@@ -118,8 +118,8 @@ func TestDoDiagnostics(t *testing.T) {
 		{"require non-Boolean", "true <- ready host \"ok\"\n      else\n        false -> decline", "require 1", "pure decision requires a bool"},
 		{"missing outcome", "        Disproven() -> decline\n", "", "missing Disproven"},
 		{"duplicate outcome", "Disproven() -> decline", "Proven -> decline\n        Disproven() -> decline", "duplicate decision variant"},
-		{"refinement", "Proven (reason: first)", "Proven (reason: 7)", "fresh captures"},
-		{"shadow", "Proven (reason: second)", "Proven (reason: first)", "fresh captures"},
+		{"refinement", "Proven { reason: first }", "Proven { reason: 7 }", "fresh captures"},
+		{"shadow", "Proven { reason: second }", "Proven { reason: first }", "fresh captures"},
 		{"later use", "n 0", "second 0", "unbound capture"},
 		{"else scope", "outputs why 3", "outputs first 3", "unbound capture"},
 		{"alternative scope", "mark host 20", "mark host first", "unbound capture"},
@@ -153,11 +153,11 @@ rewrite (Pair x y) =
     Proven <- Ask x
       else
         Disproven -> [1]
-        Unavailable (reason: why) -> [why]
+        Unavailable { reason: why } -> [why]
     Proven <- Ask y
       else
         Disproven -> [2]
-        Unavailable (reason: why) -> [why]
+        Unavailable { reason: why } -> [why]
     [3]
 `)
 	c, a := compile(t, root)
@@ -316,7 +316,7 @@ func TestBehavior(t *testing.T){
 }
 
 func TestDoExpressionElseRequiresBooleanPattern(t *testing.T) {
-	for _, pattern := range []string{"Proven (reason: why)", "_", "0", "(true | false)"} {
+	for _, pattern := range []string{"Proven { reason: why }", "_", "0", "(true | false)"} {
 		t.Run(pattern, func(t *testing.T) {
 			_, err := hyrule.Format("input.rules", []byte(`rewrite input = do
   `+pattern+` <- Ask input
@@ -335,8 +335,11 @@ func TestRequireNeedsChoice(t *testing.T) {
 	write(t, root, "bindings.go", nativeHost)
 	write(t, root, "input.rules", `total fn rewrite(input)
   fallback outputs 0 (-1)
+
 host
   ready! = Ready
+
+@rewrite_L5_Fdecd027b
 rewrite (inputs _ n host) =
   do
     require ready host "ok"

@@ -7,13 +7,13 @@ host
   Grow = Grow
 
 @Empty
-rewrite (Append header@(Header (length: 0))) = Empty header
+rewrite (Append (Header { length: 0 } as header)) = Empty header
 
 @Reuse
-rewrite (Append header@(Header (length: length, capacity: capacity)))
+rewrite (Append (Header { length, capacity } as header))
   | Fits length capacity
   =
   Reuse header
 
 @Grow
-rewrite (Append header@(Header (length: _))) = Grow header
+rewrite (Append (Header { length: _ } as header)) = Grow header

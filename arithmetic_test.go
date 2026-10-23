@@ -23,11 +23,11 @@ func TestArithmeticLocalsPreserveGoOverflow(t *testing.T) {
   value: Value
 
 @Increment
-rewrite number@(Number (value: value))
+rewrite (Number { value } as number)
   | let one = 1
   , let next = value + 1
   =
-  number with (value: next)
+  number with { value: next }
 `)
 			config, artifacts := compile(t, root)
 			if err := config.Publish(artifacts, false); err != nil {

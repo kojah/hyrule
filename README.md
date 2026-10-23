@@ -20,8 +20,10 @@ Types belong in the function header; arm captures and locals are inferred:
 fn rewrite(value: Request) -> Plan
   match value
     @Positive
-    Request(count: count) when count > 0 ->
+    Request { count }
+      when count > 0 ->
       go! { Plan{Count: count} }
+    @rewrite_L6_F7b374983
     _ ->
       go! { Plan{} }
 ```
@@ -39,7 +41,9 @@ fallback before the body:
 total fn classify(value: Request) -> Plan
   fallback go! { Plan{} }
   match value
-    Request(count: count) when count > 0 ->
+    @classify_L4_F3bc2397b
+    Request { count }
+      when count > 0 ->
       go! { Plan{Count: count} }
 ```
 
@@ -66,8 +70,10 @@ host
   payload = BuildPayload
 
 @LookupPayload
-rewrite (Extract lookup@(Lookup _ _ true) 0)
-  | ready lookup = payload lookup
+rewrite (Extract ((Lookup _ _ true) as lookup) 0)
+  | ready lookup
+  =
+  payload lookup
 ```
 
 `?` declares a matcher returning children followed by a success Boolean. `!`
@@ -86,13 +92,16 @@ receive deterministic source identities. Multiple guarded right-hand sides are
 ordered alternatives with separate local scopes:
 
 ```text
+@append_L1_Fbb6aced4
 append (Append header count)
-  | fits header count = reuseBacking header count
-  | otherwise = allocateBacking header count
+  | fits header count
+  =
+  reuseBacking header count
+append (Append header count) = allocateBacking header count
 ```
 
 Bare pattern names bind captures unless they name declared constructors or
-patterns. `whole@Pattern` captures an entire matched value; `_` ignores it.
+patterns. `Pattern as whole` captures an entire matched value; `_` ignores it.
 `^Limit` explicitly references a declared constant. Backticks escape a capture
 whose spelling conflicts with a constructor or keyword. Field paths such as
 `request.Header.Length` read established captures; they do not establish non-nil
@@ -106,14 +115,16 @@ Capture equality does not establish aliasing, structural equality or solver fact
 ### Guards, conditionals and where
 
 ```text
-classify (Entry (node: node))
-  | Found (size: size) <- lookup node
-  , size > 0 && not (excluded node)
+@classify_L1_Fc36e76e3
+classify (Entry { node })
+  | Found { size } <- lookup node
+  , size > 0
+  , not (excluded node)
   =
   if size > limit then outputs large else outputs small
   where
     limit = base * 2
-    large = Big (size: size)
+    large = Big { size }
 ```
 
 `&&`, `||` and `not` take bool operands and short-circuit as in Go and Haskell;
@@ -139,7 +150,19 @@ nested calls: `sum (increment left) right`. Host arity never determines grouping
 Negative call arguments need grouping: `outputs 0 (-1)`; `a - 1` is subtraction.
 See [applications](APPLICATIONS.md) for precedence and name resolution.
 
-Named groups use `Header (length: length, capacity: capacity)`. Matcher labels
+Named fields use braces: `Header { length, capacity }` is shorthand for
+`Header { length: length, capacity: capacity }`. Punning works in patterns,
+construction and `with` updates; fields are selected by name, never position.
+Mix puns with explicit fields, for example `Header { length, capacity: limit }`.
+Use `Header { length } as header` to capture the whole matched header as well
+as its length. For positional patterns, group the whole pattern before `as`:
+`(Pair left right) as pair`. Aliases are pattern-only and bind the immediately
+preceding pattern atom. Named records and updates can span lines and have a
+trailing comma. `Header {}` is an empty named record pattern/construction.
+The old `name@pattern`, `Type (field: value)` and `with (...)` spellings are
+rejected. Positional calls and grouping still use their existing syntax.
+
+Matcher labels
 name Go result parameters excluding the match Boolean. Omitted named children
 are wildcards. Builder labels name input parameters; every parameter must be
 supplied exactly once. Missing, duplicate, unknown and mixed positional/named
@@ -153,9 +176,7 @@ the next alternative. OR is match-only and expands to at most 64 alternatives.
 It is separate from result choice `<|>`.
 
 ```text
-pattern FiniteWrite request resident =
-  Write (request: request, allocated: true, resident: resident,
-         evidence: ExactEvidence)
+pattern FiniteWrite request resident = Write { request, allocated: true, resident, evidence: ExactEvidence }
 ```
 
 Reusable patterns have explicit capture parameters and exact arity. All captures
@@ -173,10 +194,12 @@ for a result block. Existing Hyrule expression syntax remains available.
 ```text
 fn rewrite(input: Request) -> Plan
 
-rewrite (Request (Text: text, A: a, B: b))
+@rewrite_L3_F1fe98495
+rewrite (Request { Text: text, A: a, B: b })
   | go! { a >= 0 && b >= 0 }
   , let total = go! { a + b }
-  = go! {
+  =
+  go! {
       result := Plan{Text: strings.ToUpper(text), Total: total}
       if result.Text == "" {
           result.Text = "EMPTY"
@@ -239,6 +262,7 @@ composite literal, so a one-line host builder is unnecessary.
 ```text
 type Copy
 
+@copy_L3_Faad7ae20
 copy (Builtin source "copy" [destination, input]) = Copy source destination input
 ```
 
@@ -260,9 +284,9 @@ storage. Include provenance explicitly where constructors must preserve it.
 decisions independently require all outcomes. Undeclared runtime tags fail
 conservatively, even before catchalls.
 See [union contracts](UNIONS.md) and [native views/tuple schemas](HOST_INTERFACES.md).
-Patterns may also name Go types directly, `ChannelSnapshot (Fill: fill)`, as
+Patterns may also name Go types directly, `ChannelSnapshot { Fill: fill }`, as
 derived read-only views over exact Go field names, and typed Go constants by
-name, `SendChannel` or the tagged variant `FiniteCapacity (Bound: bound)`.
+name, `SendChannel` or the tagged variant `FiniteCapacity { Bound: bound }`.
 Opted-in accessor methods project as `Name(): pattern` labels.
 
 Guard qualifiers are strict and ordered. Commas or `&&` separate requirements;
@@ -270,12 +294,13 @@ Guard qualifiers are strict and ordered. Commas or `&&` separate requirements;
 
 ```text
 @Fits
-append request@(Request (length: length, capacity: capacity, count: count))
+append (Request { length, capacity, count } as request)
   | count >= 0
   , let end = length + count
   , end >= length
   , end <= capacity
-  = request with (length: end)
+  =
+  request with { length: end }
 ```
 
 Locals cannot shadow captures or earlier locals, and are visible only to later
@@ -286,7 +311,7 @@ with explicit guards where required. Comparison operators are `== != < <= > >=`;
 types must be compatible and equality must be safely comparable. Boolean
 `&&`, `||` and `not` are described under "Guards, conditionals and where".
 
-`request with (field: value)` copies a captured product and preserves unmentioned
+`request with { field: value }` copies a captured product and preserves unmentioned
 fields, including reference identity. It never mutates input. Duplicate/unknown
 fields and non-record bases are errors. Union updates use constructors instead.
 
@@ -306,7 +331,7 @@ first (Arguments [head, ..rest]) = Split head rest
 `[]`, `[a]` and `[a, b]` match exactly that many elements; `[a, ..rest]` matches
 at least the listed elements and binds the remaining suffix. Elements and the
 rest are ordinary patterns, so literals, constructors, nested lists, repeated
-captures and `whole@[...]` work as elsewhere. A length mismatch is a failed
+captures and `[...] as whole` work as elsewhere. A length mismatch is a failed
 match that tries the next rule. Patterns accept Go slices, using `len` and
 indexing, and any type with `Len() int` and `At(int) E` value methods, such as
 `readonly.Slice[T]`; a rest pattern on such a type also needs `Sub(int, int)`
@@ -329,7 +354,7 @@ pattern definitions, and a target reports all of its findings together:
   whole rule, since other uses may need them.
 - An `exhaustive type` input must be covered by unguarded rules. Each uncovered
   variant is named with a witness, `non-exhaustive union Event: missing Channel
-  (capacity: ChannelCapacity (Kind: UnboundedCapacity))`; `_` stands for values
+  { capacity: ChannelCapacity { Kind: UnboundedCapacity } }`; `_` stands for values
   outside the listed ones, and omitted fields are unconstrained. An input that
   only guards, host matchers, accessors or repeated captures might cover is
   reported as `unproven` rather than missing. `total fn` declares its own
@@ -369,6 +394,7 @@ host
   plan = BuildPlan
   conservative = ConservativePlan
 
+@resolve_L6_F9193c53f
 resolve request =
   do
     require ready request
@@ -410,7 +436,9 @@ directly in the configured binding file:
 
 ```text
 fn rewrite(value: ssa.Instruction) -> Copy
+
 partial fn classify(value: ssa.Value, kind: Kind) -> ImmediateKind
+
 total fn transfer(request: TransferRequest) -> TransferPlan
   fallback outputs TransferMissing()
 ```

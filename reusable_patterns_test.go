@@ -27,12 +27,12 @@ func TestReusablePatternsPreserveTypedOrderedMatches(t *testing.T) {
   Positive = Positive
   Sum = Sum
 
-pattern Whole source left right = source@(Choice left right)
+pattern Whole source left right = (Choice left right) as source
 
-pattern Choice left right = (Pair (left: left, right: right) | Pair (left: right, right: left))
+pattern Choice left right = (Pair { left, right } | Pair { left: right, right: left })
 
 @Pick
-rewrite outer@(Whole inner x y)
+rewrite ((Whole inner x y) as outer)
   | Positive x
   =
   Sum x y
@@ -41,7 +41,7 @@ rewrite outer@(Whole inner x y)
 rewrite (First Small()) = Sum 0 0
 `)
 	write(t, root, "second.rules", `// Forward reference in another configured file.
-pattern First value = Pair (left: value)
+pattern First value = Pair { left: value }
 pattern Small = (0 | 1)
 `)
 	data, err := os.ReadFile(filepath.Join(root, "hyrule.yaml"))
@@ -94,7 +94,7 @@ rewrite _ = 0
 @R
 rewrite _ = 0
 `, "free capture $secret"},
-		{"free whole capture", `pattern Shared = secret@(Pair _ _)
+		{"free whole capture", `pattern Shared = (Pair _ _) as secret
 
 @R
 rewrite _ = 0
@@ -137,7 +137,7 @@ rewrite Shared() = 0
 		{"named actual", `pattern Shared x = Pair x _
 
 @R
-rewrite (Shared (x: x)) = 0
+rewrite (Shared { x }) = 0
 `, "arguments are positional"},
 		{"build use", `pattern Shared = _
 
@@ -152,7 +152,7 @@ rewrite _
   =
   0
 `, "expected guard binding"},
-		{"whole input actual", `pattern Shared x = x@(Pair _ _)
+		{"whole input actual", `pattern Shared x = (Pair _ _) as x
 
 @R
 rewrite (Shared 1) = 0
@@ -172,7 +172,7 @@ rewrite (Shared x) = 0
 @R
 rewrite (Shared x) = x
 `, ""},
-		{"wildcard actual", `pattern Shared x = x@(Pair _ _)
+		{"wildcard actual", `pattern Shared x = (Pair _ _) as x
 
 @R
 rewrite (Shared _) = 0
@@ -249,8 +249,10 @@ rewrite (Pair Choice() Choice()) = 0
 
 func TestReusablePatternFormatting(t *testing.T) {
 	original := []byte(`// Explicit captures are part of the reusable contract.
-pattern Entry request present = Pair (left: request, right: present)
+pattern Entry request present = Pair { left: request, right: present }
+
 pattern Ready = (true | false)
+
 @R
 rewrite (Entry x Ready()) = x
 `)

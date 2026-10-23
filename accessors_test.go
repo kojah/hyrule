@@ -46,13 +46,13 @@ func TestAccessorProjections(t *testing.T) {
 	write(t, root, "input.rules", `fn rewrite(arg0: Input) -> string
 
 @Exported
-rewrite (Input (Expr: ast.Ident (Name: name, IsExported(): true))) = name
+rewrite (Input { Expr: ast.Ident { Name: name, IsExported(): true } }) = name
 
 @Three
-rewrite (Input (Box: Box (Size(): 3))) = "three"
+rewrite (Input { Box: Box { Size(): 3 } }) = "three"
 
 @Seven
-rewrite (Input (Expr: ast.Expr (Pos(): 7))) = "seven"
+rewrite (Input { Expr: ast.Expr { Pos(): 7 } }) = "seven"
 `)
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {
@@ -73,17 +73,17 @@ func TestAccessors(t *testing.T) {
  }
 }`)
 	runUnionFixture(t, root, "TestAccessors")
-	if formatted, err := hyrule.Format("input.rules", []byte("rewrite (Box (Size():3)) = 0\n")); err != nil ||
-		!strings.Contains(string(formatted), "Box (Size(): 3)") {
+	if formatted, err := hyrule.Format("input.rules", []byte("@rewrite_L1_Fdecd027b\nrewrite (Box { Size(): 3 }) = 0\n")); err != nil ||
+		!strings.Contains(string(formatted), "Box { Size(): 3 }") {
 		t.Fatalf("accessor formatting: %v\n%s", err, formatted)
 	}
 }
 
 func TestAccessorDiagnostics(t *testing.T) {
 	for _, test := range []struct{ name, views, pattern, want string }{
-		{"not opted in", accessorViews, "(Input (Box: Box (Hidden(): x)))", "Hidden is not an opted-in accessor"},
-		{"arguments", accessorViews, "(Input (Box: Box (Scaled(): x)))", "not an opted-in accessor"},
-		{"unknown method", accessorViews, "(Input (Box: Box (Missing(): x)))", "unknown Go method Missing"},
+		{"not opted in", accessorViews, "(Input { Box: Box { Hidden(): x } })", "Hidden is not an opted-in accessor"},
+		{"arguments", accessorViews, "(Input { Box: Box { Scaled(): x } })", "not an opted-in accessor"},
+		{"unknown method", accessorViews, "(Input { Box: Box { Missing(): x } })", "unknown Go method Missing"},
 		{"bad views entry", "go/ast\n  Ident.Missing\n", "_", "unknown accessor method go/ast.Ident.Missing"},
 		{"views method arguments", "go/ast\n  CommentGroup.Text\n  Scope.Lookup\n", "_", "must take no arguments"},
 	} {

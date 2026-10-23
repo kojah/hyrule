@@ -17,19 +17,19 @@ type Effect = Effect
   Uncertain (lock: Lock, reason: Reason) = Uncertain
 
 @DeferredRelease
-rewrite (Event (lock: lock, release: true, deferred: true)) = [DeferRelease (lock: lock)]
+rewrite (Event { lock, release: true, deferred: true }) = [DeferRelease { lock }]
 
 @ImmediateRelease
-rewrite (Event (lock: lock, release: true, deferred: false)) = [Release (lock: lock)]
+rewrite (Event { lock, release: true, deferred: false }) = [Release { lock }]
 
 @DeferredAcquisition
-rewrite (Event (release: false, deferred: true)) = []
+rewrite (Event { release: false, deferred: true }) = []
 
 @Acquisition
-rewrite (Event (lock: lock, release: false, deferred: false)) =
+rewrite (Event { lock, release: false, deferred: false }) =
   do
     proof <- Exclusive lock
     case proof of
-      Proven() -> [Acquire (lock: lock)]
-      Disproven() -> [Acquire (lock: lock), Order (lock: lock)]
-      Unknown (reason: reason) -> [Acquire (lock: lock), Uncertain (lock: lock, reason: reason)]
+      Proven() -> [Acquire { lock }]
+      Disproven() -> [Acquire { lock }, Order { lock }]
+      Unknown { reason } -> [Acquire { lock }, Uncertain { lock, reason }]

@@ -43,7 +43,6 @@ const usefulnessPrelude = `fn rewrite(arg0: Input) -> int
 host
   Split? = Split
   Positive = Positive
-
 `
 
 func expectUsefulness(t *testing.T, rules, want string) {
@@ -64,104 +63,104 @@ func TestUnreachableRules(t *testing.T) {
 rewrite _ = 0
 
 @Late
-rewrite (Input (Flag: true)) = 1
+rewrite (Input { Flag: true }) = 1
 `, "rule Late: unreachable rule: rule First matches every input it matches"},
 		{"Booleans", `@True
-rewrite (Input (Flag: true)) = 0
+rewrite (Input { Flag: true }) = 0
 
 @False
-rewrite (Input (Flag: false)) = 1
+rewrite (Input { Flag: false }) = 1
 
 @Late
-rewrite (Input (Count: 1)) = 2
+rewrite (Input { Count: 1 }) = 2
 `, "rule Late: unreachable rule: earlier rules match every input"},
 		{"nil and non-nil", `@Nil
-rewrite (Input (Next: nil)) = 0
+rewrite (Input { Next: nil }) = 0
 
 @Some
-rewrite (Input (Next: Input ())) = 1
+rewrite (Input { Next: Input() }) = 1
 
 @Late
-rewrite (Input (Count: 2)) = 2
+rewrite (Input { Count: 2 }) = 2
 `, "rule Late: unreachable"},
 		{"list lengths", `@Empty
-rewrite (Input (Items: [])) = 0
+rewrite (Input { Items: [] }) = 0
 
 @One
-rewrite (Input (Items: [_])) = 1
+rewrite (Input { Items: [_] }) = 1
 
 @More
-rewrite (Input (Items: [_, _, .._])) = 2
+rewrite (Input { Items: [_, _, .._] }) = 2
 
 @Late
-rewrite (Input (Items: [3, ..rest])) = 3
+rewrite (Input { Items: [3, ..rest] }) = 3
 `, "rule Late: unreachable"},
 		{"list rest covers longer lists", `@Rest
-rewrite (Input (Items: [_, ..rest])) = 0
+rewrite (Input { Items: [_, ..rest] }) = 0
 
 @Late
-rewrite (Input (Items: [1, 2, 3])) = 1
+rewrite (Input { Items: [1, 2, 3] }) = 1
 `, "rule Late: unreachable rule: rule Rest matches"},
 		{"or covers", `@Either
-rewrite (Input (Flag: (true | false))) = 0
+rewrite (Input { Flag: (true | false) }) = 0
 
 @Late
 rewrite _ = 1
 `, "rule Late: unreachable"},
 		{"repeated literal", `@One
-rewrite (Input (Count: 1)) = 0
+rewrite (Input { Count: 1 }) = 0
 
 @Again
-rewrite (Input (Count: 1, Flag: true)) = 1
+rewrite (Input { Count: 1, Flag: true }) = 1
 `, "rule Again: unreachable"},
 		{"repeated typed constant", `@A
-rewrite (Input (Kind: KindA)) = 0
+rewrite (Input { Kind: KindA }) = 0
 
 @Again
-rewrite (Input (Kind: KindA)) = 1
+rewrite (Input { Kind: KindA }) = 1
 `, "rule Again: unreachable"},
 		{"tagged variant", `@B
-rewrite (Input (Capacity: KindB (Bound: bound))) = bound
+rewrite (Input { Capacity: KindB { Bound: bound } }) = bound
 
 @Zero
-rewrite (Input (Capacity: KindB (Bound: 0))) = 1
+rewrite (Input { Capacity: KindB { Bound: 0 } }) = 1
 `, "rule Zero: unreachable"},
 		{"implementer", `@Leaf
-rewrite (Input (Node: Leaf (Value: value))) = value
+rewrite (Input { Node: Leaf { Value: value } }) = value
 
 @Three
-rewrite (Input (Node: Leaf (Value: 3))) = 3
+rewrite (Input { Node: Leaf { Value: 3 } }) = 3
 `, "rule Three: unreachable"},
 		{"product view", `@Any
-rewrite (Input (Capacity: Capacity ())) = 0
+rewrite (Input { Capacity: Capacity() }) = 0
 
 @Late
-rewrite (Input (Count: 4)) = 1
+rewrite (Input { Count: 4 }) = 1
 `, "rule Late: unreachable"},
 		{"same host matcher", `@Split
-rewrite (Input (Count: Split left right)) = left + right
+rewrite (Input { Count: Split left right }) = left + right
 
 @Again
-rewrite (Input (Count: Split _ 0)) = 0
+rewrite (Input { Count: Split _ 0 }) = 0
 `, "rule Again: unreachable"},
 		{"guarded branch after otherwise", `@Count
-rewrite (Input (Count: count))
+rewrite (Input { Count: count })
   | Positive count = 1
   | otherwise = 2
   | Positive (count + 1) = 3
 `, "rule Count_3: unreachable"},
 		{"nested", `@Deep
-rewrite (Input (Next: Input (Next: Input (Flag: flag)))) = 0
+rewrite (Input { Next: Input { Next: Input { Flag: flag } } }) = 0
 
 @Late
-rewrite (Input (Next: Input (Next: Input (Flag: true, Count: 2)))) = 1
+rewrite (Input { Next: Input { Next: Input { Flag: true, Count: 2 } } }) = 1
 `, "rule Late: unreachable"},
 		{"dead alternative", `@True
-rewrite (Input (Flag: true)) = 0
+rewrite (Input { Flag: true }) = 0
 
 @Either
-rewrite (Input (Flag: (true | false))) = 1
-`, "input.rules:11:24: rule Either: unreachable alternative"},
+rewrite (Input { Flag: (true | false) }) = 1
+`, "input.rules:10:25: rule Either: unreachable alternative"},
 	} {
 		t.Run(test.name, func(t *testing.T) { expectUsefulness(t, test.rules, test.want) })
 	}
@@ -175,92 +174,94 @@ rewrite (Input (Flag: (true | false))) = 1
 func TestReachableRulesAreNotReported(t *testing.T) {
 	for _, test := range []struct{ name, rules string }{
 		{"guard", `@Positive
-rewrite (Input (Count: count))
+rewrite (Input { Count: count })
   | Positive count
-  = 0
+  =
+  0
 
 @Again
-rewrite (Input (Count: count))
+rewrite (Input { Count: count })
   | Positive count
-  = 1
+  =
+  1
 
 @Rest
-rewrite (Input (Count: count)) = 2
+rewrite (Input { Count: count }) = 2
 `},
 		{"host matcher", `@Split
-rewrite (Input (Count: Split _ _)) = 0
+rewrite (Input { Count: Split _ _ }) = 0
 
 @Rest
 rewrite _ = 1
 `},
 		{"repeated capture", `@Same
-rewrite (Input (Count: count, Capacity: Capacity (Bound: count))) = 0
+rewrite (Input { Count: count, Capacity: Capacity { Bound: count } }) = 0
 
 @Again
-rewrite (Input (Count: count, Capacity: Capacity (Bound: count))) = 1
+rewrite (Input { Count: count, Capacity: Capacity { Bound: count } }) = 1
 `},
 		{"accessor", `@Size
-rewrite (Input (Box: Box (Size(): 1))) = 0
+rewrite (Input { Box: Box { Size(): 1 } }) = 0
 
 @Again
-rewrite (Input (Box: Box (Size(): 1))) = 1
+rewrite (Input { Box: Box { Size(): 1 } }) = 1
 `},
 		{"literals", `@Zero
-rewrite (Input (Count: 0, Name: "")) = 0
+rewrite (Input { Count: 0, Name: "" }) = 0
 
 @One
-rewrite (Input (Count: 1)) = 1
+rewrite (Input { Count: 1 }) = 1
 
 @Rest
 rewrite _ = 2
 `},
 		{"typed constants", `@A
-rewrite (Input (Kind: KindA)) = 0
+rewrite (Input { Kind: KindA }) = 0
 
 @B
-rewrite (Input (Kind: KindB)) = 1
+rewrite (Input { Kind: KindB }) = 1
 
 @C
-rewrite (Input (Kind: KindC)) = 2
+rewrite (Input { Kind: KindC }) = 2
 
 @Rest
 rewrite _ = 3
 `},
 		{"implementers", `@Nil
-rewrite (Input (Node: nil)) = 0
+rewrite (Input { Node: nil }) = 0
 
 @Leaf
-rewrite (Input (Node: Leaf ())) = 1
+rewrite (Input { Node: Leaf() }) = 1
 
 @Pair
-rewrite (Input (Node: Pair ())) = 2
+rewrite (Input { Node: Pair() }) = 2
 
 @Rest
 rewrite _ = 3
 `},
 		{"list lengths", `@Empty
-rewrite (Input (Items: [])) = 0
+rewrite (Input { Items: [] }) = 0
 
 @One
-rewrite (Input (Items: [_])) = 1
+rewrite (Input { Items: [_] }) = 1
 
 @More
-rewrite (Input (Items: [_, .._])) = 2
+rewrite (Input { Items: [_, .._] }) = 2
 `},
 		{"host sequence lengths", `@Empty
-rewrite (Input (Seq: [])) = 0
+rewrite (Input { Seq: [] }) = 0
 
 @More
-rewrite (Input (Seq: [_, ..rest])) = 1
+rewrite (Input { Seq: [_, ..rest] }) = 1
 
 @Negative
 rewrite _ = 2
 `},
 		{"different fields", `@Flag
-rewrite (Input (Flag: true)) = 0
+rewrite (Input { Flag: true }) = 0
 
 @Count
-rewrite (Input (Count: 1)) = 1
+rewrite (Input { Count: 1 }) = 1
 `},
 	} {
 		t.Run(test.name, func(t *testing.T) { expectUsefulness(t, test.rules, "") })
@@ -297,7 +298,6 @@ exhaustive type Event = Event
 
 @Closed
 rewrite Closed = 9
-
 `
 
 // An exhaustive input union must be covered by unguarded rules. Missing
@@ -306,67 +306,68 @@ rewrite Closed = 9
 func TestNonExhaustiveWitnesses(t *testing.T) {
 	for _, test := range []struct{ name, rules, want string }{
 		{"typed constant", `@Nil
-rewrite (Channel (capacity: NilCapacity ())) = 0
+rewrite (Channel { capacity: NilCapacity() }) = 0
 
 @Finite
-rewrite (Channel (capacity: FiniteCapacity ())) = 1
-`, "non-exhaustive union Event: missing Channel (capacity: ChannelCapacity (Kind: UnboundedCapacity))"},
+rewrite (Channel { capacity: FiniteCapacity() }) = 1
+`, "non-exhaustive union Event: missing Channel { capacity: ChannelCapacity { Kind: UnboundedCapacity } }"},
 		{"typed constants are open", `@Nil
-rewrite (Channel (capacity: NilCapacity ())) = 0
+rewrite (Channel { capacity: NilCapacity() }) = 0
 
 @Finite
-rewrite (Channel (capacity: FiniteCapacity ())) = 1
+rewrite (Channel { capacity: FiniteCapacity() }) = 1
 
 @Unbounded
-rewrite (Channel (capacity: UnboundedCapacity ())) = 2
-`, "missing Channel (capacity: ChannelCapacity (Kind: _))"},
+rewrite (Channel { capacity: UnboundedCapacity() }) = 2
+`, "missing Channel { capacity: ChannelCapacity { Kind: _ } }"},
 		{"Booleans", `@Ready
-rewrite (Channel (ready: true)) = 0
+rewrite (Channel { ready: true }) = 0
 
 @Waiting
-rewrite (Channel (ready: false)) = 1
+rewrite (Channel { ready: false }) = 1
 `, ""},
 		{"missing Boolean", `@Ready
-rewrite (Channel (ready: true, link: nil)) = 0
+rewrite (Channel { ready: true, link: nil }) = 0
 
 @Waiting
-rewrite (Channel (ready: false)) = 1
-`, "missing Channel (ready: true, link: Link())"},
+rewrite (Channel { ready: false }) = 1
+`, "missing Channel { ready: true, link: Link() }"},
 		{"pointers", `@None
-rewrite (Channel (link: nil)) = 0
+rewrite (Channel { link: nil }) = 0
 
 @Some
-rewrite (Channel (link: Link ())) = 1
+rewrite (Channel { link: Link() }) = 1
 `, ""},
 		{"lists", `@Empty
-rewrite (Channel (items: [])) = 0
+rewrite (Channel { items: [] }) = 0
 
 @One
-rewrite (Channel (items: [_])) = 1
-`, "missing Channel (items: [_, _, .._])"},
+rewrite (Channel { items: [_] }) = 1
+`, "missing Channel { items: [_, _, .._] }"},
 		{"list rest", `@Empty
-rewrite (Channel (items: [])) = 0
+rewrite (Channel { items: [] }) = 0
 
 @More
-rewrite (Channel (items: [_, ..rest])) = 1
+rewrite (Channel { items: [_, ..rest] }) = 1
 `, ""},
 		{"literal", `@Zero
-rewrite (Channel (capacity: ChannelCapacity (Bound: 0))) = 0
-`, "missing Channel (capacity: ChannelCapacity (Bound: _))"},
+rewrite (Channel { capacity: ChannelCapacity { Bound: 0 } }) = 0
+`, "missing Channel { capacity: ChannelCapacity { Bound: _ } }"},
 		{"guard", `@Positive
-rewrite (Channel (capacity: capacity))
+rewrite (Channel { capacity })
   | Positive capacity.Bound
-  = 0
+  =
+  0
 `, "non-exhaustive union Event: unproven Channel (guards, host matchers"},
 		{"repeated capture", `@Same
-rewrite (Channel (capacity: ChannelCapacity (Bound: bound, Kind: _), items: [bound])) = 0
+rewrite (Channel { capacity: ChannelCapacity { Bound: bound, Kind: _ }, items: [bound] }) = 0
 
 @Empty
-rewrite (Channel (items: [])) = 1
+rewrite (Channel { items: [] }) = 1
 
 @More
-rewrite (Channel (items: [_, _, .._])) = 2
-`, "unproven Channel (items: [_])"},
+rewrite (Channel { items: [_, _, .._] }) = 2
+`, "unproven Channel { items: [_] }"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
@@ -390,8 +391,8 @@ rewrite Number = Empty()
 rewrite Empty = Empty()
 
 @Wrapped
-rewrite (Wrapped (atom: AtomNumber)) = Empty()
-`, "non-exhaustive union Value: missing Wrapped (atom: AtomEmpty)"},
+rewrite (Wrapped { atom: AtomNumber }) = Empty()
+`, "non-exhaustive union Value: missing Wrapped { atom: AtomEmpty }"},
 		{"nested or covers", `@Number
 rewrite Number = Empty()
 
@@ -399,7 +400,7 @@ rewrite Number = Empty()
 rewrite Empty = Empty()
 
 @Wrapped
-rewrite (Wrapped (atom: (AtomNumber | AtomEmpty))) = Empty()
+rewrite (Wrapped { atom: (AtomNumber | AtomEmpty) }) = Empty()
 `, ""},
 		{"fallback after every variant", `@Number
 rewrite Number = Empty()
@@ -411,10 +412,10 @@ rewrite (Empty | Wrapped) = Empty()
 rewrite _ = Empty()
 `, "rule Late: unreachable rule: earlier rules match every input"},
 		{"unvalidated union stays open", `@Number
-rewrite (Value (Atom: AtomNumber)) = Empty()
+rewrite (Value { Atom: AtomNumber }) = Empty()
 
 @Empty
-rewrite (Value (Atom: AtomEmpty)) = Empty()
+rewrite (Value { Atom: AtomEmpty }) = Empty()
 
 @Rest
 rewrite _ = Empty()

@@ -64,8 +64,8 @@ rewrite (Pair x y | Pair x y)
         case next of
           Proven() -> [10]
           Disproven() -> [11]
-          Unavailable (reason: why) -> Wrap [Mark why, Mark 3]
-      Unavailable (reason: why) -> [Mark why]
+          Unavailable { reason: why } -> Wrap [Mark why, Mark 3]
+      Unavailable { reason: why } -> [Mark why]
 
 @Fallback
 rewrite _ = [Mark 99]
@@ -136,15 +136,15 @@ func TestQueryDecisionDiagnostics(t *testing.T) {
 		{"missing", named("p", "Ask 0", "\n    Proven -> []"), "missing Disproven, Unavailable"},
 		{"duplicate", named("p", "Ask 0", complete+"\n    Proven -> []"), "duplicate decision variant"},
 		{"catchall", named("p", "Ask 0", "\n    _ -> []"), "decision arm must name"},
-		{"refined", named("p", "Ask 0", "\n    Proven -> []\n    Disproven -> []\n    Unavailable (reason: 42) -> []"), "refinements are not exhaustive"},
+		{"refined", named("p", "Ask 0", "\n    Proven -> []\n    Disproven -> []\n    Unavailable { reason: 42 } -> []"), "refinements are not exhaustive"},
 		{"wrong capture", "do\n    p <- Ask 0\n    case q of\n      Proven -> []", "unbound capture"},
 		{"not query", named("p", "Mark 0", complete), "requires a bool or declared union"},
 		{"wrong arity", named("p", "Ask()", complete), "one parameter per argument"},
 		{"argument type", named("p", "Ask \"bad\"", complete), "cannot use"},
 		{"builder argument", named("p", "Ask (Mark 0)", complete), "captures, constants or literals"},
-		{"escaped payload", named("p", "Ask 0", "\n    Proven -> [why]\n    Disproven -> []\n    Unavailable (reason: why) -> []"), "unbound capture"},
+		{"escaped payload", named("p", "Ask 0", "\n    Proven -> [why]\n    Disproven -> []\n    Unavailable { reason: why } -> []"), "unbound capture"},
 		{"shadow query", named("x", "Ask 0", complete), "query capture shadows"},
-		{"shadow payload", named("p", "Ask 0", "\n    Proven -> []\n    Disproven -> []\n    Unavailable (reason: x) -> []"), "fresh captures"},
+		{"shadow payload", named("p", "Ask 0", "\n    Proven -> []\n    Disproven -> []\n    Unavailable { reason: x } -> []"), "fresh captures"},
 		{"effect type", `["bad"]`, "cannot use"},
 		{"query as builder", "Ask 0", "expected build binding"},
 		{"nested query", "Wrap (case Ask 0 of\n    Proven -> []\n    Disproven -> []\n    Unavailable -> [])", "only allowed as a rule result"},
@@ -198,7 +198,7 @@ func TestEffectsPreserveNamedArgumentOrderAndTypes(t *testing.T) {
   Pack = Pack
 
 @R
-rewrite _ = Pack (right: [Mark 2, nil, Mark 3], left: Mark 1)
+rewrite _ = Pack { right: [Mark 2, nil, Mark 3], left: Mark 1 }
 `)
 	c, a := compile(t, root)
 	if err := c.Publish(a, false); err != nil {
@@ -282,7 +282,7 @@ func TestResultKeywordsRemainUsableAsFieldNames(t *testing.T) {
   B = Build
 
 @R
-rewrite (M (effects: a, query: b)) = B (effects: a, query: b)
+rewrite (M { effects: a, query: b }) = B { effects: a, query: b }
 `)
 	compile(t, root)
 }
@@ -308,7 +308,7 @@ host
   Later = Later
 
 @First
-rewrite (Node (A: 0)) = [Invalid(), Later()]
+rewrite (Node { A: 0 }) = [Invalid(), Later()]
 
 @Fallback
 rewrite _ = [Later()]

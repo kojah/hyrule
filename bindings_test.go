@@ -25,7 +25,7 @@ rewrite (Pair x y)
     case proof of
       Proven() -> [Mark ^Count]
       Disproven() -> []
-      Unavailable (reason: why) -> Wrap [why]
+      Unavailable { reason: why } -> Wrap [why]
 `
 	// The same host declarations and rule must emit identical Go, including the
 	// ordered query continuation, regardless of how the bindings are spelled.

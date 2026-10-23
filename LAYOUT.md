@@ -23,7 +23,7 @@ Equations may continue on indented lines. Guard bars belong to the equation;
 comma-separated guard qualifiers preserve written evaluation order. A `where`
 block follows the last alternative on an indented line; its bindings align with
 each other. In `if`, `then` and `else` may each start a line indented past the
-line containing `if`. Parentheses
+line containing `if`. Parentheses, record braces
 and brackets permit expression continuation across lines, so named groups and
 lists can wrap freely. Explicit `do` and `case` blocks inside parentheses still
 use their own statement/arm indentation. Pattern alternatives require parentheses. Result choice `<|>` can
@@ -56,3 +56,10 @@ body. A `match parameter` body has aligned arms, each with an optional
 `@Label`, a pattern, optional `when` qualifiers, and `-> result`. The body
 may instead be a direct result expression. A header without a body can supply
 types for equation fragments in the target's other files.
+
+Named record patterns and constructions use `Type { field, other: value }`;
+updates use `value with { field: replacement }`. A bare field is a pun for the
+same-named value or capture. `pattern as name` binds the whole pattern atom;
+group positional applications before aliasing. Record braces are expression
+delimiters, not block delimiters. The old named parentheses and prefix `@`
+captures are rejected; `@Label` still names a rule.

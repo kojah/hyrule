@@ -33,16 +33,16 @@ func TestDecisionGraphPreservesOrderedContainerChoices(t *testing.T) {
   Result = Result
 
 @Empty
-rewrite (Slice (header: Header (length: 0))) = Result 0
+rewrite (Slice { header: Header { length: 0 } }) = Result 0
 
 @Reuse
-rewrite (Slice (header: Header (length: length)))
+rewrite (Slice { header: Header { length } })
   | Fits length
   =
   Result 1
 
 @Grow
-rewrite (Slice (header: Header (length: _))) = Result 2
+rewrite (Slice { header: Header { length: _ } }) = Result 2
 `)
 	c, a := compile(t, root)
 	if err := c.Publish(a, false); err != nil {
@@ -74,7 +74,7 @@ rewrite (Slice (header: Header (length: _))) = Result 2
   Result = Result
 
 @Alternative
-rewrite (Slice (header: Header (length: length)) | Other (header: Header (length: length)))
+rewrite (Slice { header: Header { length } } | Other { header: Header { length } })
   | Fits length
   =
   Result length

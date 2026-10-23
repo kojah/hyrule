@@ -7,16 +7,16 @@ host
   Positive = Positive
   Increment = Increment
 
-pattern NumberValue number = Number (value: number)
+pattern NumberValue number = Number { value: number }
 
 @PositiveNumber
 rewrite (NumberValue number)
   | Positive number
   =
-  Number (value: Increment number)
+  Number { value: Increment number }
 
 @OtherNumber
-rewrite (Number (value: number)) = Number (value: number)
+rewrite (Number { value: number }) = Number { value: number }
 
 @EmptyValue
 rewrite Empty() = Empty()

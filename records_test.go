@@ -33,13 +33,13 @@ func TestTypedConstantPatternAndRecordGuardFallthrough(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", recordHost)
 	write(t, root, "input.rules", recordSchema+`@Known
-rewrite box@(Box (kind: ^Known, count: n))
+rewrite (Box { kind: ^Known, count: n } as box)
   | n >= 0
   =
-  box with (count: 7)
+  box with { count: 7 }
 
 @Fallback
-rewrite box = box with (count: -1)
+rewrite box = box with { count: -1 }
 `)
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {
@@ -69,7 +69,7 @@ func TestStructuralRuleDiagnostics(t *testing.T) {
 		{"typed constant mismatch", recordSchema + `host
   Bad = Foreign
 `,
-			`(Box (kind: ^Bad)) = Box (kind: ^Known, count: 0, source: "", any: nil)`, "constant pattern type mismatch"},
+			`(Box { kind: ^Bad }) = Box { kind: ^Known, count: 0, source: "", any: nil }`, "constant pattern type mismatch"},
 		{"unknown constant", recordSchema, `_ = ^Missing`, "unknown constant Missing"},
 		{"incomplete schema", `type Box = Box
   kind: Kind
@@ -78,20 +78,20 @@ func TestStructuralRuleDiagnostics(t *testing.T) {
   kind: Kind
   count: Kind
 `, `box = box`, "duplicate record field"},
-		{"unknown field", recordSchema, `(Box (missing: 0)) = Box (kind: ^Known, count: 0, source: "", any: nil)`, "unknown matcher field"},
-		{"missing construction field", recordSchema, `_ = Box (kind: ^Known)`, "missing named builder arguments"},
-		{"unknown update field", recordSchema, `box = box with (missing: 0)`, "unknown update field"},
-		{"duplicate update field", recordSchema, `box = box with (count: 0, count: 1)`, "unique named fields"},
-		{"update needs captured base", recordSchema, `_ = 0 with (count: 0)`, "explicit captured record base"},
-		{"unsafe interface equality", recordSchema, `box@(Box (any: any))
+		{"unknown field", recordSchema, `(Box { missing: 0 }) = Box { kind: ^Known, count: 0, source: "", any: nil }`, "unknown matcher field"},
+		{"missing construction field", recordSchema, `_ = Box { kind: ^Known }`, "missing named builder arguments"},
+		{"unknown update field", recordSchema, `box = box with { missing: 0 }`, "unknown update field"},
+		{"duplicate update field", recordSchema, `box = box with { count: 0, count: 1 }`, "unique named fields"},
+		{"update needs captured base", recordSchema, `_ = 0 with { count: 0 }`, "explicit captured record base"},
+		{"unsafe interface equality", recordSchema, `Box { any } as box
   | any == any
   =
   box`, "safe comparable operands"},
-		{"unordered scalar", recordSchema, `box@(Box (count: n))
+		{"unordered scalar", recordSchema, `Box { count: n } as box
   | true < false
   =
   box`, "ordered scalar types"},
-		{"incompatible comparison", recordSchema, `box@(Box (count: n, source: source))
+		{"incompatible comparison", recordSchema, `Box { count: n, source } as box
   | n < source
   =
   box`, "compatible operand types"},
@@ -100,7 +100,7 @@ func TestStructuralRuleDiagnostics(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
 			write(t, root, "bindings.go", recordHost)
-			write(t, root, "input.rules", test.schema+"@Check\nrewrite "+test.rule+"\n")
+			write(t, root, "input.rules", test.schema+"\n\n@Check\nrewrite "+test.rule+"\n")
 			config, err := hyrule.Load(filepath.Join(root, "hyrule.yaml"))
 			if err != nil {
 				t.Fatal(err)
@@ -115,10 +115,10 @@ func TestStructuralRuleDiagnostics(t *testing.T) {
 
 func TestStructuralSyntaxFormatting(t *testing.T) {
 	input := []byte(recordSchema + `@Copy
-rewrite box@(Box (kind: ^Known, count: n))
+rewrite (Box { kind: ^Known, count: n } as box)
   | n >= 0
   =
-  box with (count: n)
+  box with { count: n }
 `)
 	first, err := hyrule.Format("records.rules", input)
 	if err != nil {
@@ -144,10 +144,10 @@ type Signature func(Box)(Box,bool)
   effects: Effects
 
 @Construct
-rewrite (Box (count: 0)) = Box (count: 1, effects: [7, 8])
+rewrite (Box { count: 0 }) = Box { count: 1, effects: [7, 8] }
 
 @Update
-rewrite box@(Box (count: 1)) = box with (effects: [])
+rewrite (Box { count: 1 } as box) = box with { effects: [] }
 
 @Preserve
 rewrite box = box
@@ -192,7 +192,7 @@ host
   Pair?
 
 @Partial
-rewrite (Pair 0 b) = Copy (destination: b)
+rewrite (Pair 0 b) = Copy { destination: b }
 
 @Zero
 rewrite (Pair 1 1) = Copy()
@@ -200,19 +200,22 @@ rewrite (Pair 1 1) = Copy()
 @Positional
 rewrite (Pair a b)
   | a > 0
-  = Copy "positional" a b 1
+  =
+  Copy "positional" a b 1
 
 @Named
 rewrite (Pair a b)
   | b > 0
-  = Copy (id: 2, input: b, destination: a, source: "named")
+  =
+  Copy { id: 2, input: b, destination: a, source: "named" }
 
 @Updated
 rewrite (Pair a b)
   | let base = Copy "base" a b 3
-  = base with (source: "updated")
+  =
+  base with { source: "updated" }
 `)
-	if formatted, err := hyrule.Format("input.rules", []byte("type Copy\n\nrewrite x = x\n")); err != nil || !strings.HasPrefix(string(formatted), "type Copy\n") {
+	if formatted, err := hyrule.Format("input.rules", []byte("type Copy\n\n@rewrite_L3_Fdecd027b\nrewrite x = x\n")); err != nil || !strings.HasPrefix(string(formatted), "type Copy\n") {
 		t.Fatalf("implicit storage type was not preserved: %v\n%s", err, formatted)
 	}
 	config, artifacts := compile(t, root)

@@ -17,11 +17,12 @@ type Proof = Proof
   Disproven = DisprovenKind
   Unknown (reason: Reason) = UnknownKind
 
-acquire (AcquireEvent (lock: lock)) =
+@acquire_L10_F247aa7f8
+acquire (AcquireEvent { lock }) =
   case Exclusive lock of
     Proven -> [Acquire lock]
     Disproven -> [Acquire lock, RecordOrder lock]
-    Unknown (reason: reason) -> [Acquire lock, Uncertain lock reason]
+    Unknown { reason } -> [Acquire lock, Uncertain lock reason]
 ```
 
 The constructors/builders in this illustration need host declarations. The
@@ -43,13 +44,14 @@ host functions and explicit receiver methods are supported.
 For a named result:
 
 ```text
+@classify_L1_F8f022b29
 classify request =
   do
     proof <- Exclusive request.Lock
     case proof of
       Proven -> proof
       Disproven -> proof
-      Unknown (reason: reason) -> conservative reason
+      Unknown { reason } -> conservative reason
 ```
 
 This retains the whole result without a second query. Names cannot shadow an
@@ -59,14 +61,16 @@ executes. All arms are type-checked, including unreachable ones.
 ## Sequential queries with do
 
 ```text
+@resolve_L1_Fd8602263
 resolve request =
   do
-    Proven (reason: first) <- ask request
+    Proven { reason: first } <- ask request
       else
         Disproven -> missing request
-        Unknown (reason: why) -> uncertain why
+        Unknown { reason: why } -> uncertain why
     true <- ready request first
-      else false -> missing request
+      else
+        false -> missing request
     answer first
 ```
 
@@ -89,10 +93,12 @@ language.
 ## Lazy ordered alternatives
 
 ```text
+@resolve_L1_F564ff0a7
 resolve request =
   do
-    (Proven (reason: why) | Unknown (reason: why)) <- ask request
-      else Disproven -> decline
+    (Proven { reason: why } | Unknown { reason: why }) <- ask request
+      else
+        Disproven -> decline
     answer why
   <|> case secondary request of
     true -> fallbackAnswer request

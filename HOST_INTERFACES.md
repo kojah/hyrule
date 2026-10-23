@@ -10,6 +10,7 @@ the implicit API remains `func(Input[, Host]) (Output, bool)`.
 host
   transferred!
 
+@transfer_L4_F7363bae7
 transfer request =
   case transferred request of
     true -> Settled
@@ -56,8 +57,7 @@ projection has Go's nil behavior; it does not establish non-nil evidence.
 
 ```text
 host
-  transferred! instruction obligation =
-    transfersResource evidence instruction obligation.target
+  transferred! instruction obligation = transfersResource evidence instruction obligation.target
 ```
 
 Parameters are positional values. The body calls an existing host function with
@@ -77,8 +77,7 @@ without adding implicit state or changing their execution phase.
 Declare the parameter and result types with the failure contract:
 
 ```text
-total fn classify(evidence: *Evidence, probe: Probe, instruction: Instruction,
-  obligation: Obligation) -> Status, Reason
+total fn classify(evidence: *Evidence, probe: Probe, instruction: Instruction, obligation: Obligation) -> Status, Reason
   fallback outputs statusUnknown reasonNone
 ```
 
@@ -93,6 +92,7 @@ type Signature func(*Evidence, Probe, Instruction, Obligation) (Status, Reason)
 total fn classify
   fallback outputs statusUnknown reasonNone
 
+@classify_L4_F4e70955a
 classify (inputs evidence probe instruction obligation) =
   case transferred instruction obligation of
     true -> outputs statusSettled reasonTransferred
@@ -123,7 +123,8 @@ view Assertion = *ssa.TypeAssert
   value: X
   commaOK: CommaOk
 
-asserted (Assertion (value: value, commaOK: false)) = value
+@asserted_L5_F9d90fe8d
+asserted (Assertion { value, commaOK: false }) = value
 ```
 
 Views name local/imported structs or pointers and can expose a subset of direct
@@ -191,7 +192,7 @@ tests Go `==`; in values and guards, `OperationEnabled` or `action ==
 UnknownAction` reads it. Qualified names use the binding file's imports.
 
 Applied to a struct whose unique field has the constant's type, the name is a
-tagged variant: `FiniteCapacity (Bound: bound)` on a `ChannelCapacity{Kind
+tagged variant: `FiniteCapacity { Bound: bound }` on a `ChannelCapacity{Kind
 CapacityKind; Bound int}` input requires `Kind == FiniteCapacity` and matches
 the named Go fields. The constants of the tag type are the variant set; a tag
 outside them matches no variant. Two fields of the tag type are ambiguous.

@@ -31,13 +31,13 @@ func TestNamedBuildersPreserveWrittenEvaluationOrder(t *testing.T) {
   Sum = Sum
 
 @Guarded
-rewrite (Pair (left: x))
+rewrite (Pair { left: x })
   | Positive x
   =
-  Compose (right: Mark x, left: Mark 4)
+  Compose { right: Mark x, left: Mark 4 }
 
 @Fallback
-rewrite _ = Sum (Mark 1) (Compose (right: Mark 2, left: Mark 3))
+rewrite _ = Sum (Mark 1) (Compose { right: Mark 2, left: Mark 3 })
 `)
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {
@@ -75,7 +75,7 @@ func TestNamedBuilderHostAndAssignmentContexts(t *testing.T) {
   Header = Build
 
 @Header
-rewrite _ = Header (length: 255, backing: nil)
+rewrite _ = Header { length: 255, backing: nil }
 `)
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {
@@ -94,16 +94,16 @@ rewrite _ = Header (length: 255, backing: nil)
 
 func TestNamedBuilderDiagnostics(t *testing.T) {
 	for _, test := range []struct{ name, expression, want string }{
-		{"missing", `Sum (left: 1)`, "missing named builder arguments"},
-		{"duplicate", `Sum (left: 1, left: 2)`, "duplicate builder argument left"},
-		{"unknown", `Sum (left: 1, absent: 2)`, "unknown builder argument absent"},
-		{"case sensitive", `Sum (Left: 1, right: 2)`, "unknown builder argument Left"},
-		{"mixed named first", `Sum (left: 1) 2`, "cannot mix named and positional builder arguments"},
-		{"mixed positional first", `Sum 1 (right: 2)`, "cannot mix named and positional builder arguments"},
-		{"unnamed Go params", `Unnamed (left: 1, right: 2)`, "usable Go parameter names"},
-		{"blank Go param", `Blank (left: 1, right: 2)`, "usable Go parameter names"},
-		{"typed literal", `Tiny (value: 256)`, "overflows"},
-		{"wrong type", `Sum (left: "wrong", right: 2)`, "cannot use"},
+		{"missing", `Sum { left: 1 }`, "missing named builder arguments"},
+		{"duplicate", `Sum { left: 1, left: 2 }`, "duplicate builder argument left"},
+		{"unknown", `Sum { left: 1, absent: 2 }`, "unknown builder argument absent"},
+		{"case sensitive", `Sum { Left: 1, right: 2 }`, "unknown builder argument Left"},
+		{"mixed named first", `Sum { left: 1 } 2`, "cannot mix named and positional"},
+		{"mixed positional first", `Sum 1 { right: 2 }`, "cannot mix named and positional"},
+		{"unnamed Go params", `Unnamed { left: 1, right: 2 }`, "usable Go parameter names"},
+		{"blank Go param", `Blank { left: 1, right: 2 }`, "usable Go parameter names"},
+		{"typed literal", `Tiny { value: 256 }`, "overflows"},
+		{"wrong type", `Sum { left: "wrong", right: 2 }`, "cannot use"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
@@ -141,7 +141,7 @@ func TestNamedGuardArgumentsRemainUnsupported(t *testing.T) {
 
 @Contract
 rewrite _
-  | Positive (n: 1)
+  | Positive { n: 1 }
   =
   0
 `)
@@ -160,7 +160,7 @@ func TestNamedBuilderFormatting(t *testing.T) {
   SliceHeader = Build
 
 @Header
-rewrite _ = SliceHeader (backing: b, offset: s, length: n, capacity: c)
+rewrite _ = SliceHeader { backing: b, offset: s, length: n, capacity: c }
 `)
 	formatted, err := hyrule.Format("builders.rules", input)
 	if err != nil {

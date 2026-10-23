@@ -39,9 +39,10 @@ rewrite (inputs shape host)
 
 @Guarded
 rewrite (inputs shape host)
-  | First (n: n) <- Pick host shape
-  , Pick host shape != nil
-  , n > 0 && Small host n
+  | First { n } <- Pick host shape
+  , (Pick host shape) != nil
+  , n > 0
+  , Small host n
   =
   outputs n
 
@@ -50,7 +51,8 @@ rewrite (inputs shape host) =
   do
     answer <- ask host
     false <- answer == 0
-      else true -> outputs 1
+      else
+        true -> outputs 1
     if answer > 3 then outputs answer else decline
   <|> outputs 99
 `
@@ -118,9 +120,9 @@ func TestHaskellLanguageDiagnostics(t *testing.T) {
 		{"where scope", "offset = 5", "offset = n", "not an equation capture"},
 		{"where collision", "    offset = 5", "    offset = 5\n    host = 1", "collides"},
 		{"where projection", "10 + offset", "10 + offset.N", "cannot be projected"},
-		{"bool operands", "n > 0 && Small host n", "n > 0 && not n", "require bool operands"},
-		{"bool guard", "n > 0 && Small host n", "n", "guards require bool"},
-		{"impure pattern guard", "First (n: n) <- Pick host shape", "First (n: n) <- ask host", "must be pure"},
+		{"bool operands", "n > 0\n  , Small host n", "n > 0 && not n", "require bool operands"},
+		{"bool guard", "n > 0\n  , Small host n", "n", "guards require bool"},
+		{"impure pattern guard", "First { n } <- Pick host shape", "First { n } <- ask host", "must be pure"},
 		{"decline needs choice", "else outputs 7", "else decline", "enclosing ordered alternative"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -228,7 +230,7 @@ type Signature func(Node) (int, bool)
 func decimal(n int) string { return numbers.Itoa(n) }
 `
 
-const inlineGoRules = `rewrite (Node (A: left, B: right))
+const inlineGoRules = `rewrite (Node { A: left, B: right })
   | go! { left >= 0 }
   , let total = go! { left + right }
   = go! {
@@ -250,7 +252,7 @@ func TestInlineGoDiagnostics(t *testing.T) {
 		{"wrong result", `go! { "wrong" }`, "cannot use"},
 		{"missing return", `go! { n := 1; _ = n }`, "missing return"},
 		{"unknown name", `go! { missing }`, "undefined"},
-		{"multiple results", `go! { numbers.Atoi("1") }`, "multiple-value"},
+		{"multiple results", `go! { numbers.Atoi("1") }`, "too many return values"},
 		{"unknown import", `go! { missingpkg.Value }`, "undefined"},
 		{"generated names unavailable", `go! { harg0 }`, "undefined"},
 	}
@@ -274,9 +276,11 @@ func TestInlineGoDiagnostics(t *testing.T) {
 func TestInlineGoWhereCannotSeeGuardLocals(t *testing.T) {
 	root := fixture(t)
 	write(t, root, "bindings.go", inlineGoHost)
-	write(t, root, "input.rules", `rewrite input
+	write(t, root, "input.rules", `@rewrite_L1_Fdecd027b
+rewrite input
   | let later = 1
-  = answer
+  =
+  answer
   where
     answer = go! { later }
 `)

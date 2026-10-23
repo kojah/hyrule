@@ -35,12 +35,12 @@ rewrite (Both x y)
     case proof of
       Proven() -> Wrap [Mark ^Count]
       Disproven() -> Wrap [^Count]
-      Unavailable (reason: why) -> do
+      Unavailable { reason: why } -> do
         next <- Ask y
         case next of
           Proven() -> [1]
           Disproven() -> [2]
-          Unavailable (reason: nextWhy) -> Wrap [nextWhy]
+          Unavailable { reason: nextWhy } -> Wrap [nextWhy]
 
 @Fallback
 rewrite _ = [^Count]

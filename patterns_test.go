@@ -33,14 +33,14 @@ func TestNamedFieldsAndOrderedAlternatives(t *testing.T) {
 // Each OR arm has the same two captures. The inner named capture destructures
 // a certified header component without changing its enclosing correlation.
 @Choose
-rewrite (Header (length: Integer (value: length), offset: offset) | Header (offset: length, length: offset))
+rewrite (Header { length: Integer { value: length }, offset } | Header { offset: length, length: offset })
   | First length
   , Second length
   =
   Result offset length
 
 @Fallback
-rewrite (Header (length: length)) = Result 0 length
+rewrite (Header { length }) = Result 0 length
 `)
 	c, artifacts := compile(t, root)
 	if err := c.Publish(artifacts, false); err != nil {
@@ -70,20 +70,20 @@ rewrite (Header (length: length)) = Result 0 length
 
 func TestPatternContractDiagnostics(t *testing.T) {
 	cases := []struct{ name, pattern, build, want string }{
-		{"unknown field", `(Pair (missing: x))`, `0`, "unknown matcher field missing"},
-		{"success is not child", `(Pair (matched: _))`, `0`, "unknown matcher field matched"},
-		{"duplicate field", `(Pair (left: x, left: y))`, `0`, "duplicate matcher field left"},
-		{"mixed children", `(Pair (left: x) _)`, `0`, "cannot mix named and positional"},
-		{"unnamed result", `(Unnamed (left: x))`, `0`, "unknown matcher field left"},
-		{"or missing capture", `(Pair (left: x) | Pair (right: y))`, `0`, "identical capture names and types"},
-		{"or capture type", `(Pair (left: x) | Text (value: x))`, `0`, "identical capture names and types"},
-		{"local join", `(Pair (left: (x | _), right: x))`, `0`, "identical capture names and types"},
+		{"unknown field", `Pair { missing: x }`, `0`, "unknown matcher field missing"},
+		{"success is not child", `Pair { matched: _ }`, `0`, "unknown matcher field matched"},
+		{"duplicate field", `Pair { left: x, left: y }`, `0`, "duplicate matcher field left"},
+		{"mixed children", `Pair { left: x } _`, `0`, "cannot mix named and positional"},
+		{"unnamed result", `Unnamed { left: x }`, `0`, "unknown matcher field left"},
+		{"or missing capture", `(Pair { left: x } | Pair { right: y })`, `0`, "identical capture names and types"},
+		{"or capture type", `(Pair { left: x } | Text { value: x })`, `0`, "identical capture names and types"},
+		{"local join", `(Pair { left: (x | _), right: x })`, `0`, "identical capture names and types"},
 		{"or arity", `(_ |)`, `0`, "expected expression"},
 		{"or labels", `(left: _ | _)`, `0`, "expected"},
 		{"or build", `_`, `(1 | 2)`, "expected"},
-		{"named build", `_`, `Sum (left: 1) 2`, "cannot mix named and positional builder arguments"},
-		{"interface equality", `(Any (left: x, right: x))`, `0`, "may contain an interface"},
-		{"expansion bound", `(Pair (left: (1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9), right: (1 | 2 | 3 | 4 | 5 | 6 | 7 | 8)))`, `0`, "exceeds 64 alternatives"},
+		{"named build", `_`, `Sum { left: 1 } 2`, "cannot mix named and positional"},
+		{"interface equality", `Any { left: x, right: x }`, `0`, "may contain an interface"},
+		{"expansion bound", `(Pair { left: (1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9), right: (1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) })`, `0`, "exceeds 64 alternatives"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -121,8 +121,9 @@ func TestNamedAlternativeFormatting(t *testing.T) {
 	original := []byte(`// field ordering is intentional
 host
   Header?
+
 @Nested
-rewrite whole@(Header (length: n, offset: (0 | 1)) | Header (offset: 2, length: n)) = n
+rewrite ((Header { length: n, offset: (0 | 1) } | Header { offset: 2, length: n }) as whole) = n
 `)
 	formatted, err := hyrule.Format("named.rules", original)
 	if err != nil {

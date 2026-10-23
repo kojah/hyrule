@@ -50,29 +50,30 @@ func TestDerivedViews(t *testing.T) {
 	write(t, root, "nodes.rules", `fn rewrite(arg0: Node) -> int
 
 @Leaf
-rewrite (Leaf (Value: value)) = value
+rewrite (Leaf { Value: value }) = value
 
 @Leaves
-rewrite (Pair (Left: Leaf (Value: left), Right: Leaf (Value: right))) = left + right
+rewrite (Pair { Left: Leaf { Value: left }, Right: Leaf { Value: right } }) = left + right
 
 host
   Width
 
 @Pair
-rewrite pair@(Pair ()) = Width pair
+rewrite (Pair() as pair) = Width pair
 `)
 	write(t, root, "snapshots.rules", `fn rewrite(arg0: Snapshot) -> int
 
 @Next
-rewrite (Snapshot (Next: Snapshot (Fill: fill))) = fill * 100
+rewrite (Snapshot { Next: Snapshot { Fill: fill } }) = fill * 100
 
 @Room
-rewrite (Snapshot (Capacity: Capacity (Bound: bound), Fill: fill, Depth: depth, Closed: false))
+rewrite (Snapshot { Capacity: Capacity { Bound: bound }, Fill: fill, Depth: depth, Closed: false })
   | fill < bound
-  = fill + depth
+  =
+  fill + depth
 
 @Closed
-rewrite (Snapshot (Closed: true)) = -1
+rewrite (Snapshot { Closed: true }) = -1
 `)
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {
@@ -106,17 +107,17 @@ func TestViews(t *testing.T) {
 
 func TestDerivedViewDiagnostics(t *testing.T) {
 	for _, test := range []struct{ name, pattern, want string }{
-		{"unknown field", "(Snapshot (Missing: x))", "unknown Go field Missing"},
+		{"unknown field", "Snapshot { Missing: x }", "unknown Go field Missing"},
 		{"positional", "(Snapshot x)", "requires named Go fields"},
-		{"embedded pointer", "(Snapshot (Outer: Outer (Depth: x)))", "promoted through embedded pointer Inner"},
-		{"foreign unexported", "(Snapshot (Capacity: strings.Builder (addr: x)))", "does not match input type"},
-		{"wrong type", "(Snapshot (Capacity: Inner (Depth: x)))", "does not match input type"},
+		{"embedded pointer", "Snapshot { Outer: Outer { Depth: x } }", "promoted through embedded pointer Inner"},
+		{"foreign unexported", "Snapshot { Capacity: strings.Builder { addr: x } }", "does not match input type"},
+		{"wrong type", "Snapshot { Capacity: Inner { Depth: x } }", "does not match input type"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
 			write(t, root, "bindings.go", derivedViewHost)
 			derivedViewConfig(t, root)
-			write(t, root, "nodes.rules", "fn rewrite(arg0: Node) -> int\n\nrewrite _ = 0\n")
+			write(t, root, "nodes.rules", "fn rewrite(arg0: Node) -> int\n\n@rewrite_L3_Fdecd027b\nrewrite _ = 0\n")
 			write(t, root, "snapshots.rules", "fn rewrite(arg0: Snapshot) -> int\n\n@Check\nrewrite "+test.pattern+" = 0\n")
 			expectUnionCompile(t, root, test.want)
 		})
@@ -149,18 +150,19 @@ func TestTypedConstantPatterns(t *testing.T) {
 	write(t, root, "input.rules", `fn rewrite(arg0: Request) -> int
 
 @FiniteSend
-rewrite (Request (Action: Send, Capacity: FiniteCapacity (Bound: bound))) = bound
+rewrite (Request { Action: Send, Capacity: FiniteCapacity { Bound: bound } }) = bound
 
 @NilReceive
-rewrite (Request (Action: Receive(), Capacity: NilCapacity())) = -1
+rewrite (Request { Action: Receive(), Capacity: NilCapacity() }) = -1
 
 @Unbounded
-rewrite (Request (Capacity: c@UnboundedCapacity)) = -2
+rewrite (Request { Capacity: UnboundedCapacity as c }) = -2
 
 @Other
-rewrite (Request (Action: action))
+rewrite (Request { Action: action })
   | action == UnknownAction
-  = -3
+  =
+  -3
 `)
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {
@@ -185,9 +187,9 @@ func TestConstants(t *testing.T) {
 
 func TestTypedConstantDiagnostics(t *testing.T) {
 	for _, test := range []struct{ name, pattern, want string }{
-		{"fields on a plain constant", "(Request (Action: Send (Bound: 1)))", "constant pattern Send takes no fields"},
-		{"no tag field", "(FiniteCapacity (Bound: b))", "constant FiniteCapacity does not match input type"},
-		{"positional variant", "(Request (Capacity: FiniteCapacity b))", "requires named Go fields"},
+		{"fields on a plain constant", "Request { Action: Send { Bound: 1 } }", "constant pattern Send takes no fields"},
+		{"no tag field", "FiniteCapacity { Bound: b }", "constant FiniteCapacity does not match input type"},
+		{"positional variant", "Request { Capacity: FiniteCapacity b }", "requires named Go fields"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := fixture(t)
@@ -220,10 +222,10 @@ func TestInterfacePatternsWithoutImplementerLists(t *testing.T) {
 	write(t, root, "input.rules", `fn rewrite(arg0: fmt.Stringer) -> string
 
 @Name
-rewrite (Name (Text: text)) = text
+rewrite (Name { Text: text }) = text
 
 @Code
-rewrite (Code (Value: 0)) = "zero"
+rewrite (Code { Value: 0 }) = "zero"
 `)
 	config, artifacts := compile(t, root)
 	if !strings.Contains(string(artifacts[0].Data), ".(type)") {
@@ -252,7 +254,9 @@ func TestInterfacePatternRejectsIncompatibleType(t *testing.T) {
 	signatureConfig(t, root, "")
 	write(t, root, "input.rules", `fn rewrite(value: fmt.Stringer) -> string
   match value
-    Plain(Text: text) -> text
+    @rewrite_L3_Fdecd027b
+    Plain { Text: text } ->
+      text
 `)
 	expectUnionCompile(t, root, "does not match input type")
 }
@@ -270,7 +274,7 @@ func TestPackageImportNames(t *testing.T) {
 	write(t, root, "bindings.go", "package fixture\n")
 	write(t, root, "other.go", "package fixture\nimport \"go/token\"\ntype Op struct{ Kind token.Token }\n")
 	signatureConfig(t, root, "")
-	write(t, root, "input.rules", "fn rewrite(arg0: Op) -> bool\n\n@Add\nrewrite (Op (Kind: token.ADD)) = true\n")
+	write(t, root, "input.rules", "fn rewrite(arg0: Op) -> bool\n\n@Add\nrewrite (Op { Kind: token.ADD }) = true\n")
 	config, artifacts := compile(t, root)
 	if err := config.Publish(artifacts, false); err != nil {
 		t.Fatal(err)

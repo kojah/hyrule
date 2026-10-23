@@ -39,14 +39,16 @@ active fields wherever they must survive construction.
 ## Matching and construction
 
 ```text
-pattern NumberValue number = Number (value: number)
+pattern NumberValue number = Number { value: number }
 
 @Positive
 rewrite (NumberValue number)
-  | positive number = Number (value: increment number)
+  | positive number
+  =
+  Number { value: increment number }
 
 @OtherNumber
-rewrite (Number (value: number)) = Number (value: number)
+rewrite (Number { value: number }) = Number { value: number }
 
 @Empty
 rewrite Empty = Empty

@@ -166,7 +166,7 @@ rewrite _ = 1
 }
 
 func TestFormatContract(t *testing.T) {
-	input := []byte("// description\nhost\n  Pair? = Pair\n@R\nrewrite (Pair a /* preserve me */ b) = Sum a b\n// tail\n")
+	input := []byte("// description\nhost\n  Pair? = Pair\n\n@R\nrewrite (Pair a b) = Sum a b\n/* preserve me */\n// tail\n")
 	formatted, err := hyrule.Format("test.rules", input)
 	if err != nil {
 		t.Fatal(err)
@@ -202,7 +202,7 @@ func TestNestedPatternsAndLiteralFidelity(t *testing.T) {
   Text = Text
 
 @Nested
-rewrite (Binary lhs@(Ident "x") _)
+rewrite (Binary ((Ident "x") as lhs) _)
   | Named lhs
   =
   Text "line\nquoted\"\\end"
