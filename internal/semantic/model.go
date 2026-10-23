@@ -117,6 +117,16 @@ type Item struct {
 	Record  *Record
 	Rule    *Rule
 	API     *API
+	// Implementers closes an interface's implementer set for derived views.
+	Implementers *Implementers
+}
+
+// Implementers lists the concrete Go types derived views may assert from an
+// interface; without a list, types declared in the interface's package apply.
+type Implementers struct {
+	Position
+	Interface string
+	Types     []string
 }
 
 // File holds semantic declarations. Files combine in lexical filename

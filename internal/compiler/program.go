@@ -18,6 +18,7 @@ type Program struct {
 	Constructors map[string]*semantic.Variant
 	Records      []*semantic.Record
 	RecordNames  map[string]*semantic.Record
+	Implementers []*semantic.Implementers
 	patterns     map[string]*semantic.Pattern
 	rules        []*semantic.Rule
 	rule         string
@@ -100,6 +101,13 @@ func (program *Program) collectItem(item semantic.Item, names map[string]bool) e
 		program.Unions = append(program.Unions, union)
 	} else if record := item.Record; record != nil {
 		program.Records = append(program.Records, record)
+	} else if closed := item.Implementers; closed != nil {
+		for _, existing := range program.Implementers {
+			if existing.Interface == closed.Interface {
+				return &semantic.Diagnostic{Position: closed.Position, Message: "duplicate implementers for " + closed.Interface}
+			}
+		}
+		program.Implementers = append(program.Implementers, closed)
 	} else if pattern := item.Pattern; pattern != nil {
 		if program.patterns[pattern.Name] != nil {
 			return &semantic.Diagnostic{Position: pattern.Position, Message: "duplicate pattern " + pattern.Name}

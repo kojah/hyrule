@@ -33,6 +33,9 @@ func Print(file *File) []byte {
 			printUnion(&out, item.Union)
 		case item.API != nil:
 			printAPI(&out, item.API)
+		case item.Implementers != nil:
+			printComments(&out, item.Implementers.Comments)
+			out.WriteString("implementers " + item.Implementers.Interface + " = " + strings.Join(item.Implementers.Types, ", ") + "\n")
 		case item.Pattern != nil:
 			printPattern(&out, item.Pattern)
 		case item.Rule != nil:

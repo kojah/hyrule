@@ -2,7 +2,9 @@
    logical statements; INDENT/DEDENT describe block boundaries, not characters.
    Names are resolved after parsing against all files belonging to a target. *)
 file = { declaration, NEWLINE }, EOF ;
-declaration = host | schema | pattern | signature | equation ;
+declaration = host | schema | implementers | pattern | signature | equation ;
+(* Closes the concrete types derived views may assert from an interface. *)
+implementers = "implementers", storageType, "=", storageType, { ",", storageType } ;
 host = "host", INDENT, hostBinding, { NEWLINE, hostBinding }, DEDENT ;
 hostBinding = name, [ "?" | "!" ], { name }, [ "=", application ] ;
 (* A type may omit "= hostType" when the Go type has the same name. A type

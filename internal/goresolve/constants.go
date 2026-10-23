@@ -121,7 +121,7 @@ func (e *resolver) taggedVariant(x *semantic.Expr, object *types.Const, input ty
 		structure, _ = pointer.Elem().Underlying().(*types.Struct)
 	}
 	if structure == nil {
-		return nil, e.fail(x, "constant "+x.Name+" does not match input type "+types.TypeString(input, e.host.Qualifier))
+		return nil, e.fail(x, "constant "+x.Name+" does not match input type "+e.typeText(input))
 	}
 	key := "variant " + types.TypeString(input, nil)
 	record := &boundRecord{declaration: &semantic.Record{Position: x.Position, Name: key, View: true}, typ: input}
@@ -142,7 +142,7 @@ func (e *resolver) taggedVariant(x *semantic.Expr, object *types.Const, input ty
 		results = append(results, types.NewVar(token.NoPos, e.host.Package, field.Name(), field.Type()))
 	}
 	if tag == "" {
-		return nil, e.fail(x, "constant "+x.Name+" does not match input type "+types.TypeString(input, e.host.Qualifier))
+		return nil, e.fail(x, "constant "+x.Name+" does not match input type "+e.typeText(input))
 	}
 	results = append(results, types.NewVar(token.NoPos, e.host.Package, "matched", types.Typ[types.Bool]))
 	parameter := types.NewTuple(types.NewVar(token.NoPos, e.host.Package, "input", input))

@@ -12,6 +12,15 @@ func (p *parser) declaration(file *File, comments []string) {
 		p.hostDeclarations(file, comments)
 	case p.at("type") || p.at("view") || p.at("exhaustive"):
 		p.schema(file, comments)
+	case p.take("implementers"):
+		closed := &Implementers{Position: pos, Interface: p.hostType(), Comments: comments}
+		p.expect("=")
+		closed.Types = append(closed.Types, p.hostType())
+		for p.take(",") {
+			closed.Types = append(closed.Types, p.hostType())
+		}
+		file.Items = append(file.Items, Item{Implementers: closed})
+		p.lineEnd()
 	case p.take("signature"):
 		file.Items = append(file.Items, Item{API: p.signature(pos, comments)})
 		p.lineEnd()

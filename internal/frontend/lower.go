@@ -210,6 +210,9 @@ func (l lowering) item(item syntax.Item) semantic.Item {
 			out.Union.Variants = append(out.Union.Variants, &semantic.Variant{Position: position(v.Position), Name: v.Name, HostTag: v.GoTag, Fields: fields(v.Fields)})
 		}
 	}
+	if x := item.Implementers; x != nil {
+		out.Implementers = &semantic.Implementers{Position: position(x.Position), Interface: x.Interface, Types: slices.Clone(x.Types)}
+	}
 	if x := item.API; x != nil {
 		out.API = &semantic.API{Position: position(x.Position), Mode: x.Mode, Fallback: l.expression(x.Fallback),
 			Inputs: params(x.Inputs), Outputs: params(x.Outputs)}

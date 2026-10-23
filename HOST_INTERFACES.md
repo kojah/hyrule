@@ -146,7 +146,20 @@ Labels are exact Go field names, including fields promoted from structs
 embedded by value; other packages' types expose only exported fields. The
 pattern matches values of that type, pointers to it (nil never matches) and,
 on an interface input, the dynamic type that implements the interface: the
-value type when its method set suffices, otherwise the pointer type. `Name()`
+value type when its method set suffices, otherwise the pointer type.
+
+An interface input has a closed implementer set: by default the concrete
+types declared in the interface's own package, so `ssa.Call` works on an
+`ssa.Instruction`. A rule file may instead list the set explicitly, which an
+interface from another package or `any` requires:
+
+```text
+implementers fmt.Stringer = *Name, Code
+```
+
+Naming a type outside the set is a compile error. At run time other dynamic
+types, typed nil pointers and nil interfaces match no implementer, and
+consecutive implementer alternatives share one Go type switch. `Name()`
 with no fields tests the type alone. Pointer-typed fields match nested
 patterns through the same nil check, while a field promoted through an
 embedded pointer is an error; match the embedded field explicitly. A derived

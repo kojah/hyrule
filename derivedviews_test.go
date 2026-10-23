@@ -1,7 +1,10 @@
 package hyrule_test
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/kojah/lockdoc/tools/hyrule"
 )
 
 const derivedViewHost = `package fixture
@@ -191,6 +194,76 @@ func TestTypedConstantDiagnostics(t *testing.T) {
 			write(t, root, "bindings.go", constantHost)
 			signatureConfig(t, root, "")
 			write(t, root, "input.rules", "signature Request -> int\n\n@Check\nrewrite "+test.pattern+" = 0\n")
+			expectUnionCompile(t, root, test.want)
+		})
+	}
+}
+
+const closedHost = `package fixture
+import "fmt"
+var _ fmt.Stringer
+type Name struct{ Text string }
+func (n *Name) String() string { return n.Text }
+type Code struct{ Value int }
+func (c Code) String() string { return "code" }
+type Other struct{}
+func (Other) String() string { return "other" }
+`
+
+// Interface inputs assert members of a closed implementer set. A foreign
+// interface or any needs an explicit list; other dynamic types and typed nil
+// fall through, and consecutive alternatives share one type switch.
+func TestClosedImplementerSets(t *testing.T) {
+	root := fixture(t)
+	write(t, root, "bindings.go", closedHost)
+	signatureConfig(t, root, "")
+	write(t, root, "input.rules", `signature fmt.Stringer -> string
+
+implementers fmt.Stringer = *Name, Code
+
+@Name
+rewrite (Name (Text: text)) = text
+
+@Code
+rewrite (Code (Value: 0)) = "zero"
+`)
+	config, artifacts := compile(t, root)
+	if !strings.Contains(string(artifacts[0].Data), ".(type)") {
+		t.Fatalf("closed alternatives do not share a type switch:\n%s", artifacts[0].Data)
+	}
+	if err := config.Publish(artifacts, false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "behavior_test.go", `package fixture
+import ("fmt"; "testing")
+func TestClosed(t *testing.T) {
+ var nilName *Name
+ for _, test := range []struct{input fmt.Stringer; want string; ok bool}{
+  {&Name{"n"}, "n", true}, {nilName, "", false}, {Code{0}, "zero", true}, {Code{1}, "", false},
+  {Other{}, "", false}, {nil, "", false},
+ } {
+  if got, ok := Rewrite(test.input); ok != test.ok || got != test.want { t.Fatalf("%#v => %q %t", test.input, got, ok) }
+ }
+}`)
+	runUnionFixture(t, root, "TestClosed")
+	if formatted, err := hyrule.Format("input.rules", []byte("implementers  fmt.Stringer =  *Name,Code\n\nrewrite x = x\n")); err != nil ||
+		!strings.HasPrefix(string(formatted), "implementers fmt.Stringer = *Name, Code\n") {
+		t.Fatalf("implementers formatting: %v\n%s", err, formatted)
+	}
+}
+
+func TestClosedImplementerDiagnostics(t *testing.T) {
+	for _, test := range []struct{ name, declaration, rule, want string }{
+		{"foreign interface needs a list", "", "(Name (Text: t)) = t", "not in the closed implementer set of fmt.Stringer"},
+		{"unlisted type", "implementers fmt.Stringer = *Name\n\n", "(Code ()) = \"\"", "not in the closed implementer set"},
+		{"not an implementer", "implementers fmt.Stringer = Name\n\n", "_ = \"\"", "not a concrete implementer"},
+		{"duplicate list", "implementers fmt.Stringer = Code\n\nimplementers fmt.Stringer = Other\n\n", "_ = \"\"", "duplicate implementers"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := fixture(t)
+			write(t, root, "bindings.go", closedHost)
+			signatureConfig(t, root, "")
+			write(t, root, "input.rules", "signature fmt.Stringer -> string\n\n"+test.declaration+"@Check\nrewrite "+test.rule+"\n")
 			expectUnionCompile(t, root, test.want)
 		})
 	}
