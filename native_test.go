@@ -1,7 +1,9 @@
 package hyrule_test
 
 import (
+	"bytes"
 	"context"
+	"go/format"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -290,4 +292,40 @@ rewrite (inputs (Entry { name } as node) (Entry() as node)) =
  }{Calls=0;got,ok:=Rewrite(tt.a,tt.b);if got!=tt.want||ok!=tt.ok||Calls!=tt.calls{t.Fatalf("%v,%v: %p,%v calls=%d",tt.a,tt.b,got,ok,Calls)}}
  }`)
 	runGeneratedTransitionTest(t, root)
+}
+
+// Native argument bundles synthesize anonymous records. A union-bearing field
+// needs validation even when another argument is unused; emitted Go must be
+// ready to publish without another formatting pass by the consumer.
+func TestNativeUnionArgumentBundleFormatting(t *testing.T) {
+	root := fixture(t)
+	host := strings.Replace(unionHost, "func(Value)(Value,bool)", "func(Value,int)(Value,bool)", 1)
+	write(t, root, "bindings.go", host)
+	write(t, root, "input.rules", "partial fn rewrite(value, context)\n"+strings.Replace(unionSchema, "exhaustive type Value", "type Value", 1)+`@Any
+rewrite (inputs value _) = value
+`)
+	config, artifacts := compile(t, root)
+	for _, artifact := range artifacts {
+		formatted, err := format.Source(artifact.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(formatted, artifact.Data) {
+			t.Fatalf("generated Go for %s needs another formatting pass", artifact.Target)
+		}
+	}
+	if err := config.Publish(artifacts, false); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "behavior_test.go", `package fixture
+import "testing"
+func TestBundleValidation(t *testing.T) {
+ for _, input := range []Value{{Kind:NumberTag,Number:7},{Kind:EmptyTag},{Kind:99},{Kind:WrapTag,Atom:Atom{Kind:99}}} {
+  got, ok := Rewrite(input, 4)
+  valid := input.Kind==NumberTag || input.Kind==EmptyTag
+  if ok!=valid || ok && got!=input || !ok && got!=(Value{}) { t.Fatalf("%+v => %+v,%t", input,got,ok) }
+ }
+}
+`)
+	runUnionFixture(t, root, "TestBundleValidation")
 }

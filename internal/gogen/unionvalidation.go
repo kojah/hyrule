@@ -70,7 +70,7 @@ func (e *emitter) emitValidators() {
 		if checked == "" {
 			continue
 		}
-		fmt.Fprintf(&e.out, "func %s(value %s) bool { return %s }\n", e.recordValidator(record), e.host.TypeName(record.Type), checked)
+		fmt.Fprintf(&e.out, "func %s(value %s) bool {\nreturn %s\n}\n", e.recordValidator(record), e.host.TypeName(record.Type), checked)
 	}
 }
 

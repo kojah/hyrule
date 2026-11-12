@@ -16,7 +16,8 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// Artifact is a validated generated file. Path is absolute; Data is deterministic.
+// Artifact is a validated generated file. Path is absolute; Data is deterministic,
+// gofmt-stable Go ready for publication without consumer formatting.
 type Artifact struct {
 	Target string
 	Path   string
